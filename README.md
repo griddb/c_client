@@ -10,9 +10,9 @@ Please refer to the API(C) section in API Reference for detailed information.
 
 Library building and program execution are checked in the environment below.
 
-    OS:         CentOS 7.3(x64)
-    GCC:        Version 4.8.5
-    GridDB:     Version 3.0 CE(Community Edition)
+    OS:             CentOS 7.3(x64)
+    GCC:            Version 4.8.5
+    GridDB server:  Version 3.0 CE(Community Edition)
 
 ## Quick start
 
@@ -40,6 +40,8 @@ GridDB server need to be started in advance.
     $ ./a.out <GridDB notification address(default is 239.0.0.1)> <GridDB notification port(default is 31999)>
       <GridDB cluster name> <GridDB user> <GridDB password>
       -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
+
+Note: The gridstore.h file on client/c/include folder is used for building.
 
 ## Document
   Refer to the file below for more detailed information.  
