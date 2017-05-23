@@ -1609,10 +1609,17 @@ void RowMapper::encodeKeyByObj(
 
 	switch (enrty.elementType) {
 	case GS_TYPE_STRING:
-		if (mode == MODE_ROWWISE_SEPARATED_V2) {
-			ClientUtil::writeVarDataString(out, *static_cast<const GSChar* const*>(keyObj));
-		} else {
-			out << *static_cast<const GSChar* const*>(keyObj);
+		{
+			const GSChar *keyStr = *static_cast<const GSChar* const*>(keyObj);
+			if (keyStr == NULL) {
+				UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			}
+			if (mode == MODE_ROWWISE_SEPARATED_V2) {
+				ClientUtil::writeVarDataString(out, keyStr);
+			}
+			else {
+				out << keyStr;
+			}
 		}
 		break;
 	case GS_TYPE_INTEGER:
