@@ -1,18 +1,17 @@
 ﻿/*
-	Copyright (c) 2015 TOSHIBA CORPORATION.
+   Copyright (c) 2017 TOSHIBA Digital Solutions Corporation
 
-	This program is free software: you can redistribute it and/or modify
-	it under the terms of the GNU Affero General Public License as
-	published by the Free Software Foundation, either version 3 of the
-	License, or (at your option) any later version.
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU Affero General Public License for more details.
+       http://www.apache.org/licenses/LICENSE-2.0
 
-	You should have received a copy of the GNU Affero General Public License
-	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 */
 /*!
 	@file
@@ -22,6 +21,7 @@
 #include "gs_error_common.h"
 #include "sha2.h"
 #include "uuid_utils.h"
+
 
 
 const Auth::Mode Auth::Challenge::DEFAULT_MODE = Auth::MODE_CHALLENGE;
@@ -176,6 +176,11 @@ bool Auth::Challenge::getResponse(
 		util::ArrayByteInStream &in, const Allocator &alloc, Mode &mode,
 		Challenge &challenge) {
 	const Mode respMode = getMode(in);
+	if (respMode != MODE_NONE && !challengeEnabled_) {
+		GS_COMMON_THROW_USER_ERROR(
+				GS_ERROR_AUTH_INTERNAL_ILLEGAL_MESSAGE, "");
+	}
+
 	if (respMode != mode) {
 		if (respMode == MODE_BASIC) {
 			mode = MODE_BASIC;
@@ -510,7 +515,7 @@ Auth::Mode Auth::Challenge::getDefaultMode() {
 }
 
 Auth::Mode Auth::Challenge::getMode(util::ArrayByteInStream &in) {
-	if (challengeEnabled_ && in.base().remaining() > 0) {
+	if (in.base().remaining() > 0) {
 		int8_t base;
 		in >> base;
 		return static_cast<Mode>(base);

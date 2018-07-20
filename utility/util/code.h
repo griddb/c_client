@@ -1,18 +1,17 @@
 ﻿/*
-    Copyright (c) 2012 TOSHIBA CORPORATION.
-    
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
+   Copyright (c) 2017 TOSHIBA Digital Solutions Corporation
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 */
 /*
     Copyright (c) 2011 Minor Gordon
@@ -1347,6 +1346,25 @@ UTIL_FORCEINLINE int32_t varIntEncode32_fast_short(uint8_t *p, uint32_t v) {
 		return 2;
 	}
 	return varIntEncode64(p, v);
+}
+
+/*
+	https://developers.google.com/protocol-buffers/docs/encoding#types
+*/
+inline uint32_t zigzagEncode32(int32_t n) {
+	return (static_cast<uint32_t>(n) << 1) ^ static_cast<uint32_t>(n >> 31);
+}
+
+inline int32_t zigzagDecode32(uint32_t n) {
+	return static_cast<int32_t>(n >> 1) ^ (-1) * static_cast<int32_t>(n & 1);
+}
+
+inline uint64_t zigzagEncode64(int64_t n) {
+	return (static_cast<uint64_t>(n) << 1) ^ static_cast<uint64_t>(n >> 63);
+}
+
+inline int64_t zigzagDecode64(uint64_t n) {
+	return static_cast<int64_t>(n >> 1) ^ (-1) * static_cast<int64_t>(n & 1);
 }
 
 

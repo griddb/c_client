@@ -1,18 +1,17 @@
 ﻿/*
-    Copyright (c) 2012 TOSHIBA CORPORATION.
-    
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or (at your option) any later version.
+   Copyright (c) 2017 TOSHIBA Digital Solutions Corporation
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 */
 /*
     Copyright (c) 2008, Yubin Lim(purewell@gmail.com).
@@ -54,171 +53,5 @@
 #include <string>
 #include <list>
 
-namespace util {
-
-/*!
-    @brief Status of using memory.
-*/
-class MemoryStatus {
-public:
-
-	static MemoryStatus getStatus();
-
-	size_t getPeakUsage() const;
-	size_t getLastUsage() const;
-
-private:
-	MemoryStatus();
-	size_t peakUsage_;
-	size_t lastUsage_;
-};
-
-class ProcessUtils {
-public:
-	static uint64_t getCurrentProcessId();
-
-private:
-	ProcessUtils();
-};
-
-#if UTIL_MINOR_MODULE_ENABLED
-
-class SharedObject {
-public:
-	void open(const char8_t *path, int type);
-
-	void close(void);
-
-	void* getSymbol(const char8_t *symbol);
-
-public:
-	SharedObject();
-	virtual ~SharedObject();
-
-private:
-	SharedObject(const SharedObject&);
-	SharedObject& operator=(const SharedObject&);
-
-private:
-	void *data_;
-};
-
-class System {
-public:
-	static std::string& getCurrentDirectory(std::string &out);
-
-	static char* getCurrentDirectory(char *buf, size_t blen);
-
-
-
-	static void getLibraryVersion(int *major, int *minor, int *patch, int *rel);
-
-	static size_t getCPUCount(void);
-
-	static size_t getOnlineCPUCount(void);
-
-private:
-	System();
-	System(const System&);
-	inline System& operator=(const System&);
-};
-
-class Group;
-
-class User {
-public:
-	void getUser(uid_t uid);
-
-	void getUser(const char *id);
-
-	inline const char* getID(void) const {
-		return id_.c_str();
-	}
-
-	inline const char* getPassword(void) const {
-		return password_.c_str();
-	}
-
-	inline uid_t getUID(void) const {
-		return uid_;
-	}
-
-	inline gid_t getGID(void) const {
-		return gid_;
-	}
-
-	inline const char* getName(void) const {
-		return name_.c_str();
-	}
-
-	inline const char* getHomeDirectory(void) const {
-		return homedir_.c_str();
-	}
-
-	inline const char* getShell(void) const {
-		return shell_.c_str();
-	}
-
-public:
-	User();
-	virtual ~User();
-
-private:
-	std::string id_;
-	std::string password_;
-	uid_t uid_;
-	gid_t gid_;
-	std::string name_;
-	std::string homedir_;
-	std::string shell_;
-};
-
-class Group {
-public:
-	typedef std::list<std::string> user_cont;
-
-	typedef user_cont::iterator user_itr;
-
-	typedef user_cont::const_iterator user_citr;
-
-public:
-	void getGroup(gid_t gid);
-
-	void getGroup(const char *id);
-
-	inline const char* getID(void) const {
-		return id_.c_str();
-	}
-
-	inline const char* getPassword(void) const {
-		return password_.c_str();
-	}
-
-	inline uid_t getGID(void) const {
-		return gid_;
-	}
-
-	inline user_cont& getUsers(void) {
-		return users_;
-	}
-
-	inline const user_cont& getUsers(void) const {
-		return users_;
-	}
-
-public:
-	Group();
-	virtual ~Group();
-
-private:
-	std::string id_;
-	std::string password_;
-	gid_t gid_;
-	user_cont users_;
-};
-
-#endif 
-
-} 
 
 #endif

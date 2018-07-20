@@ -10,6 +10,7 @@ commondir = $(serverdir)
 picojsondir = $(rootdir)/3rd_party/picojson
 ebbdir = $(rootdir)/3rd_party/ebb
 shadir = $(rootdir)/3rd_party/sha2
+securitydir = $(rootdir)/3rd_party/omaha/omaha/base/security
 uuiddir = $(rootdir)/3rd_party/uuid
 bindir = $(rootdir)/bin
 
@@ -40,35 +41,25 @@ clean-local:
 	rmdir -v $(bindir) 2> /dev/null || test 1
 
 libgridstore_la_SOURCES = \
-$(utildir)/util/allocator.cpp \
-$(utildir)/util/allocator.h \
 $(utildir)/util/code.cpp \
-$(utildir)/util/code.h \
 $(utildir)/util/container.cpp \
-$(utildir)/util/container.h \
 $(utildir)/util/file.cpp \
-$(utildir)/util/file.h \
 $(utildir)/util/net.cpp \
-$(utildir)/util/net.h \
 $(utildir)/util/os.cpp \
-$(utildir)/util/os.h \
 $(utildir)/util/system.cpp \
-$(utildir)/util/system.h \
 $(utildir)/util/thread.cpp \
-$(utildir)/util/thread.h \
 $(utildir)/util/time.cpp \
-$(utildir)/util/time.h \
-$(utildir)/util/trace.cpp \
-$(utildir)/util/trace.h \
 $(utildir)/util/type.cpp \
-$(utildir)/util/type.h \
 $(commondir)/authentication.cpp \
+$(commondir)/bit_array.cpp \
+$(commondir)/container_key.cpp \
 $(commondir)/http.cpp \
 $(commondir)/json.cpp \
 $(commondir)/service_address.cpp \
 $(commondir)/uuid_utils.cpp \
 $(ebbdir)/ebb_request_parser.c \
 $(shadir)/sha2.c \
+$(securitydir)/md5.c \
 $(uuiddir)/uuid/clear.c \
 $(uuiddir)/uuid/compare.c \
 $(uuiddir)/uuid/copy.c \
@@ -79,7 +70,8 @@ $(uuiddir)/uuid/parse.c \
 $(uuiddir)/uuid/unpack.c \
 $(uuiddir)/uuid/unparse.c \
 $(uuiddir)/uuid/uuid_time.c \
-$(srcdir)/client.cpp
+$(srcdir)/client.cpp \
+$(srcdir)/container_key_utils.cpp 
 
 libgridstore_la_CFLAGS = $(AM_CFLAGS) -fvisibility=hidden
 libgridstore_la_CXXFLAGS = $(AM_CXXFLAGS) -fvisibility=hidden
@@ -93,5 +85,6 @@ INCLUDES = \
 -I$(picojsondir)/include \
 -I$(ebbdir) \
 -I$(shadir) \
+-I$(securitydir) \
 -I$(uuiddir) \
 -I$(srcdir)/include

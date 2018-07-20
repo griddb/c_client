@@ -12,7 +12,7 @@ Library building and program execution are checked in the environment below.
 
     OS:             CentOS 7.3(x64)
     GCC:            Version 4.8.5
-    GridDB server:  Version 3.0 CE(Community Edition)
+    GridDB server:  Version 4.0 CE(Community Edition)
 
 ## Quick start
 
@@ -58,5 +58,5 @@ Note: There are some samples on client/c/sample folder.
     By using the GitHub pull request function, you shall be deemed to have agreed to GridDB Contributor License Agreement.
 
 ## License
-  The C client source license is GNU Affero General Public License (AGPL).  
+  The C client source license is Apache License, version 2.0.  
   See 3rd_party/3rd_party.md for the source and license of the third party.

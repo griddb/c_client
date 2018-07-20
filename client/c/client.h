@@ -1,18 +1,17 @@
 ﻿/*
-	Copyright (c) 2012 TOSHIBA CORPORATION.
+   Copyright (c) 2017 TOSHIBA Digital Solutions Corporation
 
-	This program is free software: you can redistribute it and/or modify
-	it under the terms of the GNU Affero General Public License as
-	published by the Free Software Foundation, either version 3 of the
-	License, or (at your option) any later version.
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU Affero General Public License for more details.
+       http://www.apache.org/licenses/LICENSE-2.0
 
-	You should have received a copy of the GNU Affero General Public License
-	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 */
 /*!
 	@file
@@ -27,19 +26,30 @@
 #define gsPutContainerGeneral gsPutContainerGeneral_Static
 #define gsPutCollectionGeneral gsPutCollectionGeneral_Static
 #define gsPutTimeSeriesGeneral gsPutTimeSeriesGeneral_Static
+#define gsCreateRowByStore gsCreateRowByStore_Static
 #define gsGetRowSchema gsGetRowSchema_Static
-#endif
+#endif 
 
 #ifdef GS_CLIENT_UNIT_TEST
 #define gsGetContainerInfoV1_5 gsGetContainerInfoV1_5_Stub
 #define gsGetContainerInfoV2_1 gsGetContainerInfoV2_1_Stub
+#define gsGetContainerInfoV3_3 gsGetContainerInfoV3_3_Stub
 #define gsPutTimeSeriesV2_0 gsPutTimeSeriesV2_0_Stub
 #define gsPutContainerGeneralV2_0 gsPutContainerGeneralV2_0_Stub
 #define gsPutContainerGeneralV2_1 gsPutContainerGeneralV2_1_Stub
+#define gsPutContainerGeneralV3_3 gsPutContainerGeneralV3_3_Stub
 #define gsPutCollectionGeneralV2_1 gsPutCollectionGeneralV2_1_Stub
+#define gsPutCollectionGeneralV3_3 gsPutCollectionGeneralV3_3_Stub
 #define gsPutTimeSeriesGeneralV2_0 gsPutTimeSeriesGeneralV2_0_Stub
 #define gsPutTimeSeriesGeneralV2_1 gsPutTimeSeriesGeneralV2_1_Stub
+#define gsPutTimeSeriesGeneralV3_3 gsPutTimeSeriesGeneralV3_3_Stub
+#define gsCreateRowByStoreV3_3 gsCreateRowByStoreV3_3_Stub
 #define gsGetRowSchemaV2_1 gsGetRowSchemaV2_1_Stub
+#define gsGetRowSchemaV3_3 gsGetRowSchemaV3_3_Stub
+#endif 
+
+#if !defined(GS_DEPRECATION_IGNORABLE) && defined(GS_CLIENT_UNIT_TEST)
+#define GS_DEPRECATION_IGNORABLE 1
 #endif
 
 #include "util/container.h"
@@ -47,6 +57,7 @@
 #include "gridstore.h"
 #include "authentication.h"
 #include "service_address.h"
+#include "container_key_utils.h"
 #include "geometry_coder.h"
 #include "uuid/uuid.h"
 
@@ -57,6 +68,7 @@
 #undef gsPutContainerGeneral
 #undef gsPutCollectionGeneral
 #undef gsPutTimeSeriesGeneral
+#undef gsCreateRowByStore
 #undef gsGetRowSchema
 
 #ifdef __cplusplus
@@ -67,6 +79,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfo(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists);
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV1_5(
+		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
+		GSBool *exists);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV2_1(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists);
 GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeries(
@@ -81,7 +96,15 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV2_0(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV2_1(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container);
 GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneral(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSCollection **collection);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV2_1(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSCollection **collection);
@@ -93,7 +116,15 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV2_0(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSTimeSeries **timeSeries);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV2_1(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSTimeSeries **timeSeries);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStore(
+		GSGridStore *store, const GSContainerInfo *info, GSRow **row);
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchema(
+		GSRow *row, GSContainerInfo *schemaInfo);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV2_1(
 		GSRow *row, GSContainerInfo *schemaInfo);
 
 #ifdef __cplusplus
@@ -119,12 +150,20 @@ public:
 	template<typename T> static bool parseValue(
 			const GSChar *strValue, T &resultValue);
 	template<typename T> static T parseValue(const GSChar *strValue);
+
 	static size_t copyString(
 			const std::string &src, GSChar *dest, size_t destLenWithNull);
 	static size_t copyString(
 			const GSChar *src, size_t srcLenWithNull,
 			GSChar *dest, size_t destLenWithNull) throw();
-	static std::string normalizeName(const GSChar *value);
+
+	static std::string normalizeSymbol(
+			const GSChar *symbol, const GSChar *typeName);
+	static std::string normalizeSymbolUnchecked(const GSChar *symbol);
+	static void checkSymbol(const GSChar *symbol, const GSChar *typeName);
+	static void checkBasicSymbol(const GSChar *symbol, const GSChar *typeName);
+	static int32_t toASCIILower(int32_t ch);
+
 	static bool isIPV6Address(const util::SocketAddress &address);
 	static GSTimeUnit checkTimeUnit(GSTimeUnit timeUnit);
 	template<typename T> static T getNonAlignedValue(const void *ptr);
@@ -134,6 +173,10 @@ public:
 	template<typename T>
 	static const T* findFromArray(
 			const T *target, size_t totalByteSize, const T& value);
+
+	template<typename C>
+	static ArrayByteInStream subStream(
+			const C &buf, const ArrayByteInStream &in, size_t size);
 
 
 	static const uint32_t VAR_SIZE_1BYTE_THRESHOLD = 128;
@@ -166,6 +209,17 @@ public:
 
 private:
 	ClientUtil();
+};
+
+struct ClientVersion {
+	ClientVersion() throw();
+	ClientVersion(int32_t majorVersion, int32_t minorVersion) throw();
+
+	bool since(int32_t majorVersion, int32_t minorVersion) const throw();
+	bool since(const ClientVersion &another) const throw();
+
+	int32_t majorVersion_;
+	int32_t minorVersion_;
 };
 
 
@@ -423,13 +477,14 @@ enum ClientErrorCode {
 	GS_ERROR_CC_CONTAINER_NOT_OPENED,
 	GS_ERROR_CC_ILLEGAL_COMMIT_MODE,
 	GS_ERROR_CC_TRANSACTION_CLOSED,
-	GS_ERROR_CC_NO_SHCH_ELEMENT,
+	GS_ERROR_CC_NO_SUCH_ELEMENT,
 	GS_ERROR_CC_CONTAINER_CLOSED,
 	GS_ERROR_CC_NOT_LOCKED,
 	GS_ERROR_CC_RESOURCE_CLOSED,
 	GS_ERROR_CC_ALLOCATION_FAILED,
 	GS_ERROR_CC_RECOVERABLE_CONNECTION_PROBLEM,
-	GS_ERROR_CC_RECOVERABLE_ROW_SET_LOST
+	GS_ERROR_CC_RECOVERABLE_ROW_SET_LOST,
+	GS_ERROR_CC_ILLEGAL_CONFIG
 };
 
 
@@ -452,12 +507,13 @@ public:
 		MODE_AGGREGATED
 	};
 
-	static const GSType ANY_NULL_TYPE = -1;
+	static const GSType ANY_NULL_TYPE = GS_TYPE_NULL;
 	static const GSType NULLABLE_MASK =
 			~static_cast<GSType>((1U << (CHAR_BIT - 1)) - 1);
 
 	struct Tool;
 	struct KeyStorage;
+	struct Config;
 	class InputCursor;
 	class OutputCursor;
 	class VarDataPool;
@@ -475,15 +531,21 @@ public:
 	};
 	typedef TypeTraits<ANY_NULL_TYPE, false> AnyNullTraits;
 
+	template<int> struct ColumnInfoTraits;
+	template<bool Const = false> class ContainerInfoRef;
+
 public:
-	RowMapper(RowTypeCategory rowTypeCategory, const GSBinding *binding,
-			bool anyTypeAllowed = false);
-	RowMapper(const RowMapper &srcMapper, ArrayByteInStream &schemaIn,
-			bool columnOrderIgnorable);
+	RowMapper(
+			RowTypeCategory rowTypeCategory, const GSBinding *binding,
+			const Config &config);
+	RowMapper(
+			const RowMapper &srcMapper, ArrayByteInStream &schemaIn,
+			const Config &config, bool columnOrderIgnorable);
 	~RowMapper();
 
-	static std::auto_ptr<RowMapper> getInstance(ArrayByteInStream &in,
-			RowTypeCategory category, bool anyTypeAllowed);
+	static std::auto_ptr<RowMapper> getInstance(
+			ArrayByteInStream &in, const Config &config,
+			RowTypeCategory category);
 
 	static Cache& getDefaultCache();
 
@@ -494,22 +556,28 @@ public:
 
 	bool matches(
 			RowTypeCategory rowTypeCategory, const GSBinding *binding,
-			bool general) const;
+			bool general, const Config &config) const;
 	bool matches(
-			const RowMapper &baseMapper, ArrayByteInStream schemaIn) const;
+			const RowMapper &baseMapper, ArrayByteInStream schemaIn,
+			const Config &config) const;
 
 	static size_t getDigest(
 			RowTypeCategory rowTypeCategory, const GSBinding *binding,
-			bool general);
+			bool general, bool nullableAllowed);
 	static size_t getDigest(
-			const RowMapper &baseMapper, ArrayByteInStream schemaIn);
+			const RowMapper &baseMapper, ArrayByteInStream schemaIn,
+			const Config &config);
 
 	GSContainerType getContainerType() const;
 	void getContainerSchema(
-			GSContainerInfo &containerInfo, VarDataPool &varDataPool) const;
+			ContainerInfoRef<> &containerInfoRef,
+			VarDataPool &varDataPool) const;
+	static GSColumnInfo getColumnSchema(
+			const GSBindingEntry &entry, VarDataPool *varDataPool);
 
 	RowTypeCategory getCategory() const;
 	bool isGeneral() const;
+	bool isNullableAllowed() const;
 	const GSBinding& getBinding() const;
 	bool hasKey() const;
 
@@ -517,7 +585,39 @@ public:
 	bool isArray(int32_t columnId) const;
 	bool hasAnyTypeColumn() const;
 
-	void exportSchema(XArrayByteOutStream &out) const;
+	static GSBinding importSchema(
+			ArrayByteInStream &in, VarDataPool *varDataPool,
+			std::vector<GSBindingEntry> *entryList,
+			GSContainerType *containerType, bool anyTypeAllowed);
+	void exportSchema(XArrayByteOutStream &out, const Config &config) const;
+
+	static size_t importColumnCount(ArrayByteInStream &in);
+	static void exportColumnCount(
+			XArrayByteOutStream &out, size_t columnCount);
+
+	static int32_t importKeyListBegin(
+			ArrayByteInStream &in, const Config &config, size_t columnCount);
+	static void importKeyListEnd(
+			ArrayByteInStream &in, const Config &config, size_t columnCount,
+			int32_t &keyColumnId);
+
+	static void exportKeyListBegin(
+			XArrayByteOutStream &out, const Config &config,
+			const int32_t &keyColumnId);
+	static void exportKeyListEnd(
+			XArrayByteOutStream &out, const Config &config,
+			const int32_t &keyColumnId);
+
+	static GSColumnInfo importColumnSchema(
+			ArrayByteInStream &in, const Config &config,
+			VarDataPool &varDataPool);
+
+	static void exportColumnSchema(
+			XArrayByteOutStream &out, const GSBindingEntry &entry);
+	static void importColumnSchema(
+			ArrayByteInStream &in, const Config &config, GSBindingEntry &entry,
+			std::string *nameStr, VarDataPool *varDataPool);
+
 	int32_t resolveColumnId(const GSChar *name) const;
 
 	static void encodeKeyGeneral(
@@ -564,6 +664,15 @@ public:
 	const GSChar* decodeStringV2(
 			ArrayByteInStream &in, VarDataPool *pool, void *rowObj) const;
 
+	template<typename Alloc>
+	static const GSChar* readStringWithSize(
+			ArrayByteInStream &in, size_t inSize, Alloc &alloc);
+	template<typename Alloc>
+	static const GSChar* copyString(const GSChar *src, Alloc &alloc);
+	template<typename Alloc>
+	static const GSChar* copyString(
+			const GSChar *src, size_t srcSize, Alloc &alloc);
+
 	static GSType toFullType(GSType type, bool arrayUsed);
 	static GSType toElementType(GSType type, bool &arrayUsed);
 
@@ -605,9 +714,20 @@ public:
 	static bool isKeyType(GSType type);
 
 	static bool isAny(GSType type);
-	static bool isNullable(GSType type);
+	static bool isNullable(const GSBindingEntry &entry);
+	static bool isTypeNullable(GSType type);
 	static GSType toNullable(GSType type, bool nullable = true);
 	static GSType toNonNullable(GSType type);
+
+	static GSTypeOption filterTypeOptions(
+			const GSBindingEntry &entry,
+			bool anyTypeAllowed, bool nullableAllowed);
+	static bool filterNullable(
+			GSTypeOption options, GSTypeOption nullableDefault,
+			bool nullableAllowed, const GSChar *columnName);
+
+	static const ContainerInfoRef<true> toInfoRef(
+			const GSContainerInfo *info, const ClientVersion &version) throw();
 
 	struct Initializer {
 	public:
@@ -652,16 +772,24 @@ private:
 		int32_t id_;
 	};
 
+	enum ColumnFlag {
+		COLUMN_FLAG_ARRAY = 1 << 0,
+		COLUMN_FLAG_NOT_NULL = 1 << 2
+	};
+
 	typedef std::map<std::string, ColumnIdEntry> ColumnIdMap;
 
 	static const bool ACCEPT_AGGREGATION_RESULT_COLUMN_ID;
 	static const bool RESTRICT_KEY_ORDER_FIRST;
 
 	static Cache *cache_;
+	static const Config BASIC_CONFIG;
 	static const RowMapper AGGREGATION_RESULT_MAPPER;
 	static const RowMapper QUERY_ANALYSIS_MAPPER;
 
-	RowMapper(size_t digest, RowTypeCategory rowTypeCategory, bool general);
+	RowMapper(
+			size_t digest, RowTypeCategory rowTypeCategory, bool general,
+			bool nullableAllowed);
 
 	RowMapper(const RowMapper&);
 	RowMapper& operator=(const RowMapper&);
@@ -671,10 +799,11 @@ private:
 
 	static GSBinding checkAndCopyBinding(
 			const GSBinding *src, ColumnIdMap &entryIndexMap,
-			RowTypeCategory rowTypeCategory, bool anyTypeAllowed);
+			RowTypeCategory rowTypeCategory, const Config &config);
 	static GSBinding createReorderedBinding(
 			const RowMapper &baseMapper, ColumnIdMap &entryIndexMap,
-			ArrayByteInStream &in, bool columnOrderIgnorable);
+			ArrayByteInStream &in, const Config &config,
+			bool columnOrderIgnorable);
 
 	template<GSType T, typename M>
 	static const GSChar *maskNullString(const GSChar *src);
@@ -748,6 +877,7 @@ private:
 	size_t refCount_;
 	const RowTypeCategory rowTypeCategory_;
 	const bool general_;
+	const bool nullableAllowed_;
 	ColumnIdMap columnIdMap_;
 	GSBinding binding_;
 	int32_t keyColumnId_;
@@ -769,6 +899,7 @@ struct RowMapper::KeyStorage {
 		int64_t longValue_;
 		GSTimestamp timestampValue_;
 	} value_;
+	std::string strStorage_;
 };
 
 
@@ -801,6 +932,14 @@ struct RowMapper::BaseCursor {
 	int64_t varDataOffset_;
 };
 
+struct RowMapper::Config {
+	Config(bool anyTypeAllowed, bool nullableAllowed, bool keyExtensible);
+
+	bool anyTypeAllowed_;
+	bool nullableAllowed_;
+	bool keyExtensible_;
+};
+
 
 class RowMapper::InputCursor {
 public:
@@ -813,6 +952,7 @@ public:
 
 	void setVarDataBaseOffset(int64_t varDataBaseOffset);
 
+	MappingMode getMode() const;
 	int32_t getRowCount() const;
 	int64_t getLastRowID() const;
 	bool isRowIdIncluded() const;
@@ -905,12 +1045,13 @@ public:
 
 	const RowMapper* resolve(
 			RowTypeCategory rowTypeCategory, const GSBinding *binding,
-			bool general, bool anyTypeAllowed = false);
+			bool general, const Config &config);
 	const RowMapper* resolve(
 			const RowMapper &baseMapper, ArrayByteInStream &schemaIn,
-			bool columnOrderIgnorable);
+			const Config &config, bool columnOrderIgnorable);
 	const RowMapper* resolve(
-			const GSContainerInfo &info, bool anyTypeAllowed = false);
+			const RowMapper::ContainerInfoRef<true> &infoRef,
+			const Config &config);
 
 	const RowMapper* duplicate(const RowMapper &mapper);
 
@@ -1050,6 +1191,138 @@ struct RowMapper::TypeTraits {
 
 };
 
+template<> struct RowMapper::ColumnInfoTraits<0> {
+	struct Type {
+		const GSChar *name;
+		GSType type;
+	};
+};
+
+template<> struct RowMapper::ColumnInfoTraits<1> {
+	struct Type {
+		const GSChar *name;
+		GSType type;
+		GSIndexTypeFlags indexTypeFlags;
+	};
+};
+
+template<> struct RowMapper::ColumnInfoTraits<2> {
+	typedef GSColumnInfo Type;
+};
+
+template<bool Const> class RowMapper::ContainerInfoRef {
+public:
+	typedef typename util::Conditional<
+			Const, const GSContainerInfo*, GSContainerInfo*>::Type RefType;
+
+	ContainerInfoRef(RefType ref, const ClientVersion &version) throw();
+
+	ContainerInfoRef(const ContainerInfoRef &another) throw();
+	ContainerInfoRef& operator=(const ContainerInfoRef &another) throw();
+
+	static void clear(RefType ref, const ClientVersion &version) throw();
+	void clear() throw();
+
+	bool hasRef() const;
+	ContainerInfoRef<true> toConst() const;
+
+	void get(GSContainerInfo &info) const;
+	void set(const GSContainerInfo &info);
+
+	GSContainerType getType() const;
+	bool isRowKeyAssigned() const;
+
+	size_t getColumnCount() const;
+	GSColumnInfo getColumnInfo(int32_t column) const;
+	void setColumnInfo(int32_t column, const GSColumnInfo &columnInfo);
+	void createColumnInfoList(size_t columnCount, VarDataPool &pool);
+
+	const void* getRawColumnInfoList() const;
+
+private:
+	typedef typename util::Conditional<
+			Const, const GSColumnInfo*, GSColumnInfo*>::Type ColumnInfoRefType;
+	typedef typename util::Conditional<
+			Const, const void*, void*>::Type RawPtrType;
+
+	template<bool RefConst>
+	static typename util::Conditional<
+			RefConst, const void*, void*>::Type getColumnInfoRef(
+			const ContainerInfoRef &infoRef,
+			typename util::Conditional<
+					RefConst, const void*, void*>::Type columnInfoList,
+			int32_t column);
+	size_t getColumnInfoSize() const;
+
+	const GSTimeSeriesProperties* getTimeSeriesProperties() const;
+
+	RefType ref_;
+	ClientVersion version_;
+
+	RawPtrType columnInfoList_;
+	mutable GSTimeSeriesProperties tsProps_;
+};
+
+template<> void RowMapper::ContainerInfoRef<false>::clear() throw();
+
+template<> void RowMapper::ContainerInfoRef<false>::set(
+		const GSContainerInfo &info);
+
+template<> void RowMapper::ContainerInfoRef<false>::setColumnInfo(
+		int32_t column, const GSColumnInfo &columnInfo);
+
+template<> void RowMapper::ContainerInfoRef<false>::createColumnInfoList(
+		size_t columnCount, VarDataPool &pool);
+
+
+struct ContainerKey {
+	ContainerKey();
+	ContainerKey toCaseSensitive(bool caseSensitive) const;
+
+	std::vector<uint8_t> bytes_;
+	bool caseSensitive_;
+	bool compatible_;
+};
+
+bool operator<(const ContainerKey &key1, const ContainerKey &key2);
+bool operator==(const ContainerKey &key1, const ContainerKey &key2);
+std::ostream& operator<<(std::ostream &out, const ContainerKey &key);
+
+class ContainerKeyConverter {
+public:
+	typedef ContainerKeyUtils::Components Components;
+
+	ContainerKeyConverter(bool compatible, bool internalMode);
+
+	static int64_t getPublicDatabaseId();
+
+	bool isCompatible() const;
+
+	ContainerKey get(
+			ArrayByteInStream &in, bool caseSensitive) const;
+	void put(
+			XArrayByteOutStream &out,
+			const ContainerKey &key, int64_t databaseId) const;
+
+	ContainerKey compose(
+			const Components &components, bool caseSensitive) const;
+	void decompose(
+			const ContainerKey &key, Components &components) const;
+
+	std::string format(const ContainerKey &key) const;
+	std::ostream& format(std::ostream &os, const ContainerKey &key) const;
+	ContainerKey parse(const char8_t *str, bool caseSensitive) const;
+
+	int32_t compare(
+			const ContainerKey &key1, const ContainerKey &key2) const;
+
+private:
+	static const int64_t PUBLIC_DATABASE_ID;
+
+	bool compatible_;
+	bool internalMode_;
+};
+
 
 
 struct Statement {
@@ -1110,7 +1383,19 @@ struct Statement {
 		CREATE_TRIGGER,
 		DROP_TRIGGER,
 
-		STATEMTNT_ID_MAX
+		GET_USERS,
+		PUT_USER,
+		DROP_USER,
+		GET_DATABASES,
+		PUT_DATABASE,
+		DROP_DATABASE,
+		PUT_PRIVILEGE,
+		DROP_PRIVILEGE,
+
+		CREATE_INDEX_DETAIL,
+		DROP_INDEX_DETAIL,
+
+		STATEMENT_ID_MAX
 	};
 };
 
@@ -1127,9 +1412,11 @@ struct StatementResult {
 
 class NodeConnection {
 public:
+	struct ClientId;
 	struct Config;
 	struct LoginInfo;
 	struct OptionalRequest;
+	class OptionalRequestSource;
 	struct Heartbeat;
 	static const int32_t EE_MAGIC_NUMBER;
 
@@ -1138,6 +1425,7 @@ public:
 
 	static void setDetailErrorMessageEnabled(bool enabled);
 	static int32_t getProtocolVersion();
+	int32_t getRemoteProtocolVersion() const;
 	static bool isSupportedProtocolVersion(int32_t protocolVersion);
 	static void setProtocolVersion(int32_t protocolVersion);
 	const util::SocketAddress& getRemoteAddress() const;
@@ -1152,6 +1440,8 @@ public:
 	static void putStatementId(XArrayByteOutStream &reqOut, int64_t statementId,
 			bool firstStatement = false);
 	static bool isOptionalRequestEnabled();
+	static bool isClientIdOnLoginEnabled();
+	static bool isDatabaseIdEnabled();
 	static void tryPutEmptyOptionalRequest(XArrayByteOutStream &reqOut);
 
 	ArrayByteInStream executeStatement(
@@ -1171,17 +1461,20 @@ public:
 
 	void login(
 			util::NormalXArray<uint8_t> &req, util::NormalXArray<uint8_t> &resp,
-			const LoginInfo &loginInfo);
+			const LoginInfo &loginInfo, int64_t *databaseId);
 	bool loginInternal(
 			util::NormalXArray<uint8_t> &req, util::NormalXArray<uint8_t> &resp,
-			const LoginInfo &loginInfo, Auth::Challenge &challenge);
+			const LoginInfo &loginInfo, Auth::Challenge &challenge,
+			size_t &lastInPos);
 
 	void logout(
 			util::NormalXArray<uint8_t> &req, util::NormalXArray<uint8_t> &resp);
 
 	void reuse(
 			util::NormalXArray<uint8_t> &req, util::NormalXArray<uint8_t> &resp,
-			const LoginInfo &loginInfo);
+			const LoginInfo &loginInfo, int64_t *databaseId);
+
+	int64_t getHeartbeatReceiveCount() const;
 
 	static std::string getDigest(const char8_t *password);
 
@@ -1208,6 +1501,7 @@ private:
 			util::NormalXArray<uint8_t> &heartbeatBuf, Heartbeat &heartbeat);
 
 	void putConnectRequest(XArrayByteOutStream &reqOut);
+	void acceptConnectResponse(ArrayByteInStream &respIn);
 
 	static bool isStatementIdLarge(bool firstStatement);
 	static int64_t getStatementId(
@@ -1220,7 +1514,9 @@ private:
 	int32_t alternativeVersion_;
 	bool alternativeVersionEnabled_;
 	Auth::Mode authMode_;
+	int32_t remoteProtocolVersion_;
 	int64_t statementId_;
+	int64_t heartbeatReceiveCount_;
 	std::string authenticatedUser_;
 	std::string authenticatedPasswordDigest_;
 	std::string authenticatedDatabase_;
@@ -1228,6 +1524,28 @@ private:
 	bool authenticated_;
 	bool ownerMode_;
 	int32_t transactionTimeoutSecs_;
+};
+
+
+struct NodeConnection::ClientId {
+public:
+	ClientId();
+	ClientId(const uuid_t &uuid, int64_t sessionId);
+
+	ClientId(const ClientId &another);
+	ClientId& operator=(const ClientId &another);
+
+	void generate(int64_t sessionId);
+
+	bool isEmpty() const;
+
+	int64_t getSessionId() const;
+	const uuid_t& getUUID() const;
+
+private:
+	uuid_t uuid_;
+	int64_t sessionId_;
+	bool generated_;
 };
 
 
@@ -1263,6 +1581,7 @@ struct NodeConnection::LoginInfo {
 	bool ownerMode_;
 	std::string clusterName_;
 	int32_t transactionTimeoutSecs_;
+	ClientId clientId_;
 };
 
 struct NodeConnection::OptionalRequest {
@@ -1276,16 +1595,21 @@ struct NodeConnection::OptionalRequest {
 		ROW_INSERT_UPDATE = 7,
 		STATEMENT_TIMEOUT = 10001,
 		FETCH_LIMIT = 10002,
-		FETCH_SIZE = 10003
+		FETCH_SIZE = 10003,
+		CLIENT_ID = 11001,
+		FETCH_BYTES_SIZE = 11002
 	};
+
+	typedef std::vector<uint8_t> ExtValue;
+	typedef std::map<int32_t, ExtValue> ExtMap;
 
 	OptionalRequest();
 	OptionalRequest(
 			int32_t statementTimeout, int64_t fetchLimit, int64_t fetchSize,
 			const std::string &dbName);
 
-	void format(XArrayByteOutStream &reqOut);
-	static void putType(XArrayByteOutStream &reqOut, Type type);
+	void putExt(int32_t type, const void *value, size_t valueSize);
+	void format(XArrayByteOutStream &reqOut) const;
 
 	int32_t transactionTimeout_;
 	bool forUpdate_;
@@ -1297,6 +1621,38 @@ struct NodeConnection::OptionalRequest {
 	int32_t statementTimeout_;
 	int64_t fetchLimit_;
 	int64_t fetchSize_;
+	ClientId clientId_;
+	int32_t fetchBytesSize_;
+	std::auto_ptr<ExtMap> extRequestMap_;
+
+private:
+	struct Formatter;
+};
+
+struct NodeConnection::OptionalRequest::Formatter {
+	static const int32_t RANGE_SIZE;
+	static const int32_t RANGE_START_ID;
+
+	explicit Formatter(XArrayByteOutStream &reqOut);
+	void putType(int32_t type);
+	void close();
+
+	static void putBodySize(
+			XArrayByteOutStream &reqOut, size_t headPos, size_t bodyPos);
+
+	XArrayByteOutStream &reqOut_;
+
+	int32_t lastRangeId_;
+	size_t headPos_;
+	size_t bodyPos_;
+	size_t rangeHeadPos_;
+	size_t rangeBodyPos_;
+};
+
+class NodeConnection::OptionalRequestSource {
+public:
+	virtual bool hasOptions() const = 0;
+	virtual void putOptions(OptionalRequest &optionalRequest) const = 0;
 };
 
 struct NodeConnection::Heartbeat {
@@ -1326,6 +1682,7 @@ public:
 			util::NormalXArray<uint8_t> &resp,
 			const NodeConnection::Config &config,
 			const NodeConnection::LoginInfo &loginInfo,
+			int64_t *databaseId,
 			bool preferCache);
 
 	void clear();
@@ -1354,7 +1711,8 @@ private:
 class ContainerHashMode {
 public:
 	enum Id {
-		CRC32
+		COMPATIBLE1,
+		MD5
 	};
 };
 
@@ -1368,34 +1726,41 @@ public:
 	class DefaultProtocolConfig;
 	struct AddressConfig;
 
+	template<typename T> class ClusterInfoEntry;
+	struct ClusterInfo;
+
 	NodeResolver(NodeConnectionPool &pool, bool passive,
 			const util::SocketAddress &address,
 			const NodeConnection::Config &connectionConfig,
-			const NodeConnection::LoginInfo &loginInfo,
-			int32_t partitionCount,
 			const ServiceAddressResolver::Config &sarConfig,
 			const std::vector<util::SocketAddress> &memberList,
 			const AddressConfig &addressConfig);
 
-	void setPassword(const NodeConnection::LoginInfo &loginInfo);
 	void setConnectionConfig(const NodeConnection::Config &connectionConfig);
 	void setNotificationReceiveTimeoutMillis(int64_t timeout);
 	void setProviderTimeoutMillis(int64_t timeout);
 	void setPreferableConnectionPoolSize(int32_t size);
 
-	int32_t getPartitionCount();
-	ContainerHashMode::Id getContainerHashMode();
+	int32_t getPartitionCount(ClusterInfo &clusterInfo);
+	ContainerHashMode::Id getContainerHashMode(ClusterInfo &clusterInfo);
+	int64_t getDatabaseId(ClusterInfo &clusterInfo);
+	void acceptDatabaseId(
+			ClusterInfo &clusterInfo, int64_t databaseId,
+			const util::SocketAddress &address);
 
-	util::SocketAddress getMasterAddress();
+	util::SocketAddress getMasterAddress(ClusterInfo &clusterInfo);
 	util::SocketAddress getNodeAddress(
-			int32_t partitionId, bool backupPreferred,
-			const util::SocketAddress *preferebleHost = NULL);
+			ClusterInfo &clusterInfo, int32_t partitionId, bool backupPreferred,
+			const util::SocketAddress *preferableHost = NULL);
 	void getNodeAddressList(
-			int32_t partitionId, std::vector<util::SocketAddress> &addressList);
+			ClusterInfo &clusterInfo, int32_t partitionId,
+			std::vector<util::SocketAddress> &addressList);
 
-	void invalidateMaster();
+	void invalidateMaster(ClusterInfo &clusterInfo);
 
 	void setProtocolConfig(ProtocolConfig *protocolConfig);
+
+	void close();
 
 	static util::SocketAddress getAddressProperties(
 			const Properties &props, bool *passive,
@@ -1423,6 +1788,12 @@ public:
 
 	static int getAddressFamily(const bool *ipv6Expected);
 
+	static void makeServiceAddressResolver(
+			ServiceAddressResolver &resolver,
+			const ServiceAddressResolver::Config &sarConfig,
+			const std::vector<util::SocketAddress> &memberList,
+			const AddressConfig &addressConfig);
+
 private:
 	static const bool IPV6_ENABLED_DEFAULT;
 
@@ -1444,22 +1815,27 @@ private:
 	NodeResolver(const NodeResolver&);
 	NodeResolver& operator=(const NodeResolver&);
 
-	static void makeServiceAddressResolver(
-			ServiceAddressResolver &resolver,
-			const ServiceAddressResolver::Config &sarConfig,
-			const std::vector<util::SocketAddress> &memberList,
-			const AddressConfig &addressConfig);
-
-	void prepareMasterConnection(size_t startTrialCount);
+	void prepareConnectionAndClusterInfo(
+			ClusterInfo &clusterInfo, size_t startTrialCount);
 	void updateNotificationMember();
-	bool tryUpdateMasterConnection();
-	void prepareMasterInfo(size_t startTrialCount);
-	void invalidateMasterInternal();
-	void acceptPartitionCount(int32_t partitionCount, bool fromNotification);
+	bool updateConnectionAndClusterInfo(ClusterInfo &clusterInfo);
+	void updateMasterInfo(ClusterInfo &clusterInfo);
+	void invalidateMasterInternal(ClusterInfo &clusterInfo);
+	void releaseMasterCache(bool forceClose);
+
+	void acceptClusterInfo(
+			ClusterInfo &clusterInfo, const int32_t *partitionCount,
+			const ContainerHashMode::Id *hashMode, const int64_t *databaseId,
+			const util::SocketAddress &address, bool byConnection);
+	template<typename T> void acceptClusterInfoEntry(
+			ClusterInfo &clusterInfo, ClusterInfoEntry<T> &entry,
+			const char8_t *name, const T &value,
+			const util::SocketAddress &address,
+			bool byConnection, bool checkOnly);
 
 	const std::vector<util::SocketAddress>* getNodeAddressList(
-			int32_t partitionId, bool backupPreferred, size_t startTrialCount,
-			bool allowEmpty);
+			ClusterInfo &clusterInfo, int32_t partitionId, bool backupPreferred,
+			size_t startTrialCount, bool allowEmpty);
 	size_t getInetAddressSize() const;
 	static ContainerHashMode::Id decodeContainerHashMode(
 			ArrayByteInStream &in);
@@ -1476,10 +1852,6 @@ private:
 	util::SocketAddress notificationAddress_;
 	util::SocketAddress masterAddress_;
 	NodeConnection::Config connectionConfig_;
-	NodeConnection::LoginInfo loginInfo_;
-	int32_t partitionCount_;
-	bool partitionCountSpecified_;
-	ContainerHashMode::Id containerHashMode_;
 	std::auto_ptr<NodeConnection> masterConnection_;
 	util::NormalXArray<uint8_t> req_;
 	util::NormalXArray<uint8_t> resp_;
@@ -1524,6 +1896,42 @@ struct NodeResolver::AddressConfig {
 	bool alwaysMaster_;
 };
 
+template<typename T>
+class NodeResolver::ClusterInfoEntry {
+public:
+	ClusterInfoEntry();
+
+	const T* get() const;
+
+	bool tryAccept(
+			const T *value, const util::SocketAddress &address,
+			bool byConnection, bool checkOnly);
+	bool invalidate();
+
+private:
+	T value_;
+	bool acceptedByAny_;
+	bool acceptedByConnection_;
+	util::SocketAddress acceptedAddress_;
+};
+
+struct NodeResolver::ClusterInfo {
+	explicit ClusterInfo(const NodeConnection::LoginInfo &loginInfo);
+
+	bool invalidate();
+
+	const int32_t* getPartitionCount() const;
+	const ContainerHashMode::Id* getHashMode() const;
+	const int64_t* getDatabaseId() const;
+
+	void setPartitionCount(const int32_t *partitionCount);
+
+	NodeConnection::LoginInfo loginInfo_;
+	ClusterInfoEntry<int32_t> partitionCount_;
+	ClusterInfoEntry<ContainerHashMode::Id> hashMode_;
+	ClusterInfoEntry<int64_t> databaseId_;
+};
+
 
 
 class GridStoreChannel {
@@ -1547,7 +1955,6 @@ public:
 
 		bool passive_;
 		util::SocketAddress address_;
-		std::string user_;
 		std::string clusterName_;
 
 		std::string providerURL_;
@@ -1561,8 +1968,10 @@ public:
 	};
 
 	struct ConnectionId;
+	struct LocalConfig;
 	struct Source;
 	struct Context;
+	class ContextQueryOptions;
 
 	struct LocatedSchema;
 	struct SessionInfo;
@@ -1575,11 +1984,13 @@ public:
 	static bool v15DDLCompatible_;
 	static bool v20AffinityCompatible_;
 	static bool v21StatementIdCompatible_;
+	static bool v40QueryCompatible_;
+	static bool v40ContainerHashCompatible_;
+	static bool v40SchemaCompatible_;
 
 	GridStoreChannel(const Config &config, const Source &source);
 
 	NodeConnectionPool& getConnectionPool();
-	void apply(const Source &source);
 	void apply(const Config &config);
 	int64_t getFailoverTimeoutMillis(const Context &context);
 	void setStatementRetryMode(int32_t statementRetryMode);
@@ -1607,17 +2018,27 @@ public:
 	void invalidateMaster(Context &context);
 	void checkContextAvailable(const Context &context);
 
+	int64_t getDatabaseId(Context &context);
+
 	void getNodeAddressList(
 			Context &context, int32_t partitionId,
 			std::vector<util::SocketAddress> &addressList);
 
 	int32_t getPartitionCount(Context &context);
 
-	int32_t resolvePartitionId(Context &context, const GSChar *containerName);
+	int32_t resolvePartitionId(
+			Context &context, const ContainerKey &containerKey,
+			const ContainerKeyConverter &keyConverter);
 	static int32_t calculatePartitionId(
-			const GSChar *containerName, ContainerHashMode::Id mode,
+			const ContainerKey &containerKey,
+			const ContainerKeyConverter &keyConverter,
+			ContainerHashMode::Id hashMode, int32_t partitionCount);
+	static int32_t calculatePartitionId(
+			const GSChar *containerName, ContainerHashMode::Id hashMode,
 			int32_t partitionCount);
 
+	static bool isMasterResolvableByConnection();
+	static ContainerHashMode::Id getDefaultContainerHashMode();
 	static int32_t statementToNumber(Statement::Id statement);
 	static bool isRecoverableError(GSResult result) throw();
 
@@ -1638,6 +2059,7 @@ private:
 	void updateConnection(Context &context, bool preferConnectionPool);
 
 	static bool isConnectionDependentStatement(Statement::Id statement);
+	static bool isContainerKeyComposed();
 
 	NodeConnectionPool pool_;
 	Config config_;
@@ -1663,6 +2085,17 @@ private:
 	util::SocketAddress address_;
 };
 
+struct GridStoreChannel::LocalConfig {
+	LocalConfig();
+
+	void set(const Properties &properties);
+
+	int64_t failoverTimeoutMillis_;
+	int64_t transactionTimeoutMillis_;
+	int32_t fetchBytesSize_;
+	int32_t containerCacheSize_;
+};
+
 
 struct GridStoreChannel::Source {
 	friend class GridStoreChannel;
@@ -1671,16 +2104,15 @@ struct GridStoreChannel::Source {
 	~Source();
 
 	const Key& getKey() const;
+	NodeResolver::ClusterInfo createClusterInfo() const;
 	Context createContext() const;
 
 	void set(const Properties &properties);
 
 	Key key_;
 	int32_t partitionCount_;
-	int64_t failoverTimeoutMillis_;
-	int64_t transactionTimeoutMillis_;
+	LocalConfig localConfig_;
 	NodeConnection::LoginInfo loginInfo_;
-	int32_t containerCacheSize_;
 };
 
 
@@ -1695,53 +2127,72 @@ public:
 	Context& operator=(const Context &another);
 
 	int64_t getTransactionTimeoutMillis() const;
+	ContextQueryOptions bindQueryOptions(
+			const ContextQueryOptions *source) const;
 	int32_t getFailoverCount() const;
 
 	util::NormalXArray<uint8_t>& getRequestBuffer();
 	util::NormalXArray<uint8_t>& getResponseBuffer();
 
-	void getSessionUUID(uuid_t sessionUUID) const;
+	const uuid_t& getSessionUUID() const;
 	int64_t generateSessionId();
+	NodeConnection::ClientId generateClientId();
 
 	ConnectionId getLastConnectionId() const;
-	ContainerCache *getContainerCache();
+	ContainerCache* getContainerCache();
 
-	void setPreferebleHost(
+	void setPreferableHost(
 			int32_t partitionId, const util::SocketAddress *host);
-	const util::SocketAddress* getPreferebleHost(int32_t partitionId) const;
+	const util::SocketAddress* getPreferableHost(int32_t partitionId) const;
+
+	const ContainerKeyConverter& getKeyConverter() const;
 
 private:
 	typedef std::pair<ConnectionId, NodeConnection*> ConnectionEntry;
 	typedef std::map<util::SocketAddress, ConnectionEntry,
 			SocketAddressLess> ConnectionMap;
-	typedef std::map<int32_t, util::SocketAddress> PreferebleHostMap;
+	typedef std::map<int32_t, util::SocketAddress> PreferableHostMap;
 
 	Context(
-			int64_t failoverTimeoutMillis, int64_t transactionTimeoutMillis,
+			const LocalConfig &localConfig,
 			const NodeConnection::LoginInfo &loginInfo,
-			int32_t containerCacheSize);
+			const NodeResolver::ClusterInfo &clusterInfo);
 
-	int64_t failoverTimeoutMillis_;
-	int64_t transactionTimeoutMillis_;
+	LocalConfig localConfig_;
 	int32_t partitionId_;
-	int32_t partitionCount_;
 	ConnectionEntry lastConnection_;
+	int64_t lastHeartbeatCount_;
 	ConnectionMap activeConnections_;
 	NodeConnection::LoginInfo loginInfo_;
+	NodeResolver::ClusterInfo clusterInfo_;
 	bool closed_;
 
 	int32_t failoverCount_;
 
 	util::NormalXArray<uint8_t> req_;
 	util::NormalXArray<uint8_t> resp_;
-	uuid_t sessionUUID_;
 	int64_t lastSessionId_;
 	ConnectionId connectionId_;
-	int32_t containerCacheSize_;
 	std::auto_ptr<ContainerCache> containerCache_;
-	PreferebleHostMap preferebleHosts_;
+	PreferableHostMap preferableHosts_;
 
 	ResolverExecutor *resolverExecutor_;
+
+	ContainerKeyConverter keyConverter_;
+};
+
+class GridStoreChannel::ContextQueryOptions :
+		public NodeConnection::OptionalRequestSource {
+public:
+	ContextQueryOptions(
+			const LocalConfig &localConfig, const ContextQueryOptions *source);
+
+	bool hasOptions() const;
+	void putOptions(NodeConnection::OptionalRequest &optionalRequest) const;
+
+private:
+	const LocalConfig &localConfig_;
+	const ContextQueryOptions *source_;
 };
 
 struct GridStoreChannel::LocatedSchema {
@@ -1794,14 +2245,14 @@ public:
 	~ContainerCache();
 
 	const LocatedSchema* findSchema(
-			const std::string &normalizedContainerName,
+			const ContainerKey &normalizedContainerKey,
 			const GSBinding *binding,
 			const GSContainerType *containerType,
-			bool general) const;
+			bool general, const RowMapper::Config &config) const;
 	void cacheSchema(
-			const std::string &normalizedContainerName,
+			const ContainerKey&normalizedContainerKey,
 			const RowMapper &mapper, int64_t containerId, int32_t versionId);
-	bool removeSchema(const std::string &normalizedContainerName);
+	bool removeSchema(const ContainerKey &normalizedContainerKey);
 
 	bool takeSession(
 			int32_t partitionId, int64_t containerId, SessionInfo &sessionInfo);
@@ -1815,8 +2266,8 @@ private:
 	ContainerCache(const ContainerCache&);
 	ContainerCache& operator=(const ContainerCache&);
 
-	typedef std::map<uint64_t, std::string> SchemaNameMap;
-	typedef std::map<std::string, LocatedSchema> SchemaCache;
+	typedef std::map<uint64_t, ContainerKey> SchemaNameMap;
+	typedef std::map<ContainerKey, LocatedSchema> SchemaCache;
 	typedef std::map<uint64_t, SessionInfo::Key> SessionKeyMap;
 	typedef std::map<SessionInfo::Key, SessionInfo> SessionCache;
 
@@ -1833,19 +2284,23 @@ private:
 
 struct GridStoreChannel::ResolverExecutor {
 	enum Command {
+		COMMAND_GET_DATABASE_ID,
 		COMMAND_GET_ADDRESS_LIST,
 		COMMAND_GET_PARTITION_COUNT,
 		COMMAND_RESOLVE_PARTITION_ID
 	};
 
 	explicit ResolverExecutor(Command command);
-	void execute(NodeResolver &resolver);
+	void execute(
+			NodeResolver &resolver, NodeResolver::ClusterInfo &clusterInfo);
 
 	Command command_;
-	const GSChar *containerName_;
+	const ContainerKey *containerKey_;
+	const ContainerKeyConverter *keyConverter_;
 	std::vector<util::SocketAddress> *addressList_;
 	int32_t partitionId_;
 	int32_t partitionCount_;
+	int64_t databaseId_;
 };
 
 struct GridStoreChannel::ResolverExecutorScope {
@@ -1967,17 +2422,51 @@ struct GSGridStoreTag {
 public:
 	friend struct GSResourceHeader;
 
-	enum ContainerPropertyType {
+	enum ContainerPropertyKey {
 		CONTAINER_PROPERTY_ID,
 		CONTAINER_PROPERTY_SCHEMA,
 		CONTAINER_PROPERTY_INDEX,
 		CONTAINER_PROPERTY_EVENT_NOTIFICATION,
-		CONTAINER_PROPERTY_TRIGGER
+		CONTAINER_PROPERTY_TRIGGER,
+		CONTAINER_PROPERTY_ATTRIBUTE,
+		CONTAINER_PROPERTY_INDEX_DETAIL,
+
+		CONTAINER_PROPERTY_KEY_MAX
+	};
+
+	class ContainerPropertyKeySet {
+	public:
+		typedef ContainerPropertyKeySet Keys;
+
+		static const ContainerPropertyKeySet KEYS_DEFAULT;
+		static const ContainerPropertyKeySet KEYS_COMPATIBLE_TRIGGER;
+		static const ContainerPropertyKeySet KEYS_COMPATIBLE_INDEX;
+		static const ContainerPropertyKeySet KEYS_FOR_OBJECT;
+
+		ContainerPropertyKeySet(
+				ContainerPropertyKey key1 = CONTAINER_PROPERTY_KEY_MAX,
+				ContainerPropertyKey key2 = CONTAINER_PROPERTY_KEY_MAX,
+				ContainerPropertyKey key3 = CONTAINER_PROPERTY_KEY_MAX);
+
+		static ContainerPropertyKeySet all();
+
+		ContainerPropertyKeySet merge(bool exclusive, const Keys &keys) const;
+
+		uint32_t size() const;
+
+		ContainerPropertyKey begin() const;
+		ContainerPropertyKey next(ContainerPropertyKey lastKey) const;
+
+	private:
+		uint32_t flags_;
 	};
 
 	struct ContainerIdInfo {
+		ContainerIdInfo();
+
 		int32_t versionId_;
 		int64_t containerId_;
+		ContainerKey remoteKey_;
 		const GSChar *remoteName_;
 	};
 
@@ -2001,18 +2490,13 @@ public:
 	RowMapper::VarDataPool& getVarDataPool();
 
 	bool getContainerInfo(
-			const GSChar *name, GSContainerInfo &info,
-			const ContainerPropertyType *propertyTypeList = NULL,
-			size_t propertyCount = 0,
+			const GSChar *name, RowMapper::ContainerInfoRef<> &infoRef,
+			const ContainerPropertyKeySet *propKeySet = NULL,
 			RowMapper::VarDataPool *varDataPool = NULL,
-			ContainerIdInfo *idInfo = NULL,
-			int32_t majorVersion = GS_CLIENT_VERSION_MAJOR,
-			int32_t minorVersion = GS_CLIENT_VERSION_MINOR);
+			ContainerIdInfo *idInfo = NULL);
 	static GSResult getContainerInfo(
-			GSGridStore *store, const GSChar *name,
-			GSContainerInfo *info, GSBool *exists,
-			int32_t majorVersion = GS_CLIENT_VERSION_MAJOR,
-			int32_t minorVersion = GS_CLIENT_VERSION_MINOR) throw();
+			GSGridStore *store, const GSChar *name, GSContainerInfo *info,
+			GSBool *exists, const ClientVersion &version) throw();
 
 	GSContainer* getContainer(const GSChar *name, const GSBinding &binding,
 			GSContainerType containerType);
@@ -2021,30 +2505,27 @@ public:
 
 	GSContainer* putContainer(
 			const GSChar *name, const GSBinding &binding,
-			const GSContainerInfo *info, GSBool modifiable,
-			const GSContainerType *containerType,
-			int32_t majorVersion, int32_t minorVersion);
+			const RowMapper::ContainerInfoRef<true> &containerInfoRef,
+			GSBool modifiable, const GSContainerType *containerType);
 	static GSResult putContainer(
 			GSGridStore *store, const GSChar *name, bool nameRequired,
 			const GSBinding *binding, const GSContainerInfo *info,
 			GSBool modifiable, GSContainer **container,
 			const GSContainerType *containerType,
-			int32_t majorVersion = GS_CLIENT_VERSION_MAJOR,
-			int32_t minorVersion = GS_CLIENT_VERSION_MINOR) throw();
+			const ClientVersion &version) throw();
 
 	GSContainer* getContainer(
 			const GSChar *name, const GSContainerType *expectedType);
 
 	GSContainer* putContainer(
-			const GSChar *name, const GSContainerInfo &containerInfo,
-			GSBool modifiable, const GSContainerType *containerType,
-			int32_t majorVersion, int32_t minorVersion);
+			const GSChar *name,
+			const RowMapper::ContainerInfoRef<true> &containerInfoRef,
+			GSBool modifiable, const GSContainerType *containerType);
 	static GSResult putContainer(
 			GSGridStore *store, const GSChar *name,
 			const GSContainerInfo *info, GSBool modifiable,
 			GSContainer **container, const GSContainerType *containerType,
-			int32_t majorVersion = GS_CLIENT_VERSION_MAJOR,
-			int32_t minorVersion = GS_CLIENT_VERSION_MINOR) throw();
+			const ClientVersion &version) throw();
 
 	void dropContainer(
 			const GSChar *name, const GSContainerType *containerType);
@@ -2063,34 +2544,49 @@ public:
 			size_t predicateCount,
 			const GSContainerRowEntry *&entryList, size_t &entryCount);
 
-	GSRow* createRow(const GSContainerInfo &info);
+	GSRow* createRow(const RowMapper::ContainerInfoRef<true> &infoRef);
+	static GSResult createRow(
+			GSGridStore *store, const GSContainerInfo *info, GSRow **row,
+			const ClientVersion &version) throw();
+
 	GSRowKeyPredicate* createRowKeyPredicate(GSType keyType);
 
 	GSPartitionController* getPartitionController();
 
-	static void initializeContainerInfo(GSContainerInfo &info,
-			int32_t majorVersion, int32_t minorVersion) throw();
-
-	static void importSchemaProperty(ArrayByteInStream &in,
+	static void importSchemaProperty(
+			ArrayByteInStream &in, const RowMapper::Config &config,
 			RowMapper::VarDataPool &varDataPool,
-			std::vector<const GSChar*> &columnNameList,
-			std::vector<GSType> &columnTypeList,
-			GSContainerType *containerType, bool &keyAvailable,
-			bool anyTypeAllowed);
+			GSContainerInfo &containerInfo,
+			std::vector<GSColumnInfo> &columnInfoList, bool withContainerType);
+
+	static void importIndexInfo(
+			ArrayByteInStream &in, RowMapper::VarDataPool &varDataPool,
+			GSIndexInfo &indexInfo);
+	static void exportIndexInfo(
+			XArrayByteOutStream &out, const GSIndexInfo &indexInfo);
+	static int32_t getIndexTypeOrdinal(
+			GSIndexTypeFlags typeFlag, bool emptyOrDefaultAllowed);
 
 	static bool isContainerStatementUnified();
 	static bool isSessionUUIDSummarized();
 	static bool isTSDivisionAndAffinityEnabled();
 
-private:
-	typedef GridStoreChannel::ContainerCache ContainerCache;
-	typedef util::NormalSortedList<void*> ResourceList;
-	typedef std::multimap<std::string, GSContainer*> ContainerMap;
+	static bool isClientIdEnabled();
+	static bool isIndexDetailEnabled();
+	static bool isAttributeVerifiable();
+	static bool isNullableColumnAllowed();
+	static bool isNullableColumnAllowed(int32_t protocolVersion);
 
-	struct ColumnInfoWithoutIndex {
-		const GSChar *name_;
-		GSType type_;
-	};
+	static bool isQueryOptionsExtensible();
+	static const RowMapper::Config& getRowMapperConfig();
+	static const RowMapper::Config& getRowMapperConfig(
+			int32_t protocolVersion);
+
+private:
+	typedef util::NormalSortedList<void*> ResourceList;
+	typedef NodeConnection::OptionalRequestSource OptionalRequestSource;
+	typedef GridStoreChannel::ContainerCache ContainerCache;
+	typedef std::multimap<ContainerKey, GSContainer*> ContainerMap;
 
 	struct MultiQueryStatement {
 		explicit MultiQueryStatement(GridStoreChannel::Context &context);
@@ -2100,7 +2596,8 @@ private:
 		bool makeCreateSessionRequest(XArrayByteOutStream &req,
 				GridStoreChannel &channel, GridStoreChannel::Context &context);
 		void acceptCreateSessionResponse(ArrayByteInStream &resp);
-		bool makeMainRequest(XArrayByteOutStream &req);
+		bool makeMainRequest(
+				XArrayByteOutStream &req, GridStoreChannel::Context &context);
 		void acceptMainResponse(ArrayByteInStream &resp,
 				const GridStoreChannel::ConnectionId &connectionId);
 		bool makeCloseSessionRequest(XArrayByteOutStream &req);
@@ -2119,12 +2616,14 @@ private:
 	struct MultiPutStatement {
 		explicit MultiPutStatement(GridStoreChannel::Context &context);
 		void add(
-				const GSContainerRowEntry &rowEntry, const RowMapper *mapper);
+				const GSContainerRowEntry &rowEntry, const RowMapper *mapper,
+				const ContainerKeyConverter &keyConverter);
 
 		bool makeCreateSessionRequest(XArrayByteOutStream &req,
 				GridStoreChannel &channel, GridStoreChannel::Context &context);
 		void acceptCreateSessionResponse(ArrayByteInStream &resp);
-		bool makeMainRequest(XArrayByteOutStream &req);
+		bool makeMainRequest(
+				XArrayByteOutStream &req, GridStoreChannel::Context &context);
 		void acceptMainResponse(ArrayByteInStream &resp,
 				const GridStoreChannel::ConnectionId &connectionId);
 		bool makeCloseSessionRequest(XArrayByteOutStream &req);
@@ -2142,11 +2641,11 @@ private:
 		};
 
 		typedef std::vector<const RowMapper*> MapperList;
-		typedef std::vector<std::string> ContainerNameList;
-		typedef std::map<std::string, SubEntry> SubEntryMap;
+		typedef std::vector<ContainerKey> ContainerKeyList;
+		typedef std::map<ContainerKey, SubEntry> SubEntryMap;
 
 		MapperList mapperList_;
-		ContainerNameList containerNameList_;
+		ContainerKeyList containerKeyList_;
 		SubEntryMap subEntryMap_;
 		uuid_t sessionUUID_;
 	};
@@ -2163,7 +2662,7 @@ private:
 		void add(const GSRowKeyPredicateEntry &predicateEntry);
 		bool makeRequest(
 				XArrayByteOutStream &req,
-				GridStoreChannel::Context &context);
+				GridStoreChannel &channel, GridStoreChannel::Context &context);
 
 		PredicateList predicateList_;
 		EntryList entryList_;
@@ -2171,57 +2670,78 @@ private:
 
 	static bool pathKeyOperationEnabled_;
 
+	static RowMapper::Config DEFAULT_MAPPER_CONFIG;
+	static RowMapper::Config COMPATIBLE_MAPPER_CONFIG_14;
+	static RowMapper::Config COMPATIBLE_MAPPER_CONFIG_13;
+
 	GSGridStoreTag(const GSGridStore&);
 	GSGridStore& operator=(const GSGridStore&);
 
 	GSContainer* findContainerByCache(
-			ContainerCache &cache, const GSChar *name,
+			ContainerCache &cache, const ContainerKey &key,
+			const ContainerKeyConverter &keyConverter,
 			const GSBinding *binding, const GSContainerType *containerType,
 			bool general);
-	std::auto_ptr<std::string> acceptRemoteContainerName(
-			ArrayByteInStream &in, const GSChar *localName);
+	std::auto_ptr<ContainerKey> acceptRemoteContainerKey(
+			ArrayByteInStream &in, const ContainerKey &localKey,
+			const ContainerKeyConverter &keyConverter);
 
-	static void splitPathKey(const GSChar *pathKey,
+	void splitPathKey(
+			const GSChar *pathKey,
+			ContainerKey &containerKey, std::string &rowKeyStr);
+	static void splitPathKey(
+			const GSChar *pathKey,
 			std::string &containerName, std::string &rowKeyStr);
+
+	static void tryPutSystemOptionalRequest(
+			XArrayByteOutStream &reqOut, GridStoreChannel::Context &context,
+			bool forCreationDDL, const OptionalRequestSource *source = NULL);
+
 	static void exportContainerProperties(
 			XArrayByteOutStream &out, const GSContainerType type,
-			const GSContainerInfo *info, const RowMapper &mapper,
-			int32_t majorVersion, int32_t minorVersion);
-	static const GSTimeSeriesProperties* importContainerProperties(
+			const GSContainerInfo *info, const RowMapper &mapper);
+	static void importContainerProperties(
 			ArrayByteInStream &in, RowMapper::VarDataPool &varDataPool,
-			const GSChar *const *columnNameList, size_t columnCount,
-			const GSChar *&dataAffinity, GSContainerType containerType);
+			GSContainerInfo &containerInfo,
+			const std::vector<GSColumnInfo> &columnInfoList);
 
 	static GSCompressionMethod checkCompressionMethod(
 			GSCompressionMethod compressionMethod);
 	static double checkCompressionRate(double rate);
 
-	const GSContainer& resolveContainer(const std::string &containerName);
+	const GSContainer& resolveContainer(const ContainerKey &containerKey);
 	std::auto_ptr<GSContainer> duplicateContainer(const GSContainer &src);
 
 	static Statement::Id getContainerStatement(
 			Statement::Id statement, const GSContainerType *containerType);
+	static void putContainerKey(
+			XArrayByteOutStream &reqOut, GridStoreChannel &channel,
+			GridStoreChannel::Context &context, const ContainerKey &key,
+			const ContainerKeyConverter &keyConverter);
 	static void tryPutContainerType(
 			XArrayByteOutStream &reqOut, const GSContainerType *containerType);
 
-	static void importIdProperty(ArrayByteInStream &in,
-			RowMapper::VarDataPool &varDataPool, ContainerIdInfo &idInfo);
-	static void importIndexProperty(ArrayByteInStream &in,
-			std::vector<GSIndexTypeFlags> &indexTypesList,
-			size_t columnCount);
+	static void importIdProperty(
+			ArrayByteInStream &in, RowMapper::VarDataPool &varDataPool,
+			ContainerIdInfo &idInfo, const ContainerKeyConverter &keyConverter);
+	static void importIndexProperty(
+			ArrayByteInStream &in, std::vector<GSColumnInfo> &columnInfoList);
 	static void importEventNotificationProperty(
 			ArrayByteInStream &in, RowMapper::VarDataPool &varDataPool,
-			size_t &entryCount);
-	static GSTriggerInfo* importTriggerProperty(
+			std::vector<std::string> *eventNotificationInfoList);
+	static void importTriggerProperty(
 			ArrayByteInStream &in, RowMapper::VarDataPool &varDataPool,
-			std::vector<const GSChar*> &columnNameList,
-			size_t &entryCount);
-	static const void* makeColumnInfoList(
-			RowMapper::VarDataPool &varDataPool,
-			const std::vector<const GSChar*> &columnNameList,
-			const std::vector<GSType> &columnTypeList,
-			const std::vector<GSIndexTypeFlags> *indexTypesList,
-			int32_t majorVersion, int32_t minorVersion);
+			GSContainerInfo &containerInfo,
+			const std::vector<GSColumnInfo> &columnInfoList);
+	static void importIndexDetailProperty(
+			ArrayByteInStream &in, RowMapper::VarDataPool &varDataPool,
+			std::vector<GSIndexInfo> &indexInfoList);
+
+	static void applyIndexInfoList(
+			const std::vector<GSIndexInfo> &indexInfoList,
+			const std::vector<GSColumnInfo> &columnInfoList,
+			bool indexFlagsSpecified, RowMapper::VarDataPool &varDataPool,
+			GSContainerInfo &containerInfo);
 
 	static const GSChar* resolveContainerName(
 			const GSChar *name, const GSContainerInfo *info);
@@ -2255,6 +2775,11 @@ public:
 	friend struct GSResourceHeader;
 	friend struct GSGridStoreTag;
 
+	struct PartialFetchStatus;
+	struct PartialExecutionStatus;
+	struct QueryData;
+	struct QueryParameters;
+
 	static const int32_t SESSION_NOT_FOUND_ERROR_CODE;
 	static const int32_t UUID_UNMATCHED_ERROR_CODE;
 	static const int32_t ROW_SET_NOT_FOUND_ERROR_CODE;
@@ -2263,7 +2788,7 @@ public:
 
 	GSContainerTag(GSGridStore &store, RowMapper::Reference mapper,
 			int32_t schemaVerId, int32_t partitionId, int64_t containerId,
-			std::auto_ptr<std::string> normalizedContainerName);
+			std::auto_ptr<ContainerKey> normalizedContainerKey);
 	~GSContainerTag();
 
 	bool isClosed() const;
@@ -2277,7 +2802,7 @@ public:
 	int32_t getSchemaVersionId() const;
 	int32_t getPartitionId() const;
 	int64_t getContainerId() const;
-	const std::string* getNormalizedContainerName() const;
+	const ContainerKey* getNormalizedContainerKey() const;
 	GSContainerType getType() const;
 
 	RowMapper::VarDataPool& getVarDataPool();
@@ -2288,8 +2813,10 @@ public:
 	void createTrigger(const GSTriggerInfo *info);
 	void dropTrigger(const GSChar *name);
 
-	void createIndex(const GSChar *columnName, GSIndexTypeFlags flags);
-	void dropIndex(const GSChar *columnName, GSIndexTypeFlags flags);
+	void createOrDropIndex(
+			const GSChar *columnName, GSIndexTypeFlags flags,
+			bool forCreation);
+	void createOrDropIndex(const GSIndexInfo &info, bool forCreation);
 
 	void flush();
 
@@ -2302,27 +2829,36 @@ public:
 			const GSType *keyType, const void *key, bool keyFormatted);
 
 	GSQuery* query(const GSChar *queryString);
-	GSRowSet* queryAndFetch(const GSQuery &query, bool forUpdate);
+	GSRowSet* queryAndFetch(
+			const QueryParameters &parameters, bool forUpdate);
 
-	void makeQueryRequest(const GSQuery &query, bool forUpdate,
+	void makeQueryRequest(
+			const QueryParameters &parameters, bool forUpdate,
 			XArrayByteOutStream &reqOut, bool noUUID);
-	void formatQuery(XArrayByteOutStream &reqOut, const GSQuery &query);
-	GSRowSet* acceptQueryResponse(const GSQuery &query, bool forUpdate,
+	void formatQuery(
+			const QueryParameters &parameters,
+			XArrayByteOutStream &reqOut);
+	GSRowSet* acceptQueryResponse(
+			const QueryParameters &parameters, bool forUpdate,
 			ArrayByteInStream &respIn, bool bufSwapAllowed);
 
-	void closeRowSet(int64_t rowSetId, int64_t rowSetIdHint,
+	void closeRowSet(
+			const PartialFetchStatus &fetchStatus,
 			GridStoreChannel::ConnectionId &connectionId);
-	void fetchRowSet(int64_t rowSetId, int64_t rowSetIdHint,
-			int64_t totalCount, int64_t remainingCount, int64_t fetchSize,
+	void fetchRowSet(
+			int64_t remainingCount, const PartialFetchStatus &fetchStatus,
+			const QueryParameters &parameters,
 			const RowMapper &resultMapper,
 			util::NormalXArray<uint8_t> &resultData,
 			ArrayByteInStream &resultInStream,
 			RowMapper::InputCursor &cursor,
 			GridStoreChannel::ConnectionId &connectionId);
 
-	void removeRow(const RowMapper &resolvedMapper,
+	void removeRow(
+			const RowMapper &resolvedMapper,
 			int64_t transactionId, int64_t rowId, const void *key);
-	void updateRow(const RowMapper &resolvedMapper,
+	void updateRow(
+			const RowMapper &resolvedMapper,
 			int64_t transactionId, int64_t rowId,
 			const void *key, const void *rowObj);
 
@@ -2375,6 +2911,7 @@ public:
 
 private:
 	typedef std::vector<void*> ResourceList;
+	typedef NodeConnection::OptionalRequestSource OptionalRequestSource;
 	typedef GridStoreChannel::ContainerCache ContainerCache;
 
 	enum StatementFamily {
@@ -2401,6 +2938,14 @@ private:
 		TRANSACTION_INFO_DEFAULT,
 		TRANSACTION_INFO_NO_UUID,
 		TRANSACTION_INFO_SKIP_COMMIT_MODE
+	};
+
+	enum QueryResultType {
+		RESULT_ROW_SET,
+		RESULT_AGGREGATION,
+		RESULT_QUERY_ANALYSIS,
+		RESULT_PARTIAL_FETCH_STATE,
+		RESULT_PARTIAL_EXECUTION_STATE
 	};
 
 	static const bool TIME_SERIES_UPDATE_ENABLED;
@@ -2454,6 +2999,8 @@ private:
 			const StatementException &cause);
 	void putSessionInfo(XArrayByteOutStream &reqOut, int64_t sessionId);
 
+	void commitForDDL();
+
 	XArrayByteOutStream getRequestOutStream();
 
 	StatementFamily prepareSession(StatementFamily family);
@@ -2461,10 +3008,12 @@ private:
 	void putTransactionInfo(
 			XArrayByteOutStream &reqOut, StatementFamily familyForSession,
 			TransactionInfoType type = TRANSACTION_INFO_DEFAULT,
-			const bool *forUpdate = NULL);
+			const bool *forUpdate = NULL,
+			const OptionalRequestSource *source = NULL);
 	void tryPutOptionalRequest(
 			XArrayByteOutStream &reqOut,
-			bool forUpdate, bool containerLockAwared);
+			bool forUpdate, bool containerLockAware, bool forCreationDDL,
+			const OptionalRequestSource *source = NULL);
 
 	static bool isSessionIdGeneratorEnabled();
 	static bool isDDLSessionEnabled();
@@ -2491,8 +3040,23 @@ private:
 
 	void disableCache();
 
-	void createOrDropIndex(
-			bool create, const GSChar *columnName, GSIndexTypeFlags flags);
+	StatementFamily prepareQuerySession(
+			const QueryParameters &parameters, bool forUpdate,
+			bool neverCreate);
+
+	static QueryResultType resolveQueryResultType(int8_t rawType);
+	static GSRowSetType resolveRowSetType(QueryResultType type);
+	const RowMapper& getResultRowMapper(QueryResultType type) const;
+	RowMapper::MappingMode getResultRowMappingMode(QueryResultType type);
+	bool isResultRowIdIncluded(QueryResultType type);
+
+	void checkTransactionPreserved(
+			bool forUpdate, int64_t transactionId, bool updatable);
+
+	bool filterIndexInfo(
+			const GSIndexInfo &info, bool forCreation,
+			GSIndexInfo &filteredInfo) const;
+	GSIndexTypeFlags getDefaultIndexTypeFlag(int32_t columnId) const;
 
 	static GSTimestamp wrapOptionalTimestamp(const GSTimestamp *timestamp);
 
@@ -2514,7 +3078,7 @@ private:
 	const int32_t schemaVerId_;
 	const int32_t partitionId_;
 	const int64_t containerId_;
-	std::auto_ptr<std::string> normalizedContainerName_;
+	std::auto_ptr<ContainerKey> normalizedContainerKey_;
 
 	int64_t sessionId_;
 	int64_t transactionId_;
@@ -2527,11 +3091,92 @@ private:
 	bool cacheDisabled_;
 };
 
+struct GSContainerTag::PartialFetchStatus {
+	PartialFetchStatus();
+
+	static PartialFetchStatus get(ArrayByteInStream &in);
+
+	bool isEnabled() const;
+
+	int64_t totalRowCount_;
+	int64_t rowSetId_;
+	int64_t rowSetIdHint_;
+};
+
+struct GSContainerTag::PartialExecutionStatus {
+	typedef std::vector<uint8_t> EntryBytes;
+	typedef std::map<int32_t, EntryBytes> EntryMap;
+
+	static const PartialExecutionStatus STATUS_DISABLED;
+	static const PartialExecutionStatus STATUS_ENABLED_INITIAL;
+
+	explicit PartialExecutionStatus(bool enabled);
+
+	PartialExecutionStatus(const PartialExecutionStatus &another);
+	PartialExecutionStatus& operator=(const PartialExecutionStatus &another);
+
+	static PartialExecutionStatus get(ArrayByteInStream &in);
+	void put(XArrayByteOutStream &out) const;
+
+	bool isEnabled() const;
+
+	const PartialExecutionStatus& inherit(
+			const PartialExecutionStatus &next) const;
+
+	bool enabled_;
+	std::auto_ptr<EntryMap> entryMap_;
+};
+
+struct GSContainerTag::QueryData {
+	QueryData();
+
+	QueryData(const QueryData &another);
+	QueryData& operator=(const QueryData &another);
+
+	util::NormalXArray<uint8_t> data_;
+};
+
+struct GSContainerTag::QueryParameters {
+	static const int64_t DEFAULT_SIZE_OPTION_VALUE;
+
+	explicit QueryParameters(Statement::Id statement);
+
+	void putFixed(XArrayByteOutStream &out) const;
+
+	void setFetchLimit(int64_t fetchLimit);
+	void setFetchSize(int64_t fetchSize);
+	void setPartialExecutionEnabled(bool enabled);
+	bool isPartialExecutionConfigured() const;
+
+	static void checkPartialOptions(
+			int64_t fetchSize, const PartialExecutionStatus &executionStatus);
+	static bool isPartialFetch(int64_t fetchSize);
+
+	bool isForUpdate(bool forUpdate) const;
+
+	QueryParameters inherit(
+			bool forUpdate, int64_t transactionId,
+			const PartialExecutionStatus &executionStatus) const;
+
+	Statement::Id statement_;
+	QueryData queryData_;
+
+	int64_t fetchLimit_;
+	int64_t fetchSize_;
+	PartialExecutionStatus executionStatus_;
+	bool executionPartial_;
+	bool forUpdate_;
+	bool transactionIdSpecified_;
+	int64_t initialTransactionId_;
+};
+
 
 struct GSQueryTag {
 public:
 	friend struct GSResourceHeader;
 	friend struct GSContainerTag;
+
+	typedef GSContainer::QueryParameters QueryParameters;
 
 	GSQueryTag(GSContainer &container, Statement::Id statement);
 	~GSQueryTag();
@@ -2546,16 +3191,17 @@ public:
 	GSRowSet* fetch(bool forUpdate);
 	GSRowSet* getRowSet();
 
-	void setFetchOption(GSFetchOption fetchOption, const void *value,
-			GSType valueType);
+	void setFetchOption(
+			GSFetchOption option, const void *value, GSType valueType);
 
 	static bool isFetchSizeEnabled();
 
 	void setForUpdate(bool forUpdate);
-	bool isForUpdate();
+	bool isForUpdate() const;
 
 	void makeRequest(XArrayByteOutStream &reqOut, bool noUUID);
-	void acceptResponse(ArrayByteInStream &respIn,
+	void acceptResponse(
+			ArrayByteInStream &respIn,
 			const GridStoreChannel::ConnectionId &connectionId,
 			bool bufSwapAllowed);
 
@@ -2568,16 +3214,21 @@ private:
 	void checkOpened();
 	void clearLastRowSet() throw();
 
+	static int64_t filterSizedFetchOption(
+			GSFetchOption option, const void *value, GSType valueType);
+
+	template<GSType T>
+	static const typename RowMapper::ObjectTypeTraits<T, false>::Object*
+	filterFetchOption(
+			GSFetchOption option, const void *value, GSType valueType,
+			bool force);
+
 	GSResourceHeader resourceHeader_;
 
 	GSContainer *container_;
-	Statement::Id statement_;
-	util::NormalXArray<uint8_t> parameterData_;
-	int64_t fetchLimit_;
-	int64_t fetchSize_;
+	QueryParameters parameters_;
 	GSRowSet *lastRowSet_;
 	bool lastRowSetVisible_;
-	bool forUpdate_;
 	bool closed_;
 };
 
@@ -2587,13 +3238,16 @@ public:
 	friend struct GSResourceHeader;
 	friend struct GSContainerTag;
 
-	GSRowSetTag(GSContainer &container, const RowMapper &mapper,
-			int64_t transactionId, int64_t rowCount,
-			util::NormalXArray<uint8_t> &resultData,
+	typedef GSContainer::PartialFetchStatus PartialFetchStatus;
+	typedef GSContainer::QueryParameters QueryParameters;
+
+	GSRowSetTag(
+			GSContainer &container, const RowMapper &mapper,
+			int64_t rowCount, util::NormalXArray<uint8_t> &resultData,
 			const ArrayByteInStream &resultInStream,
 			RowMapper::MappingMode mappingMode, bool rowIdIncluded,
-			int8_t resultBaseType, int64_t totalRowCount,
-			int64_t rowSetId, int64_t rowSetIdHint, int64_t fetchSize,
+			GSRowSetType type, const QueryParameters &queryParameters,
+			const PartialFetchStatus &fetchStatus,
 			const GridStoreChannel::ConnectionId &connectionId,
 			bool bufSwapAllowed);
 	~GSRowSetTag();
@@ -2625,7 +3279,12 @@ public:
 	void getRowFixedPart(const uint8_t *&data, size_t &size) const;
 	void getRowVariablePart(const uint8_t *&data, size_t &size) const;
 
+	void prepareFollowing();
+	void prepareFollowingDirect();
+
 	void fetchFollowing();
+
+	void executeFollowing();
 
 private:
 	GSRowSetTag(const GSRowSet&);
@@ -2638,6 +3297,7 @@ private:
 			bool bufSwapAllowed);
 
 	void checkOpened() const;
+	void checkInRange() const;
 
 	GSResourceHeader resourceHeader_;
 
@@ -2645,21 +3305,20 @@ private:
 
 	GSContainer *container_;
 	const RowMapper &mapper_;
-	int64_t transactionId_;
 	util::NormalXArray<uint8_t> resultData_;
 	ArrayByteInStream resultInStream_;
 	RowMapper::VarDataPool &varDataPool_;
 	RowMapper::InputCursor cursor_;
-	int8_t resultBaseType_;
+	const GSRowSetType type_;
 	const void *lastKey_;
 	RowMapper::KeyStorage lastKeyStorage_;
 
 	const int64_t totalRowCount_;
 	int64_t remainingRowCount_;
-	const int64_t rowSetId_;
-	const int64_t rowSetIdHint_;
-	const int64_t fetchSize_;
+	QueryParameters queryParameters_;
+	const PartialFetchStatus fetchStatus_;
 	GridStoreChannel::ConnectionId connectionId_;
+	bool previousFound_;
 	bool followingLost_;
 	bool closed_;
 };
@@ -2678,6 +3337,11 @@ public:
 	static std::auto_ptr<GSAggregationResult> newStandaloneInstance();
 
 	bool getValue(void *value, GSType valueType);
+
+	template<typename Traits>
+	static GSResult getValueTyped(
+			GSAggregationResult *aggregationResult,
+			typename Traits::Object *value, GSBool *assigned) throw();
 
 private:
 	GSAggregationResultTag();
@@ -2709,16 +3373,16 @@ public:
 	static GSRow& resolve(void *resource);
 
 	static GSBinding createBinding(
-			const GSContainerInfo &info, std::vector<GSBindingEntry> &entryList,
+			const RowMapper::ContainerInfoRef<true> &infoRef,
+			std::vector<GSBindingEntry> &entryList,
 			bool anyTypeAllowed = false);
 
 	const RowMapper& getRowMapper() const;
-	void getContainerSchema(GSContainerInfo &info);
+	void getContainerSchema(RowMapper::ContainerInfoRef<> &infoRef);
 
 	static GSResult getContainerSchema(
 			GSRow *row, GSContainerInfo *schemaInfo,
-			int32_t majorVersion = GS_CLIENT_VERSION_MAJOR,
-			int32_t minorVersion = GS_CLIENT_VERSION_MINOR);
+			const ClientVersion &version) throw();
 
 	template<typename Traits>
 	static GSResult getPrimitiveField(GSRow *row, int32_t columnId,
@@ -2753,6 +3417,11 @@ public:
 
 	bool isNull(int32_t columnId) const;
 	void setNull(int32_t columnId, bool nullValue);
+
+	bool isNullDirect(int32_t columnId) const;
+	void setNullDirect(
+			int32_t columnId, const GSBindingEntry &entry, bool nullValue,
+			bool withClear);
 
 	const uint8_t* getNulls() const;
 	uint8_t* getNulls();
@@ -2942,6 +3611,9 @@ private:
 	typedef std::set<GSValue, KeyLess> DistinctKeySet;
 
 	void checkKeyType(const GSType *expectedType) const;
+
+	void clear();
+	void clearRangeKeyEntry(RangeKeyEntry &keyEntry);
 	void clearKey(GSValue &value);
 
 	GSResourceHeader resourceHeader_;
@@ -3094,6 +3766,24 @@ inline const T* ClientUtil::findFromArray(
 	return it;
 }
 
+template<typename C>
+ArrayByteInStream ClientUtil::subStream(
+		const C &buf, const ArrayByteInStream &in, size_t size) {
+	if (size > in.base().remaining()) {
+		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+	}
+
+	const size_t beginPos = in.base().position();
+	const size_t endPos = beginPos + size;
+	if (endPos > buf.size()) {
+		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+
+	ArrayByteInStream subIn((util::ArrayInStream(buf.data(), endPos)));
+	subIn.base().position(beginPos);
+	return subIn;
+}
+
 
 inline bool ClientUtil::varSizeIs1Byte(uint8_t val) {
 	return ((val & 0x01) == 0x01);
@@ -3119,7 +3809,7 @@ inline uint64_t ClientUtil::decode8ByteVarSize(uint64_t val) {
 
 inline uint8_t ClientUtil::encode1ByteVarSize(uint8_t val) {
 	assert(val < VAR_SIZE_1BYTE_THRESHOLD);
-	return (val << 1) | 0x01;
+	return static_cast<uint8_t>((val << 1) | 0x01);
 }
 inline uint32_t ClientUtil::encode4ByteVarSize(uint32_t val) {
 	assert(VAR_SIZE_1BYTE_THRESHOLD <= val

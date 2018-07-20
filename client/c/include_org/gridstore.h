@@ -1,6 +1,6 @@
-﻿/*
-	Copyright (c) 2012 TOSHIBA CORPORATION.
-*/
+﻿/*------------------------------------------------------------------*/
+// Copyright (c) 2017 TOSHIBA Digital Solutions Corporation
+/*------------------------------------------------------------------*/
 /*!
 	@JP
 	@file
@@ -69,7 +69,7 @@
 	@ENDL
  */
 
-#include <stdlib.h>		
+#include <stdlib.h>		// NULL, size_t
 
 #if defined(_MSC_VER) && (_MSC_VER <= 1500)
 #include "gsext/stdint.h"
@@ -87,7 +87,7 @@
 
 	@ENDL
 */
-#define GS_CLIENT_VERSION_MAJOR 2
+#define GS_CLIENT_VERSION_MAJOR 4
 #endif
 
 #ifndef GS_CLIENT_VERSION_MINOR
@@ -100,9 +100,10 @@
 
 	@ENDL
 */
-#define GS_CLIENT_VERSION_MINOR 1
+#define GS_CLIENT_VERSION_MINOR 0
 #endif
 
+// C API
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -133,9 +134,17 @@ extern "C" {
 
 #define GS_STATIC_HEADER_FUNC_SPECIFIER GS_STATIC_HEADER_FUNC_ATTR static
 
-#if defined(__GNUC__)
+#ifndef GS_DEPRECATION_IGNORABLE
+#ifdef GS_DLL_INSIDE
+#define GS_DEPRECATION_IGNORABLE 1
+#else
+#define GS_DEPRECATION_IGNORABLE 0
+#endif
+#endif
+
+#if !GS_DEPRECATION_IGNORABLE && defined(__GNUC__)
 #define GS_DEPRECATED_SYMBOL1(symbol) symbol __attribute__((deprecated))
-#elif defined(_MSC_VER)
+#elif !GS_DEPRECATION_IGNORABLE && defined(_MSC_VER)
 #define GS_DEPRECATED_SYMBOL1(symbol) __declspec(deprecated) symbol
 #else
 #define GS_DEPRECATED_SYMBOL1(symbol) symbol
@@ -154,18 +163,23 @@ extern "C" {
 
 #if GS_DEPRECATED_FUNC_ENABLED
 
+// 旧バージョンのファクトリAPIの有効化設定
 #ifndef GS_COMPATIBILITY_FACTORY_BETA_0_3
 #define GS_COMPATIBILITY_FACTORY_BETA_0_3 0
 #endif
 
-#ifndef GS_COMPATIBILITY_TIME_SETIES_PROPERTIES_0_0_10
-#define GS_COMPATIBILITY_TIME_SETIES_PROPERTIES_0_0_10 0
+// 旧バージョンの時系列構成オプション使用プログラムのコンパイル用。
+// オプションを指定しての実行はできない
+#ifndef GS_COMPATIBILITY_TIME_SERIES_PROPERTIES_0_0_10
+#define GS_COMPATIBILITY_TIME_SERIES_PROPERTIES_0_0_10 0
 #endif
 
-#ifndef GS_COMPATIBILITY_TIME_SETIES_SAMPLING_BETA_0_1
-#define GS_COMPATIBILITY_TIME_SETIES_SAMPLING_BETA_0_1 0
+// 旧バージョンのサンプリングAPIの有効化設定
+#ifndef GS_COMPATIBILITY_TIME_SERIES_SAMPLING_BETA_0_1
+#define GS_COMPATIBILITY_TIME_SERIES_SAMPLING_BETA_0_1 0
 #endif
 
+// 旧バージョンの一括ロウ作成APIの有効化設定
 #ifndef GS_COMPATIBILITY_GET_MULTIPLE_ROWS_BETA_0_3
 #define GS_COMPATIBILITY_GET_MULTIPLE_ROWS_BETA_0_3 0
 #endif
@@ -182,27 +196,49 @@ extern "C" {
 #define GS_COMPATIBILITY_DEPRECATE_FETCH_OPTION_SIZE 1
 #endif
 
-#endif	
+#endif	// GS_DEPRECATED_FUNC_ENABLED
 
 #if !defined(GS_COMPATIBILITY_SUPPORT_1_5) && \
 	(GS_CLIENT_VERSION_MAJOR > 1 || \
 	(GS_CLIENT_VERSION_MAJOR == 1 && GS_CLIENT_VERSION_MINOR >= 5))
 #define GS_COMPATIBILITY_SUPPORT_1_5 1
+#else
+#define GS_COMPATIBILITY_SUPPORT_1_5 0
 #endif
 
 #if !defined(GS_COMPATIBILITY_SUPPORT_2_0) && \
 	(GS_CLIENT_VERSION_MAJOR > 2 || \
 	(GS_CLIENT_VERSION_MAJOR == 2 && GS_CLIENT_VERSION_MINOR >= 0))
 #define GS_COMPATIBILITY_SUPPORT_2_0 1
+#else
+#define GS_COMPATIBILITY_SUPPORT_2_0 0
 #endif
 
 #if !defined(GS_COMPATIBILITY_SUPPORT_2_1) && \
 	(GS_CLIENT_VERSION_MAJOR > 2 || \
 	(GS_CLIENT_VERSION_MAJOR == 2 && GS_CLIENT_VERSION_MINOR >= 1))
 #define GS_COMPATIBILITY_SUPPORT_2_1 1
+#else
+#define GS_COMPATIBILITY_SUPPORT_2_1 0
 #endif
 
-#endif	
+#if !defined(GS_COMPATIBILITY_SUPPORT_3_5) && \
+	(GS_CLIENT_VERSION_MAJOR > 3 || \
+	(GS_CLIENT_VERSION_MAJOR == 3 && GS_CLIENT_VERSION_MINOR >= 5))
+#define GS_COMPATIBILITY_SUPPORT_3_5 1
+#else
+#define GS_COMPATIBILITY_SUPPORT_3_5 0
+#endif
+
+#if !defined(GS_COMPATIBILITY_SUPPORT_4_0) && \
+	(GS_CLIENT_VERSION_MAJOR > 4 || \
+	(GS_CLIENT_VERSION_MAJOR == 4 && GS_CLIENT_VERSION_MINOR >= 0))
+#define GS_COMPATIBILITY_SUPPORT_4_0 1
+#else
+#define GS_COMPATIBILITY_SUPPORT_4_0 0
+#endif
+
+#endif	// GS_INTERNAL_DEFINITION_VISIBLE
 
 /*!
 	@JP
@@ -294,8 +330,8 @@ typedef int64_t GSTimestamp;
 /*!
 	@JP
 	@defgroup Group_GSGridStoreFactory GSGridStoreFactory
- 
- 	@EN
+
+	@EN
 	@defgroup Group_GSGridStoreFactory GSGridStoreFactory
 
 	@ENDL
@@ -347,11 +383,14 @@ typedef struct GSGridStoreFactoryTag GSGridStoreFactory;
 		コレクションや時系列といったコンテナの追加・削除・構成変更、ならびに、
 		コンテナを構成するロウの操作機能を提供します。
 	@par
-		コンテナ名に使用できる文字は、ASCIIの英数字とアンダースコア(「_」)のみです。
-		ただし、先頭に数字は使用できません。また、ASCIIの大文字と小文字は
-		同一視されるため、大文字・小文字だけが異なる名前のコンテナを定義することは
-		できません。また、同名のコレクションと時系列をともに格納することはできません。
-		コンテナ名の長さの上限については、付録の値の範囲を参照してください。
+		コンテナ種別などの違いによらず、1つのデータベースのコンテナ間で、
+		ASCIIの大文字・小文字表記だけが異なる名前のものを複数定義することは
+		できません。コンテナ名は、ベースコンテナ名単独、もしくは、ベースコンテナ名の
+		後ろにノードアフィニティ名をアットマーク「@」で連結した形式で表記します。
+		その他、コンテナの定義において使用できるコンテナ名の文字種や長さには制限が
+		あります。具体的には、GridDBテクニカルリファレンスを参照してください。
+		特に記載のない限り、コンテナ名を指定する操作では、ASCIIの大文字・小文字
+		表記の違いは区別されません。
 	@par
 		この型のポインタを第一引数とする関数のスレッド安全性は保証されません。
 	@see GSCollection
@@ -367,13 +406,16 @@ typedef struct GSGridStoreFactoryTag GSGridStoreFactory;
 		TimeSeries Containers as well as to process the Rows constituting a
 		Container is provided.
 	@par
-		Only ASCII alphanumeric characters and the underscore mark ( "_" ) can
-		be used in the Container name. But the first character must not be
-		numeric. Since ASCII characters are case-insensitive, you cannot
-		differentiate upper- and lowercase letters in a Container name.
-		Collection and TimeSeries which have same name cannot be stored. Please
-		refer to "System limiting values" in the Appendix for the upper limit of
-		the length of the Container name.
+		Regardless of container types, etc., multiple
+		container names different only in uppercase and
+		lowercase ASCII characters cannot be defined in a
+		database. A container name is represented by only a
+		base container name or by connecting the base name and
+		a node affinity name with '@'. See the GridDB
+		Technical Reference for the details. In the
+		operations specifying a container name, uppercase and
+		lowercase ASCII characters are identified as the same
+		unless otherwise noted.
 	@par
 		Functions which have a pointer of this type in the first argument are
 		NOT thread safe.
@@ -408,10 +450,11 @@ typedef struct GSGridStoreTag GSGridStore;
 		@ref GS_STRUCT_BINDING の内容に基づき決定されます。1つのコンテナは
 		1つ以上のカラムにより構成されます。
 	@par
-		カラム名に使用できる文字は、ASCIIの英数字とアンダースコア(「_」)のみです。
-		ただし、先頭に数字は使用できません。また、ASCIIの大文字と小文字は
-		同一視されるため、大文字・小文字だけが異なる名前のカラムを定義することは
-		できません。
+		1つのコンテナのカラム間で、ASCIIの大文字・小文字表記だけが異なる名前
+		のものを複数定義することはできません。その他、コンテナ定義における
+		カラム名の文字種や長さ、カラム数には制限があります。具体的には、GridDB
+		テクニカルリファレンスを参照してください。特に記載のない限り、カラム名を
+		指定する操作では、ASCIIの大文字・小文字表記の違いは区別されません。
 	@par
 		カラムの型と、ロウオブジェクト内の各値の型との対応は、それぞれ次の通りです。
 		カラム型 | ロウオブジェクト内の各値の型
@@ -437,20 +480,42 @@ typedef struct GSGridStoreTag GSGridStore;
 		DOUBLE配列 | double*
 		TIMESTAMP配列 | @ref GSTimestamp*
 	@par
-		TIMESTAMP値はミリ秒単位の精度まで格納できます。
-		また、格納できる時刻の範囲は、UTCにおける1970年1月1日のはじめから
-		9999年12月31日の終わりまでとなります。
-		ただし、GridDBクラスタのシステム構成によってはさらに制限が設けられることがあります。
-		範囲外の時刻は格納できません。
-	@par
-		カラム数、カラム名の長さには上限があります。
-		また、フィールドの値には、表現範囲やサイズに制限があります。
-		具体的には、付録の値の範囲を参照してください。
-		制限に反する値をコンテナに格納することはできません。
+		フィールドの値の表現範囲やサイズには制限があります。
+		具体的には、付録の章の値の範囲の説明、ならびに、GridDBテクニカル
+		リファレンスを参照してください。制限に反する値をコンテナに格納することは
+		できません。
 	@par
 		ロウキーとして許可されている型や、ロウキーに対応するカラムの有無、
 		ロウ更新の可否といった制約は、このコンテナ型から派生した個別の型の定義
 		によって異なります。
+	@par
+		GridDB上のロウにおけるNULLは、NOT NULL制約が設定されていない
+		限り保持することができます。NULLは、@ref GSRow を通じて格納や
+		取り出しを行うことができます。一方、@ref GS_STRUCT_BINDING と
+		対応付くロウオブジェクトにおいては、常に後述の空の値にマッピング
+		されます。
+	@par
+		ロウオブジェクト型におけるNOT NULL制約は、@ref GS_TYPE_OPTION_NULLABLE
+		ならびに@ref GS_TYPE_OPTION_NOT_NULL により明示的に指定できます。
+		NOT NULL制約がいずれの指定対象にも指定されていない場合、ロウキー以外の
+		カラムはNOT NULL制約なしであるとみなされます。ロウキーは暗黙的にNOT NULL
+		制約が設定された状態となっており、この制約を外すような指定はできません。
+		また、同一指定対象での矛盾したNOT NULL制約は指定できません。
+		NOT NULL制約は、@ref GSColumnInfoTag::options を通じて指定することが
+		できます。
+	@par
+		空の値は、@ref GSRow の作成など各種操作の初期値などとして用いられる
+		ことのある、フィールド値の一種です。以下のように、カラム型ごとに値が
+		定義されています。
+		カラム型 | 空の値
+		- | -
+		STRING | @c "" (長さ0の文字列)
+		BOOL | 偽(@ref GS_FALSE)
+		数値型 | @c 0
+		TIMESTAMP | <tt>1970-01-01T00:00:00Z</tt>
+		GEOMETRY | @c POINT(EMPTY)
+		BLOB | 長さ0のBLOBデータ
+		配列型 | 要素数0の配列
 	@par
 		トランザクション処理では、デフォルトで自動コミットモードが有効になっています。
 		自動コミットモードでは、変更操作は逐次確定し、明示的に取り消すことができません。
@@ -466,6 +531,16 @@ typedef struct GSGridStoreTag GSGridStore;
 		経過した後に、さらに同様の操作やトランザクション操作を行おうとすると、
 		該当する@ref GSContainer インスタンスを介した以降の操作は
 		常に失敗するようになります。
+	@par
+		あるコンテナへの操作要求に対するクラスタノード上での処理が開始され、
+		終了するまでの間、同一のコンテナに対する操作が待機させられる場合が
+		あります。ここでの操作には、コンテナのスキーマや索引などの定義変更、
+		コンテナ情報の参照、ロウ操作などが含まれます。一貫性レベルが
+		@c IMMEDIATE の@ref GSGridStore インスタンスを通じてコンテナを操作する
+		場合、同一のコンテナに対する@c IMMEDIATE 設定での他の操作処理の途中、
+		原則としては待機させられます。また、コンテナに対する他の操作処理の
+		途中の状態に基づいて処理が行われることは、原則としてはありません。
+		例外事項については、個別の操作ごとの説明を参照してください。
 
 	@EN
 	@ingroup Group_GSContainer
@@ -480,9 +555,14 @@ typedef struct GSGridStoreTag GSGridStore;
 		corresponding @ref GS_STRUCT_BINDING. Each container consists of one or
 		more columns.
 	@par
-		ASCII alphanumeric character and underscore(_) is available in a column.
-		Upper case letter is not available for the first letter. Case is not
-		distinguished.
+		Multiple column names that are different only in
+		upper- and lowercase letters cannot be defined in a
+		table. Further the allowed characters, the length of
+		column names and the number of columns are limited.
+		See the GridDB Technical Reference for the details.
+		In the operations specifying column names, ASCII
+		uppercase and lowercase characters are identified as
+		same unless otherwise noted.
 	@par
 		Mapping table between column type and value in a row object is
 		following:
@@ -509,19 +589,39 @@ typedef struct GSGridStoreTag GSGridStore;
 		DOUBLE Array | double*
 		TIMESTAMP Array | @ref GSTimestamp*
 	@par
-		TIMESTAMP value suports msec.
-		Range of time is from 1/1/1970 to 12/31/9999 (UTC).
-		There may be more limitation depending on a GridDB cluster
-		configuration. Cannot store a value out of the range.
-	@par
-		There is an upper limit for the number of column and the length of
-		column name. The value has limitations for rage and size. Please refer
-		to appendix for more detail. Cannot store a value exceeding these
-		limitations.
+		The column value has limitations for rage and size. Please refer
+		to appendix and GridDB Technical Reference and for more detail.
+		Cannot store a value exceeding these limitations.
 	@par
 		A limitation about a row key type, presence of column corresponding to
 		a row key, and availability of row value updates, may differ for each
 		type derived from the container type.
+	@par
+		In GridDB, as long as NOT NULL constraint is not set, NULL can be saved.
+		NULL can be stored and retrieved by @ref GSRow. On the other hand, row
+		object associated with @ref GS_STRUCT_BINDING is always mapped to an empty
+		value.
+	@par
+		In row object, NOT NULL constraint can be explicitly specified by
+		@ref GS_TYPE_OPTION_NULLABLE and @ref GS_TYPE_OPTION_NOT_NULL.
+		If NOT NULL constraint is not specified for any target, the column other
+		than the row key will be considered to be without NOT NULL constraint.
+		It is not possible to exclude NOT NULL constraint in the row key as it
+		has been implicitly set.
+		If there is an inconsistent NOT NULL constraint on the same target,
+		NOT NULL constraint that cannot be specified can be instead set using
+		@ref GSColumnInfoTag::options.
+	@par
+		Empty value is a type of field value that are sometimes used as initial
+		values of various operations such as @ref GSRow creation, etc.
+		Column type | Empty value
+		STRING | @c "" (0-length string)
+		BOOL | False(@ref GS_FALSE)
+		Numeric type | @c 0
+		TIMESTAMP | <tt>1970-01-01T00:00:00Z</tt>
+		GEOMETRY | @c POINT(EMPTY)
+		BLOB | 0-length BLOB data
+		Array type | An array with no element
 	@par
 		About transaction, auto commit mode is active as a default. In the auto
 		commit mode, each transaction is processed sequentially, and cannot be
@@ -536,6 +636,16 @@ typedef struct GSGridStoreTag GSGridStore;
 		period. After some period defined by GridDB is passed from the timing of
 		this transaction for @ref GSContainer instance, any same type of
 		transactions will be not accepted.
+	@par
+		When there is an operation request to a certain container, operation in
+		the same container will be put on hold until the processing on the cluster
+		node is started. Operations in this context include changes in the definition
+		of container schema and index, container information reference, row operation,
+		etc. When running the containers through @ref GSGridStore instances with
+		consistency level @c IMMEDIATE, the operation will be queued behind other
+		processing in the same container with the @c IMMEDIATE configuration.
+		Processing is not performed based on the state of other on-going operation.
+		For irregular case, please see the description of each individual operation.
 
 	@ENDL
  */
@@ -628,7 +738,7 @@ typedef struct GSRowSetTag GSRowSet;
 	@brief Stores the result of an aggregation operation.
 	@par
 		Stores the result returned by @ref gsGetNextAggregation or
-		@ref gsAggregateTimeSeries . A floating-point-type result can be obtained
+		@ref gsAggregateTimeSeries. A floating-point-type result can be obtained
 		from an operation on a numeric-type Column, and a higher-precision
 		result can be obtained from an operation on a numeric-type Column with a
 		small number of significant digits.
@@ -740,9 +850,9 @@ typedef GSContainer GSCollection;
 	@par
 		Generally, in extraction of a specific range and aggregation operations
 		on TimeSeries, more efficient implementation is selected than on
-		@ref GSCollection .
+		@ref GSCollection.
 	@par
-		There are some restrictions on Row operation unlike @ref GSCollection .
+		There are some restrictions on Row operation unlike @ref GSCollection.
 		If the compression option based on the @ref GSTimeSeriesProperties has
 		been set, following Row operations are not permitted.
 		- Update operation to specified Row
@@ -777,11 +887,24 @@ typedef GSContainer GSTimeSeries;
 	@JP
 	@ingroup Group_GSRow
 	@brief 任意のスキーマについて汎用的にフィールド操作できるロウです。
+	@par
+		NULLが設定されたフィールドに対して型指定のフィールド値取得機能を
+		用いた場合、NULLの代わりに@ref GSContainer にて定義されている空の値が
+		求まります。たとえば文字列型カラムに対応するフィールドにNULLが設定
+		されており、かつ、@ref gsGetRowFieldAsString を用いた場合、
+		@c NULL アドレスではなく、空の値である長さ@c 0 の文字列を指すアドレスが
+		求まります。
 	@since 1.5
 
 	@EN
 	@ingroup Group_GSRow
 	@brief A general-purpose Row for managing fields in any schema.
+	@par
+		For fields where NULL is set, when the field value acquisition function
+		is used, an empty value defined in @ref GSContainer is obtained instead
+		of NULL. For example, if a string type column field is set to NULL,
+		@ref gsGetRowFieldAsString is used, the address is pointed to an empty
+		value of string length @c 0 instead of @c NULL.
 	@since 1.5
 
 	@ENDL
@@ -858,7 +981,7 @@ typedef struct GSRowKeyPredicateTag GSRowKeyPredicate;
  */
 typedef struct GSPartitionControllerTag GSPartitionController;
 
-#endif	
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
 
 /*!
 	@JP
@@ -1014,7 +1137,7 @@ enum GSFetchOptionTag {
 #if !GS_COMPATIBILITY_DEPRECATE_FETCH_OPTION_SIZE
 	/*!
 		@JP
-		@brief 将来的にサポートを予定しているオプションです。
+		@brief 非公開のオプションです。
 		@deprecated
 		@attention
 			十分検証されていないため、意図しない挙動を示す可能性があります。
@@ -1030,11 +1153,98 @@ enum GSFetchOptionTag {
 
 		@ENDL
 	 */
-	GS_FETCH_SIZE = (GS_FETCH_LIMIT + 1)
+	GS_FETCH_SIZE = (GS_FETCH_LIMIT + 1),
 #endif
 #endif
 
-#endif	
+#if GS_COMPATIBILITY_SUPPORT_4_0
+	/*!
+		@JP
+		@brief 部分実行モードを設定するために使用します。
+		@par
+			部分実行モードでは、クエリの中間処理や結果送受信に用いる
+			バッファのサイズなどがなるべく一定の範囲に収まるよう、必要に応じて
+			実行対象のデータ範囲を分割し、この部分範囲ごとに実行とフェッチを
+			リクエストすることがあります。そのため、@ref GSRowSet を取得した時点で
+			一部の範囲の結果が求まっていないことや、結果ロウを順に参照していく
+			段階で、残りの範囲を部分的に実行していくことがあります。
+		@par
+			部分実行モードは、現バージョンでは次の条件すべてを満たすクエリに
+			使用できます。また、@ref GS_FETCH_LIMIT オプションと併用することが
+			できます。条件を満たさない場合でも、各種フェッチオプションの設定時点
+			ではエラーを検知しない場合があります。
+			- TQL文からなるクエリであること
+			- TQL文において、選択式が「*」のみからなり、ORDER BY節を含まないこと
+			- 対応する@ref GSContainer が個々の部分的なクエリ実行時点において
+				常に自動コミットモードに設定されていること
+		@par
+			部分実行モードでは、対応する@ref GSContainer のトランザクション
+			分離レベルや状態に基づき、個々の部分的なクエリ実行時点において
+			参照可能なロウが使用されます。ただし、クエリ全体の実行開始時点で
+			存在しないロウは、実行対象から外れる場合があります。
+		@par
+			部分実行モードを有効にした場合に@ref GSRowSet に対して使用
+			できない操作や特有の挙動については、個別の定義を参照してください。
+		@par
+			サポートされる設定値の型は、@ref GSBool のみです。
+			部分実行モードを有効にするには、@ref GS_TRUE と一致する値を
+			指定します。現バージョンでは、未設定の場合には部分実行モードを有効に
+			しません。
+		@since 4.0
+		@EN
+		@brief Used to set the partial execution mode.
+		@par
+			In the partial execution mode, it is trying
+			for the buffer size of the intermediate query
+			processing and data transfer, etc. to fit
+			inside a fixed size by dividing the target
+			data and fetching the query results in each
+			divided range. Therefore the results for some
+			data ranges may not be determined when the
+			@ref GSRowSet is obtained, and in the middle
+			of getting the results, there are the cases
+			that the query is executed partially for the
+			rest of the ranges.
+		@par
+			In this version, the partial execution mode
+			can be used for queries satisfying all the
+			following conditions. And it can be used in
+			combination with @ref GS_FETCH_LIMIT option. If
+			not satisfying the conditions, the error may
+			not be detected at the setting of the fetch
+			option.
+			- The query must be specified by TQL
+			- The SELECT clause must be consisted of
+			only '*' and an ORDER BY clause must not be
+			specified.
+			- The container must have been set to the auto
+			commit mode at the each partial execution of the
+			query.
+		@par
+			In the partial execution mode, rows that can
+			be fetched at the each partial execution of
+			the query based on the separation level and
+			the status of the corresponding transaction
+			are used. However rows that don't exist at
+			the first time of the whole query execution
+			may not be reflected to the results.
+		@par
+			For inhibited operations and behaviors
+			on @ref GSRowSet in this mode, see the
+			individual definitions.
+		@par
+			The only supported type for this setting is
+			@ref GSBool. The value matching to @ref GS_TRUE
+			must be specified to activate
+			this mode. In this version, the partial
+			execution mode is not effective unless setting
+			the mode explicitly.
+		@ENDL
+	 */
+	GS_FETCH_PARTIAL_EXECUTION = (GS_FETCH_LIMIT + 2)
+#endif	// GS_COMPATIBILITY_SUPPORT_4_0
+
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
 };
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
@@ -1114,7 +1324,7 @@ typedef GSEnum GSQueryOrder;
 	@brief @ref GSContainer に設定する索引の種別を示します。
 
 	@EN
-	@brief Represents the type(s) of indexes set on a @ref GSContainer .
+	@brief Represents the type(s) of indexes set on a @ref GSContainer.
 
 	@ENDL
  */
@@ -1123,9 +1333,17 @@ enum GSIndexTypeFlagTag {
 	/*!
 		@JP
 		@brief デフォルトの索引を示します。
+		@par
+			この索引種別は、特定の種別を明示せずに索引の操作を行う必要が
+			ある場合に用いられるものであり、実在する索引はこの種別以外の種別に分類
+			されます。
 
 		@EN
 		@brief Indicates a default index.
+		@par
+			For this index type, when you need to manipulate the index without
+			specifying a type, the existing index will be classified as another
+			type other than this type.
 
 		@ENDL
 	 */
@@ -1135,8 +1353,8 @@ enum GSIndexTypeFlagTag {
 		@JP
 		@brief ツリー索引を示します。
 		@par
-			この索引は、時系列におけるロウキーと対応するカラムを除く、任意種別の
-			コンテナにおける次の型のカラムに対して使用できます。
+			この索引種別は、時系列におけるロウキーと対応するカラムを除く
+			任意の種別のコンテナにおける、次の型のカラムに対して使用できます。
 			- STRING
 			- BOOL
 			- BYTE
@@ -1150,7 +1368,7 @@ enum GSIndexTypeFlagTag {
 		@EN
 		@brief Indicates a tree index.
 		@par
-			This index can be applied to following types of Columns of any type
+			This index type can be applied to following types of Columns of any type
 			of Container, except the Column corresponding to the Row key of
 			TimeSeries.
 			- STRING
@@ -1187,8 +1405,8 @@ enum GSIndexTypeFlagTag {
 		@EN
 		@brief Indicates a hash index.
 		@par
-			This type of index can be set on the following types of Columns in
-			@ref GSCollection .
+			This index type can be set on the following types of Columns in
+			@ref GSCollection.
 			- STRING
 			- BOOL
 			- BYTE
@@ -1199,7 +1417,7 @@ enum GSIndexTypeFlagTag {
 			- DOUBLE
 			- TIMESTAMP
 		@par
-			It cannot be set on Columns in @ref GSTimeSeries .
+			It cannot be set on Columns in @ref GSTimeSeries.
 
 		@ENDL
 	 */
@@ -1209,19 +1427,16 @@ enum GSIndexTypeFlagTag {
 		@JP
 		@brief 空間索引を示します。
 		@par
-			この索引は、@ref GSCollection におけるGEOMETRY型のカラムに対してのみ
-			使用できます。@ref GSTimeSeries に対して設定することはできません。
-		@par
-			バージョン1.1またはそれ以前のバージョンでは、使用できませんでした。
+			この索引種別は、@ref GSCollection におけるGEOMETRY型のカラムに
+			対してのみ使用できます。@ref GSTimeSeries に対して設定することは
+			できません。
 
 		@EN
 		@brief Indicates a spatial index.
 		@par
-			This index can be applied to only GEOMETRY type of Columns in
-			@ref GSCollection .
-			It cannot be set on Columns in @ref GSTimeSeries .
-		@par
-			This is not available on version 1.1 or earlier.
+			This index type can be applied to only GEOMETRY type of Columns in
+			@ref GSCollection.
+			It cannot be set on Columns in @ref GSTimeSeries.
 
 		@ENDL
 	 */
@@ -1266,7 +1481,7 @@ typedef int32_t GSIndexTypeFlags;
 		Available only to @ref GSTimeSeries in the current version.
 	@par
 			In a weighted operation, a weighted value is determined based on a
-			key value. In a weighted operation on a @ref GSTimeSeries , a
+			key value. In a weighted operation on a @ref GSTimeSeries, a
 			weighted value is obtained by calculating half the time span between
 			the adjacent Rows before and after a Row in terms of the specific
 			unit. However, if a Row has only one adjacent Row, the time span
@@ -1439,7 +1654,7 @@ enum GSAggregationTag {
 			The weighted average is calculated by dividing the sum of products
 			of sample values and their respective weighted values by the sum of
 			weighted values. For the method of calculating a weighted value, see
-			the description of @ref GSAggregationTag .
+			the description of @ref GSAggregationTag.
 		@par
 			This operation is only available to numeric-type Columns. The type
 			of a returned value is always DOUBLE. If no target Row exists, the
@@ -1491,7 +1706,7 @@ enum GSInterpolationModeTag {
 
 		@EN
 		@brief Indicates performing linear interpolation or interpolation with
-			the value of a privious Row on Columns.
+			the value of a previous Row on Columns.
 		@par
 			The Column specified the interpolation function is linearly
 			interpolated with the Row values before and after the target time of
@@ -1509,17 +1724,14 @@ enum GSInterpolationModeTag {
 		@JP
 		@brief 空の値を補間値として用いることを示します。
 		@par
-			ロウキーを除くすべてのロウフィールドについて、型ごとに定められた空の値を
-			補間値として用いることを示します。空の値は、@ref gsPutCollection にて
-			カラムレイアウト変更時に新たに追加されるカラムの初期値と同一です。
+			ロウキーを除くすべてのロウフィールドについて、@ref GSContainer にて
+			定義されている空の値を補間値として用いることを示します。
 
 		@EN
 		@brief Indicates using an empty value as an interpolated value.
 		@par
-			It indicates that an empty value defined for each type is used as an
-			interpolated value for all Row fields except Row keys. The empty
-			value is the same as the initial value of a Column newly created
-			when changing a Column layout using @ref gsPutCollection .
+			It indicates that an empty value defined in @ref GSContainer is used
+			as an interpolated value for all Row fields except Row keys.
 
 		@ENDL
 	 */
@@ -1548,7 +1760,7 @@ typedef GSEnum GSInterpolationMode;
 
 	@EN
 	@brief Represents how to specify a Row based on a key timestamp of
-		@ref GSTimeSeries .
+		@ref GSTimeSeries.
 	@par
 		It can be used in combination with the timestamp (specified separately)
 		to specify a Row with the nearest timestamp etc. When no relevant Row
@@ -1684,7 +1896,7 @@ typedef GSEnum GSGeometryOperator;
 	@ENDL
  */
 enum GSCompressionMethodTag {
-#if GS_COMPATIBILITY_TIME_SETIES_PROPERTIES_0_0_10
+#if GS_COMPATIBILITY_TIME_SERIES_PROPERTIES_0_0_10
 	GS_COMPRESSION_NONE,
 	GS_COMPRESSION_LOSSLESS,
 	GS_COMPRESSION_LOSSY
@@ -1713,12 +1925,12 @@ enum GSCompressionMethodTag {
 		@EN
 		@brief Indicates it is a thinning compression method without error.
 		@par
-		    In this compression, the Row with the same 
-		    data as the Row registered just before and immediately after will be 
-		    omitted.
-		    omitted data will be restored without error at the process of interpolate 
-		    and sample processing. 
-			
+			In this compression, the Row with the same
+			data as the Row registered just before and immediately after will be
+			omitted.
+			omitted data will be restored without error at the process of interpolate
+			and sample processing.
+
 		@ENDL
 	 */
 	GS_COMPRESSION_SS,
@@ -1735,18 +1947,18 @@ enum GSCompressionMethodTag {
 			省かれたデータはinterpolateやsample処理の際に、指定された誤差の範囲内で
 			復元されます。
 
-		@EN 
+		@EN
 		@brief Indicates it is a thinning compression method with error.
 		@par
-			In this compression, The Row which show the same slope as the data 
-			registered up to the last time and immediately after will be omitted. 
-			Conditions for determining whether the same slope can be specified by 
+			In this compression, The Row which show the same slope as the data
+			registered up to the last time and immediately after will be omitted.
+			Conditions for determining whether the same slope can be specified by
 			the user.
-			It will be omitted only the case that the specified column meets the conditions 
+			It will be omitted only the case that the specified column meets the conditions
 			and the value of the other columns are the same as the last data.
-			The omitted data will be restored at a process of interpolate and sample 
+			The omitted data will be restored at a process of interpolate and sample
 			within the specified error range.
-			
+
 		@ENDL
 	 */
 	GS_COMPRESSION_HI
@@ -2138,7 +2350,26 @@ enum GSTypeTag {
 
 		@ENDL
 	 */
-	GS_TYPE_TIMESTAMP_ARRAY
+	GS_TYPE_TIMESTAMP_ARRAY,
+
+#if GS_COMPATIBILITY_SUPPORT_3_5
+	/*!
+		@JP
+		@brief ロウフィールドにNULLが設定されていることを示します。
+		@par
+			カラムの型として用いることはできません。
+		@since 3.5
+
+		@EN
+		@brief Indicates the Row field is set to null.
+		@par
+			Cannot be used as Column type.
+		@since 3.5
+
+		@ENDL
+	*/
+	GS_TYPE_NULL = -1
+#endif
 };
 
 /*!
@@ -2154,10 +2385,82 @@ typedef GSEnum GSType;
 
 /*!
 	@JP
+	@brief カラムに関するオプション設定を示します。
+
+	@EN
+	@brief Indicates optional settings for Column
+
+	@ENDL
+*/
+enum GSTypeOptionTag {
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+	GS_TYPE_OPTION_KEY = 1 << 0,
+#endif
+
+#if GS_COMPATIBILITY_SUPPORT_3_5
+
+	/*!
+		@JP
+		@brief NOT NULL制約を持たないカラムであることを示します。
+		@since 3.5
+
+		@EN
+		@brief Indicates a Column without NOT NULL constraint.
+		@since 3.5
+
+		@ENDL
+	*/
+	GS_TYPE_OPTION_NULLABLE = 1 << 1,
+
+	/*!
+		@JP
+		@brief NOT NULL制約を持つカラムであることを示します。
+		@since 3.5
+
+		@EN
+		@brief Indicates a Column with NOT NULL constraint.
+		@since 3.5
+
+		@ENDL
+	*/
+	GS_TYPE_OPTION_NOT_NULL = 1 << 2,
+
+#endif
+
+};
+
+/*!
+	@JP
+	@brief カラムに関するオプション設定を示すフラグ値のビット和です。
+	@par
+		次のフラグ値を共に含めた場合、矛盾したオプション設定であると
+		みなされます。また、いずれも含まれていない場合、NOT NULL制約に
+		関して未設定状態であるとみなされます。
+		- @ref GS_TYPE_OPTION_NULLABLE
+		- @ref GS_TYPE_OPTION_NOT_NULL
+	@see GSTypeOptionTag
+
+	@EN
+	@brief Sum of bits of value of the flag indicating the option setting for Column.
+	@par
+		When both of the following flag values are included, the option setting
+		is considered inconsistent. When neither are included, the NOT NULL
+		constraint is considered to be in an unconfigured state.
+		- @ref GS_TYPE_OPTION_NULLABLE
+		- @ref GS_TYPE_OPTION_NOT_NULL
+	@see GSTypeOptionTag
+
+	@ENDL
+*/
+typedef int32_t GSTypeOption;
+
+/*!
+	@JP
 	@brief @ref GSRowSet から取り出すことのできる内容の種別です。
 
 	@EN
-	@brief The type of content that can be extracted from @ref GSRowSet .
+	@brief The type of content that can be extracted from @ref GSRowSet.
 
 	@ENDL
  */
@@ -2169,7 +2472,7 @@ enum GSRowSetTypeTag {
 
 		@EN
 		@brief Indicate it is @ref GSRowSet consist of the type of the Row data
-		       corresponding with container the target of query execution.
+			corresponding with container the target of query execution.
 
 		@ENDL
 	 */
@@ -2196,7 +2499,7 @@ enum GSRowSetTypeTag {
 
 		@EN
 		@brief Indicates it is @ref GSRowSet consisting of the execution result entry of
-		       EXPLAIN statement and EXPLAIN ANALYZE statement.
+			EXPLAIN statement and EXPLAIN ANALYZE statement.
 		@see GSQueryAnalysisEntry
 
 		@ENDL
@@ -2221,12 +2524,12 @@ typedef GSEnum GSRowSetType;
 	@par
 		時系列を対象とした誤差あり間引き圧縮のカラム別設定に使用します。
 
-	@ENs
+	@EN
 	@brief Represents the compression settings for a particular column.
 	@par
 		Use for the column-specific settings for thinning compression with error
-        intended for the TimeSeries.
-        
+		intended for the TimeSeries.
+
 	@ENDL
  */
 typedef struct GSColumnCompressionTag {
@@ -2245,7 +2548,7 @@ typedef struct GSColumnCompressionTag {
 			- @ref GS_TYPE_DOUBLE
 
 		@EN
-		@brief Name of setting target column. 
+		@brief Name of setting target column.
 		@par
 			Possible to be used as column-specific compression settings only if
 			it selects thinning compression method (@ref GS_COMPRESSION_HI) and
@@ -2261,7 +2564,7 @@ typedef struct GSColumnCompressionTag {
 	 */
 	const GSChar *columnName;
 
-#if GS_COMPATIBILITY_TIME_SETIES_PROPERTIES_0_0_10
+#if GS_COMPATIBILITY_TIME_SERIES_PROPERTIES_0_0_10
 	GSCompressionMethod method;
 	double threshold;
 	GSBool thresholdRelative;
@@ -2275,8 +2578,8 @@ typedef struct GSColumnCompressionTag {
 			間引き圧縮方式(@ref GS_COMPRESSION_HI)以外を選択した場合は無視されます。
 
 		@EN
-		@brief Indicates whether or not to apply the relative error as a criterion 
-		       value in the thinning compression.
+		@brief Indicates whether or not to apply the relative error as a criterion
+			value in the thinning compression.
 		@par
 			If the non-thinning compression method (@ref GS_COMPRESSION_HI) is selected
 			it will be ignored.
@@ -2291,7 +2594,7 @@ typedef struct GSColumnCompressionTag {
 			誤差境界値の比率です。
 		@par
 			値がとりうる範囲は、@c span メンバと対応します。
-			また、比率は@c 0 以上@c 1以下でなければ、時系列を作成することが
+			また、比率は@c 0 以上@c 1 以下でなければ、時系列を作成することが
 			できません。
 		@par
 			誤差あり間引き圧縮方式(@ref GS_COMPRESSION_HI)において、
@@ -2300,15 +2603,15 @@ typedef struct GSColumnCompressionTag {
 
 		@EN
 		@brief Ratio of the error boundary value on the basis of the range of values can
-		       take in the relative error thinning compression.
+			take in the relative error thinning compression.
 		@par
 			Range that value can take correspond to the @c span members.
-            In addition, unless the ratio is between @c 0 and @c 1 , TimeSeries will not
-            be able to create.
+			In addition, unless the ratio is between @c 0 and @c 1, TimeSeries will not
+			be able to create.
 		@par
-			In error thinning compression method(@ref GS_COMPRESSION_HI), it is 
-			only valid if it selects the relative error as a criterion value (specify 
-			@ref GS_TRUE to @ref GSColumnCompressionTag::relative ).
+			In error thinning compression method(@ref GS_COMPRESSION_HI), it is
+			only valid if it selects the relative error as a criterion value (specify
+			@ref GS_TRUE to @ref GSColumnCompressionTag::relative).
 
 		@ENDL
 	 */
@@ -2324,13 +2627,13 @@ typedef struct GSColumnCompressionTag {
 			に @ref GS_TRUE を指定)した場合のみ有効です。
 
 		@EN
-		@brief It is the difference between the maximum value and the minimum value of 
-		       the range of values can take in the relative error thinning compression.
+		@brief It is the difference between the maximum value and the minimum value of
+			the range of values can take in the relative error thinning compression.
 		@par
-			In error thinning compression method(@ref GS_COMPRESSION_HI), it is 
-			only valid if it selects the relative error as a criterion value (specify 
-			@ref GS_TRUE to @ref GSColumnCompressionTag::relative ).
-			
+			In error thinning compression method(@ref GS_COMPRESSION_HI), it is
+			only valid if it selects the relative error as a criterion value (specify
+			@ref GS_TRUE to @ref GSColumnCompressionTag::relative).
+
 		@ENDL
 	 */
 	double span;
@@ -2346,9 +2649,9 @@ typedef struct GSColumnCompressionTag {
 		@EN
 		@brief Width of the error boundary in absolute error thinning compression.
 		@par
-			In error thinning compression method(@ref GS_COMPRESSION_HI), it is 
-			only valid if it selects the relative error as a criterion value (specify 
-			@ref GS_TRUE to @ref GSColumnCompressionTag::relative ).
+			In error thinning compression method(@ref GS_COMPRESSION_HI), it is
+			only valid if it selects the relative error as a criterion value (specify
+			@ref GS_TRUE to @ref GSColumnCompressionTag::relative).
 
 		@ENDL
 	 */
@@ -2357,7 +2660,7 @@ typedef struct GSColumnCompressionTag {
 #endif
 } GSColumnCompression;
 
-#if GS_COMPATIBILITY_TIME_SETIES_PROPERTIES_0_0_10
+#if GS_COMPATIBILITY_TIME_SERIES_PROPERTIES_0_0_10
 #define GS_COLUMN_COMPRESSION_INITIALIZER \
 	{ NULL, GS_COMPRESSION_NONE, 0, GS_FALSE }
 #else
@@ -2398,7 +2701,7 @@ typedef struct GSCollectionPropertiesTag {
 	@brief @ref GSCollectionProperties の初期化子です。
 
 	@EN
-	@brief Initializer of @ref GSCollectionProperties .
+	@brief Initializer of @ref GSCollectionProperties.
 
 	@ENDL
  */
@@ -2409,10 +2712,17 @@ typedef struct GSCollectionPropertiesTag {
 	@JP
 	@brief 時系列を新規作成または変更する際に使用される、オプションの構成情報を
 		表します。
+	@par
+		カラム名の表記、もしくは、個別に圧縮設定できるカラム数の上限などの
+		内容の妥当性について、必ずしも検査するとは限りません。
 
 	@EN
 	@brief Represents the information about optional configuration settings
 		used for newly creating or updating a TimeSeries.
+	@par
+		It does not guarantee the validity of values e.g. the column
+		names and the upper limit of the column number that can be
+		individually compressed.
 
 	@ENDL
  */
@@ -2439,8 +2749,10 @@ typedef struct GSTimeSeriesPropertiesTag {
 		@par
 			作成済みの時系列の設定を変更することはできません。
 		@par
-			値が@c 0 以下の場合、有効期限はないものとみなされ、明示的に削除操作を
+			値が負の場合、有効期限はないものとみなされ、明示的に削除操作を
 			行わない限りロウが削除されなくなります。
+			@c 0 が設定されたオプションを指定して時系列を作成することは
+			できません。
 
 		@EN
 		@brief The elapsed time period of a Row to be used as the basis of the
@@ -2468,7 +2780,7 @@ typedef struct GSTimeSeriesPropertiesTag {
 		@par
 			If the value is less than @c 0, it is determined there is no expiration
 			date and unless you execute deleting operation explicitly, Rows will not
-			be deleted.  
+			be deleted. A TimeSeries cannot be created with specifying that the value is @c 0.
 
 		@ENDL
 	 */
@@ -2477,9 +2789,17 @@ typedef struct GSTimeSeriesPropertiesTag {
 	/*!
 		@JP
 		@brief ロウの有効期限の基準とする経過時間の単位です。
+		@par
+			有効期限の期間値が設定されていた場合、@ref GS_TIME_UNIT_YEAR
+			または@ref GS_TIME_UNIT_MONTH が設定されたオプションを指定して、
+			時系列を作成することはできません。
 
 		@EN
 		@brief The unit of elapsed time referenced for the expiration date of a Row.
+		@par
+			When the elapsed time value has been set, a TimeSeries cannot be
+			created with specifying @ref GS_TIME_UNIT_YEAR or @ref GS_TIME_UNIT_MONTH
+			as the value of this option.
 
 		@ENDL
 	 */
@@ -2489,20 +2809,45 @@ typedef struct GSTimeSeriesPropertiesTag {
 		@JP
 		@brief 間引き圧縮において連続して間引きされるロウの最大期間です。
 		@par
-			この期間を設定し、前方のロウと指定の期間以上時刻が離れていた場合、
-			間引き圧縮として間引き可能な条件に達したとしても、間引きされなくなります。
+			この期間が設定された時系列のロウについて、前方のロウと指定の期間
+			以上時刻が離れていた場合、間引き圧縮として間引き可能な条件を満たして
+			いたとしても、間引かれなくなります。
 		@par
-			値が@c 0 以下の場合、連続して間引きされるロウの期間は無制限となります。
+			時系列圧縮方式として @ref GS_COMPRESSION_NO が設定されていた
+			場合、この期間の設定は無視されます。
+		@par
+			時系列圧縮方式として @ref GS_COMPRESSION_HI または
+			@ref GS_COMPRESSION_SS が設定されており、この期間として@c 0 以下の
+			値が設定された場合、TIMESTAMP型の取りうる値の範囲全体が期間として
+			設定されたとみなされます。
+		@par
+			前方のロウと指定の期間以上時刻が離れておらず、かつ、間引き圧縮として
+			間引き可能な条件を満たしていたとしても、格納先の内部の配置などに
+			よっては間引かれない場合があります。
 
 		@EN
-		@brief The maximum period of the Row which is thinned continuously in thinning 
-		     compression.
+		@brief The maximum period of the Row which is thinned continuously in thinning
+			compression.
 		@par
-			If the period is set and the time of the specified period is apart from 
-			the previous Row, it will not be thinned even if it reaches a possible 
+			If the period is set to a TimeSeries and the time of the specified period is apart from
+			the previous Row of the TimeSeries, it will not be thinned even if it satisfies possible
 			conditions for thinning as thinning compression.
 		@par
-			If the value is less than @c 0, the period of the Row thinning in succession
+			If @ref GS_COMPRESSION_NO has been set as the
+			compression method, the setting of the maximum
+			periods is ignored.
+		@par
+			If @ref GS_COMPRESSION_HI or @ref GS_COMPRESSION_SS
+			has been set, in the case that this setting is
+			not specified, the maximum value of TIMESTAMP
+			is set as the period.
+		@par
+			Even if the row is in the period from the
+			previous data and it satisfies the conditions
+			of the compression, it may not be thinned by
+			the stored location, etc.
+		@par
+			If the value is @c 0 or less, the period of the Row thinning in succession
 			will be unlimited.
 
 		@ENDL
@@ -2513,15 +2858,25 @@ typedef struct GSTimeSeriesPropertiesTag {
 		@JP
 		@brief 間引き圧縮において連続して間引きされるロウの最大期間の
 			単位です。
+		@par
+			最大期間の値が明示的に設定されていた場合、@ref GS_TIME_UNIT_YEAR
+			または@ref GS_TIME_UNIT_MONTH が設定されたオプションを指定して、
+			時系列を作成することはできません。
 
 		@EN
-		@brief A unit of the maximum period of the Row thinned continuously in thinning 
-		     compression.
+		@brief A unit of the maximum period of the Row thinned continuously in thinning
+			compression.
+		@par
+			When the maximum period has been specified
+			explicitly, a TimeSeries cannot be created
+			with specifying @ref GS_TIME_UNIT_YEAR or
+			@ref GS_TIME_UNIT_MONTH as the value of this option.
+
 		@ENDL
 	 */
 	GSTimeUnit compressionWindowSizeUnit;
 
-#if !(GS_COMPATIBILITY_TIME_SETIES_PROPERTIES_0_0_10)
+#if !(GS_COMPATIBILITY_TIME_SERIES_PROPERTIES_0_0_10)
 
 	/*!
 		@JP
@@ -2541,16 +2896,16 @@ typedef struct GSTimeSeriesPropertiesTag {
 		@brief カラム別圧縮設定(@c compressionList)のエントリ数です。
 		@par
 			1つの時系列に対してパラメータ設定できるカラム の上限数については、
-			付録の値の範囲を参照してください。
+			GridDBテクニカルリファレンスを参照してください。
 			上限を超えたオプションを指定して時系列を作成することはできません。
 
 		@EN
 		@brief Number of entries of compression settings by column (@c compressionList).
 		@par
-			Refer to the Annex Range of values for the maximum number of columns 
+			Refer to the GridDB Technical Reference for the maximum number of columns
 			that can set one of TimeSeries parameters.
 			A TimeSeries with the option that exceeds the upper limit cannot be created.
-			
+
 		@ENDL
 	 */
 	size_t compressionListSize;
@@ -2559,12 +2914,13 @@ typedef struct GSTimeSeriesPropertiesTag {
 		@JP
 		@brief カラム別の圧縮設定です。
 		@par
-			エントリ数が@c 0 の場合は、時系列を新規作成または更新する際無視されます
+			エントリ数が@c 0 の場合、時系列を新規作成または更新する際に
+			無視されます。
 
 		@EN
 		@brief Compression settings by column
 		@par
-			If the number of entries is @c 0, it is ignored when the TimeSeries is 
+			If the number of entries is @c 0, it is ignored when the TimeSeries is
 			newly created or updated.
 
 		@ENDL
@@ -2582,34 +2938,49 @@ typedef struct GSTimeSeriesPropertiesTag {
 			解放するための条件を制御できます。期限に到達したロウデータが
 			分割数に相当する期間だけ集まった時点で解放しようとします。
 		@par
-			分割数の上限については、付録の値の範囲を参照してください。
-			上限を超えたオプションを指定して時系列を作成することはできません。
+			分割数の上限については、GridDBテクニカルリファレンスを参照
+			してください。上限を超えたオプションを指定して時系列を作成
+			することはできません。
 		@par
 			値が負の場合、分割数が設定されていないことを示します。
-			@c 0 を指定することはできません。
+			@c 0 が設定されたオプションを指定して時系列を作成することは
+			できません。
+		@par
+			ロウの有効期限の基準となる経過期間の設定がない場合、この分割数の
+			設定は無視されます。
+			一方、ロウの有効期限の基準となる経過期間の設定がある場合にこの
+			分割数の設定を省略すると、作成される時系列にはGridDBクラスタ上の
+			デフォルトの分割数が設定されます。
 		@since 2.0
 
 		@EN
-		@brief Sets the division number for the validity period as the number of 
-		     expired Row data units to be released.
+		@brief Sets the division number for the validity period as the number of
+			expired Row data units to be released.
 		@par
-			The division number set is used to control the conditions for releasing 
-			Row data management areas that have expired the period. Expired Row data 
-			shall be released at the point they are collected only when the period 
+			The division number set is used to control the conditions for releasing
+			Row data management areas that have expired the period. Expired Row data
+			shall be released at the point they are collected only when the period
 			equivalent to the division number is reached.
 		@par
-			Refer to the Annex Range of values for the division number upper limit.
+			Refer to the GridDB Technical Reference for the division number upper limit.
 			A TimeSeries with the option that exceeds the upper limit cannot be created.
 		@par
 			If the value is negative, it indicates the division number has not been set.
-			Not possible to specify @c 0.
+			A TimeSeries cannot be specified with specifying @c 0 as the value of this option.
+		@par
+			If the elapsed time period is not set, the
+			setting of division number is ignored. If the
+			elapsed time period has been set and the setting of
+			division number is not set, the division
+			number for the TimeSeries to be created is set
+			to the default value of the connected GridDB server.
 		@since 2.0
 
 		@ENDL
 	 */
 	int32_t expirationDivisionCount;
 
-#endif	
+#endif	// GS_COMPATIBILITY_SUPPORT_2_0
 
 } GSTimeSeriesProperties;
 
@@ -2622,9 +2993,9 @@ typedef struct GSTimeSeriesPropertiesTag {
 		時系列圧縮方式は無圧縮に設定されます。
 
 	@EN
-	@brief Initializer of @ref GSTimeSeriesProperties .
+	@brief Initializer of @ref GSTimeSeriesProperties.
 	@par
-		Invalid the validity period of a Row and the continuous thinning limitation of 
+		Invalid the validity period of a Row and the continuous thinning limitation of
 		a compression Row. TimeSeries compression method is set to no compression.
 
 	@ENDL
@@ -2632,7 +3003,7 @@ typedef struct GSTimeSeriesPropertiesTag {
 #define GS_TIME_SERIES_PROPERTIES_INITIALIZER \
 	{ -1, GS_TIME_UNIT_DAY, -1, GS_TIME_UNIT_DAY, \
 	GS_COMPRESSION_NO, 0, NULL, -1 }
-#elif !GS_COMPATIBILITY_TIME_SETIES_PROPERTIES_0_0_10
+#elif !GS_COMPATIBILITY_TIME_SERIES_PROPERTIES_0_0_10
 #define GS_TIME_SERIES_PROPERTIES_INITIALIZER \
 	{ -1, GS_TIME_UNIT_DAY, -1, GS_TIME_UNIT_DAY, \
 	GS_COMPRESSION_NO, 0, NULL }
@@ -2695,21 +3066,51 @@ typedef struct GSColumnInfoTag {
 	*/
 	GSIndexTypeFlags indexTypeFlags;
 
-#endif	
+#if GS_COMPATIBILITY_SUPPORT_3_5
+
+	/*!
+		@JP
+		@brief カラムに関するオプション設定を示すフラグ値のビット和です。
+		@par
+			現バージョンでは、NOT NULL制約に関連する以下のフラグ値のみを含める
+			ことができます。
+			- @ref GS_TYPE_OPTION_NULLABLE
+			- @ref GS_TYPE_OPTION_NOT_NULL
+		@since 3.5
+
+		@EN
+		@brief Sum of bits of value of the flag indicating the option setting for Column.
+		@par
+			In the current version, you can only include the following flag values for the NOT NULL constraint.
+			- @ref GS_TYPE_OPTION_NULLABLE
+			- @ref GS_TYPE_OPTION_NOT_NULL
+		@since 3.5
+
+		@ENDL
+	*/
+	GSTypeOption options;
+#endif	// GS_COMPATIBILITY_SUPPORT_3_5
+
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
 
 } GSColumnInfo;
 
-#if GS_COMPATIBILITY_SUPPORT_1_5
+#if GS_COMPATIBILITY_SUPPORT_3_5
 
 /*!
 	@JP
 	@brief @ref GSColumnInfo の初期化子です。
 
 	@EN
-	@brief Initializer of @ref GSColumnInfo .
+	@brief Initializer of @ref GSColumnInfo.
 
 	@ENDL
  */
+#define GS_COLUMN_INFO_INITIALIZER \
+	{ NULL, GS_TYPE_STRING, GS_INDEX_FLAG_DEFAULT, 0 }
+
+#elif GS_COMPATIBILITY_SUPPORT_1_5
+
 #define GS_COLUMN_INFO_INITIALIZER \
 	{ NULL, GS_TYPE_STRING, GS_INDEX_FLAG_DEFAULT }
 
@@ -2718,7 +3119,7 @@ typedef struct GSColumnInfoTag {
 #define GS_COLUMN_INFO_INITIALIZER \
 	{ NULL, GS_TYPE_STRING }
 
-#endif	
+#endif	// not GS_COMPATIBILITY_SUPPORT_1_5
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 
@@ -2957,7 +3358,91 @@ typedef struct GSTriggerInfoTag {
 	0, NULL, \
 	NULL, NULL, NULL, NULL }
 
-#endif	
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+
+#if GS_COMPATIBILITY_SUPPORT_3_5
+
+/*!
+	@JP
+	@brief 索引の設定内容を表します。
+	@since 3.5
+
+	@EN
+	@brief Indicates the contents of index setting.
+	@since 3.5
+
+	@ENDL
+*/
+typedef struct GSIndexInfoTag {
+
+	/*!
+		@JP
+		@brief 索引名です。
+		@since 3.5
+
+		@EN
+		@brief Index name
+		@since 3.5
+
+		@ENDL
+	*/
+	const GSChar *name;
+
+	/*!
+		@JP
+		@brief 索引種別を示すフラグ値です。
+		@par
+			デフォルトまたは任意個数の索引種別を含めることができます。
+			複数個の索引種別を含める場合は、各種別のフラグ値のビット和により
+			表現します。コンテナ情報の一部として得られた索引情報では、
+			デフォルトを除くいずれか一つの索引種別のみが設定されます。
+		@since 3.5
+
+		@EN
+		@brief This is a flag value which shows index classification.
+		@par
+			Default or any number of index types can be included. When
+			multiple index types are included, it is expressed by sum of bits
+			of various flag values. For index information obtained as part
+			of container information, only one index type except the default is set.
+		@since 3.5
+
+		@ENDL
+	*/
+	GSIndexTypeFlags type;
+
+	/*!
+		@JP
+		@brief 索引に対応するカラムのカラム番号です。
+		@since 3.5
+
+		@EN
+		@brief Column number
+		@since 3.5
+
+		@ENDL
+	*/
+	int32_t column;
+
+	/*!
+		@JP
+		@brief 索引に対応するカラムのカラム名です。
+		@since 3.5
+
+		@EN
+		@brief Column name
+		@since 3.5
+
+		@ENDL
+	*/
+	const GSChar *columnName;
+
+} GSIndexInfo;
+
+#define GS_INDEX_INFO_INITIALIZER \
+	{ NULL, GS_INDEX_FLAG_DEFAULT, -1, NULL }
+
+#endif	// GS_COMPATIBILITY_SUPPORT_3_5
 
 /*!
 	@JP
@@ -3100,36 +3585,45 @@ typedef struct GSContainerInfoTag {
 			同一クラスタノード上の同一管理領域内に格納されるコンテナについて、
 			配置先を最適化するために使用されます。
 		@par
-			類似性設定が同一のコンテナの内容は、近接する配置先に格納される
+			データアフィニティが同一のコンテナの内容は、近接する配置先に格納される
 			可能性が高くなります。また、解放期限が設定され、近接する配置先に
 			格納された時系列について、登録頻度などの変更パターンが類似している場合、
 			解放期限に到達したロウの解放処理が効率的に行われる可能性が
 			高くなります。
 		@par
-			空文字列は指定できません。また、使用できる文字種はコンテナ名と
-			同様のものに制限されます。文字列の長さの上限については
-			付録の値の範囲を参照してください。長さの上限を超えるコンテナを
-			作成することはできません。
+			コンテナの定義において使用できるデータアフィニティ文字列の文字種や
+			長さには制限があります。具体的には、GridDBテクニカルリファレンスを参照
+			してください。ただし、文字列を設定した時点で必ずしもすべての制限を
+			検査するとは限りません。特に記載のない限り、データアフィニティ文字列が
+			使用される操作では、ASCIIの大文字・小文字表記の違いが区別されます。
 		@par
 			値が@c NULL の場合、標準設定を優先することを示します。
 		@since 2.1
 
 		@EN
 		@brief A strings indicating affinity between Containers (data affinity)
-		     for data location optimizing.
+			for data location optimizing.
 		@par
-			Use for optimizing the arrangement of Containers stored in the same 
+			Use for optimizing the arrangement of Containers stored in the same
 			management area on the same cluster node.
 		@par
-			Containers which have the same data affinity string may be stored near 
-			each other. Therefore the efficiency for the expiration of Rows may be 
-			improved by using the same data affinity string for TimeSeries Containers 
+			Containers which have the same data affinity string may be stored near
+			each other. Therefore the efficiency for the expiration of Rows may be
+			improved by using the same data affinity string for TimeSeries Containers
 			which includes Rows with similar elapsed time periods.
 		@par
-			An empty string is not acceptable. A data affinity string must be composed 
-			of characters same as a Container name. See "System limiting values" in the	
-			GridDB API Reference for the maximum length of the string. A Container with 
+			An empty string is not acceptable. A data affinity string must be composed
+			of characters same as a Container name. See "System limiting values" in the
+			GridDB Technical Reference for the maximum length of the string. A Container with
 			a Container name longer than the maximum length cannot be created.
+		@par
+			There are the limitations, allowed characters
+			and maximum length, for the data affinity
+			string. See the GridDB Technical Reference for
+			the details. All the restrictions may not be
+			checked when setting the string. The data
+			affinity string is case sensitive unless
+			otherwise noted.
 		@par
 			If null is specified, the Container will be stored as usual.
 		@since 2.1
@@ -3137,23 +3631,60 @@ typedef struct GSContainerInfoTag {
 		@ENDL
 	 */
 	const GSChar *dataAffinity;
-#endif	
 
-#endif	
+#if GS_COMPATIBILITY_SUPPORT_3_5
+
+	/*!
+		@JP
+		@brief 索引情報のエントリ数です。
+		@since 3.5
+
+		@EN
+		@brief Number of @ref GSIndexInfo object in a list
+		@since 3.5
+
+		@ENDL
+	*/
+	size_t indexInfoCount;
+
+	/*!
+		@JP
+		@brief 索引情報の一覧です。
+		@since 3.5
+
+		@EN
+		@brief List of @ref GSIndexInfo object
+		@since 3.5
+
+		@ENDL
+	*/
+	const GSIndexInfo *indexInfoList;
+
+#endif	// GS_COMPATIBILITY_SUPPORT_3_5
+
+#endif	// GS_COMPATIBILITY_SUPPORT_2_1
+
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
 
 } GSContainerInfo;
 
-#if GS_COMPATIBILITY_SUPPORT_2_1
+#if GS_COMPATIBILITY_SUPPORT_3_5
 
 /*!
 	@JP
 	@brief @ref GSContainerInfo の初期化子です。
 
 	@EN
-	@brief Initializer of @ref GSContainerInfo .
+	@brief Initializer of @ref GSContainerInfo.
 
 	@ENDL
  */
+#define GS_CONTAINER_INFO_INITIALIZER \
+	{ NULL, GS_CONTAINER_COLLECTION, 0, NULL, GS_FALSE, \
+	GS_FALSE, NULL, 0, NULL, NULL, 0, NULL }
+
+#elif GS_COMPATIBILITY_SUPPORT_2_1
+
 #define GS_CONTAINER_INFO_INITIALIZER \
 	{ NULL, GS_CONTAINER_COLLECTION, 0, NULL, GS_FALSE, \
 	GS_FALSE, NULL, 0, NULL, NULL }
@@ -3169,17 +3700,7 @@ typedef struct GSContainerInfoTag {
 #define GS_CONTAINER_INFO_INITIALIZER \
 	{ NULL, GS_CONTAINER_COLLECTION, 0, NULL, GS_FALSE }
 
-#endif	
-
-#if GS_INTERNAL_DEFINITION_VISIBLE
-enum GSTypeOptionTag {
-	GS_TYPE_OPTION_KEY = 1 << 0
-};
-#endif
-
-#if GS_INTERNAL_DEFINITION_VISIBLE
-typedef int32_t GSTypeOption;
-#endif
+#endif	// not GS_COMPATIBILITY_SUPPORT_1_5
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
 typedef struct GSBindingEntryTag {
@@ -3187,7 +3708,7 @@ typedef struct GSBindingEntryTag {
 	GSType elementType;
 	size_t offset;
 	size_t arraySizeOffset;
-	GSTypeOption options;		
+	GSTypeOption options;		// GSTypeOption
 } GSBindingEntry;
 #endif
 
@@ -3196,8 +3717,8 @@ typedef struct GSBindingEntryTag {
 	@brief ロウオブジェクトとロウデータとの対応関係を表すバインディング情報です。
 
 	@EN
-	@brief The binding information representing the correspondence between 
-	     a Row objects and a Row data.
+	@brief The binding information representing the correspondence between
+		a Row objects and a Row data.
 
 	@ENDL
  */
@@ -3217,12 +3738,12 @@ typedef struct GSBindingTag {
 		使用します。1つの実行結果は、このエントリの列により表現されます。
 
 	@EN
-	@brief Represents one of information entries composing a query plan 
-	     and the results of analyzing a query operation.
+	@brief Represents one of information entries composing a query plan
+		and the results of analyzing a query operation.
 	@par
-	    Used to hold the result of executing an EXPLAIN statement or 
-	    an EXPLAIN ANALYZE statement in TQL. One execution result is represented 
-	    by an array of entries.
+		Used to hold the result of executing an EXPLAIN statement or
+		an EXPLAIN ANALYZE statement in TQL. One execution result is represented
+		by an array of entries.
 
 	@ENDL
  */
@@ -3237,7 +3758,7 @@ typedef struct GSQueryAnalysisEntryTag {
 		@EN
 		@brief the ID indicating the location of an entry in an array of entries.
 		@par
-			In a result set of executing a TQL query, IDs are assigned serially 
+			In a result set of executing a TQL query, IDs are assigned serially
 			starting from 1.
 
 		@ENDL
@@ -3255,9 +3776,9 @@ typedef struct GSQueryAnalysisEntryTag {
 		@EN
 		@brief the depth indicating the relation to other entries.
 		@par
-			If there is found an entry whose depth is smaller than that of a target 
-			entry by one, through checking entries one by one whose 
-			IDs are smaller than that of the target entry, it means that the target 
+			If there is found an entry whose depth is smaller than that of a target
+			entry by one, through checking entries one by one whose
+			IDs are smaller than that of the target entry, it means that the target
 			entry describes the content of the found entry in more detail.
 
 		@ENDL
@@ -3297,12 +3818,12 @@ typedef struct GSQueryAnalysisEntryTag {
 			- DOUBLE
 
 		@EN
-		@brief The type name of the value corresponding to the information indicated by 
-             an entry
+		@brief The type name of the value corresponding to the information indicated by
+			an entry
 		@par
-			The type name of the value corresponding to an analysis result (e.g., execution time) 
+			The type name of the value corresponding to an analysis result (e.g., execution time)
 			etc.
-            The following types (primitive types defined by TQL) are supported:
+			The following types (primitive types defined by TQL) are supported:
 			- STRING
 			- BOOL
 			- BYTE
@@ -3321,8 +3842,8 @@ typedef struct GSQueryAnalysisEntryTag {
 		@brief このエントリが示す情報に対応付けられた値の文字列表現です。
 
 		@EN
-		@brief A string representation of the value corresponding to the information indicated by 
-		     an entry.
+		@brief A string representation of the value corresponding to the information indicated by
+			an entry.
 
 		@ENDL
 	 */
@@ -3346,7 +3867,7 @@ typedef struct GSQueryAnalysisEntryTag {
 	@brief @ref GSQueryAnalysisEntry の初期化子です。
 
 	@EN
-	@brief Initializer of @ref GSQueryAnalysisEntry .
+	@brief Initializer of @ref GSQueryAnalysisEntry.
 
 	@ENDL
  */
@@ -3362,8 +3883,8 @@ typedef struct GSQueryAnalysisEntryTag {
 	@since 1.5
 
 	@EN
-	@brief The Row contents entry by a container used when operating collectively 
-	       a plurality of Rows of a plurality of containers.
+	@brief The Row contents entry by a container used when operating collectively
+		a plurality of Rows of a plurality of containers.
 	@since 1.5
 
 	@ENDL
@@ -3390,7 +3911,7 @@ typedef struct GSContainerRowEntryTag {
 		@EN
 		@brief The list to addresses to Row objects.
 		@par
-		    Possible to include only @ref GSRow addresses as an element in the current version.
+			Possible to include only @ref GSRow addresses as an element in the current version.
 
 		@ENDL
 	 */
@@ -3419,13 +3940,13 @@ typedef struct GSContainerRowEntryTag {
 	@since 1.5
 
 	@EN
-	@brief Initializer of @ref GSContainerRowEntry .
+	@brief Initializer of @ref GSContainerRowEntry.
 	@since 1.5
 
 	@ENDL
  */
 #define GS_CONTAINER_ROW_ENTRY_INITIALIZER \
-	{ NULL, NULL, NULL }
+	{ NULL, NULL, 0 }
 
 /*!
 	@JP
@@ -3434,8 +3955,8 @@ typedef struct GSContainerRowEntryTag {
 	@since 1.5
 
 	@EN
-	@brief The specified condition entry by a container for representing the acquisition 
-	       conditions for a plurality of containers.
+	@brief The specified condition entry by a container for representing the acquisition
+		conditions for a plurality of containers.
 	@since 1.5
 
 	@ENDL
@@ -3472,7 +3993,7 @@ typedef struct GSRowKeyPredicateEntryTag {
 	@since 1.5
 
 	@EN
-	@brief Initializer of @ref GSRowKeyPredicateEntry .
+	@brief Initializer of @ref GSRowKeyPredicateEntry.
 	@since 1.5
 
 	@ENDL
@@ -3817,7 +4338,7 @@ typedef union GSValueTag {
 
 } GSValue;
 
-#endif	
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
 
 /*!
 	@JP
@@ -3836,6 +4357,9 @@ typedef union GSValueTag {
  */
 #define GS_TIME_STRING_SIZE_MAX 32
 
+//
+// GridStoreFactory API
+//
 
 /*!
 	@JP
@@ -3893,8 +4417,6 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		タイミングで、認証処理が行われます。
 	@par
 		以下のプロパティを指定できます。サポート外の名称のプロパティは無視されます。
-		一部プロパティに設けられている機能上の上限値については、
-		付録の値の範囲を参照してください。
 		<table>
 		<tr><th>名称</th><th>説明</th></tr>
 		<tr>
@@ -3922,15 +4444,13 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<td>clusterName</td>
 		<td>クラスタ名。接続先のクラスタに設定されているクラスタ名と一致するか
 		どうかを確認するために使用される。省略時もしくは空文字列を
-		指定した場合、クラスタ名の確認は行われない。
-		クラスタ名の長さには機能上の上限があり、上限を超えた場合、
-		任意のクラスタノードへの接続に失敗する</td>
+		指定した場合、クラスタ名の確認は行われない。</td>
 		</tr>
 		<tr>
 		<td>database</td>
 		<td>接続先のデータベース名。省略時は全てのユーザがアクセス可能な「public」
 		データベースに自動接続される。接続ユーザは接続データベースに属するコンテナを
-		操作できる。バージョン2.9よりサポート</td>
+		操作できる。</td>
 		</tr>
 		<tr>
 		<td>user</td>
@@ -3956,23 +4476,23 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<td>transactionTimeout</td>
 		<td>トランザクションタイムアウト時間の最低値。
 		関係する@ref GSContainer における各トランザクションの開始時点から適用。
-		@c 0  からINTEGER型の最大値までの値の文字列表現であり、単位は秒。
+		@c 0 からINTEGER型の最大値までの値の文字列表現であり、単位は秒。
 		ただし、タイムアウト時間として有効に機能する範囲に上限があり、
 		上限を超える指定は上限値が指定されたものとみなされる。
-		@c 0  の場合、後続のトランザクション処理がタイムアウトエラーになるかどうかは
+		@c 0 の場合、後続のトランザクション処理がタイムアウトエラーになるかどうかは
 		常に不定となる。省略時は接続先GridDB上のデフォルト値を使用</td>
 		</tr>
 		<tr>
 		<td>failoverTimeout</td>
 		<td>フェイルオーバ処理にて新たな接続先が見つかるまで待機する時間の最低値。
-		@c 0  からINTEGER型の最大値までの数値の文字列表現であり、単位は秒。
-		@c 0  の場合、フェイルオーバ処理を行わない。省略時は指定のファクトリの
+		@c 0 からINTEGER型の最大値までの数値の文字列表現であり、単位は秒。
+		@c 0 の場合、フェイルオーバ処理を行わない。省略時は指定のファクトリの
 		設定値を使用</td>
 		</tr>
 		<tr>
 		<td>containerCacheSize</td>
 		<td>コンテナキャッシュに格納するコンテナ情報の最大個数。
-		@c 0  からINTEGER型の最大値までの数値の文字列表現。
+		@c 0 からINTEGER型の最大値までの数値の文字列表現。
 		値が@c 0 の場合、コンテナキャッシュを使用しないことを意味する。
 		@ref GSContainer を取得する際にキャッシュにヒットした場合は、
 		GridDBへのコンテナ情報の問い合わせを行わない。
@@ -3994,6 +4514,14 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		ことはできない。バージョン2.9よりサポート</td>
 		</tr>
 		</table>
+	@par
+		クラスタ名、データベース名、ユーザ名、パスワードについては、
+		ASCIIの大文字・小文字表記の違いがいずれも区別されます。その他、
+		これらの定義に使用できる文字種や長さの上限などの制限については、
+		GridDBテクニカルリファレンスを参照してください。ただし、制限に反する
+		文字列をプロパティ値として指定した場合、各ノードへの接続のタイミングまで
+		エラーが検知されないことや、認証情報の不一致など別のエラーになる
+		ことがあります。
 	@par
 		取得のたびに、新たな@ref GSGridStore インスタンスが生成されます。
 		異なる@ref GSGridStore インスタンスならびに関連するリソースに対する操作は、
@@ -4022,9 +4550,8 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		@c NULL 以外の値であれば、対応するポインタ変数に@c NULL が格納されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- 指定のホストについて名前解決できなかった場合
-		- プロパティ指定時、指定のプロパティが上で説明した式に合致しない場合。
-			形式に合致している場合は、接続や認証できない値であっても
-			@ref GS_RESULT_OK を返します。
+		- 指定のプロパティが上で説明した形式・制限に合致しないことを検知できた
+			場合
 		- @c store に@c NULL が指定された場合
 
 	@EN
@@ -4034,12 +4561,11 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		When obtaining @ref GSGridStore, it just searches for the name of a
 		master node (hereafter, a master) administering each @ref GSContainer
 		as necessary, but authentication is not performed. When a client really
-		needs to connect to a node corresponding to each @ref GSContainer ,
+		needs to connect to a node corresponding to each @ref GSContainer,
 		authentication is performed.
 	@par
 		The following properties can be specified. Unsupported property names
-		are ignored. See "System limiting values" in the Appendix for upper
-		limit values of some properties.
+		are ignored.
 		<table>
 		<tr><th>Property</th><th>Description</th></tr>
 		<tr>
@@ -4073,17 +4599,14 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<td>clusterName</td>
 		<td>A cluster name. It is used to verify whether it matches the cluster
 		name assigned to the destination cluster. If it is omitted or an empty
-		string is specified, cluster name verification is not performed.
-		If a cluster name of over the upper length limit is specified,
-		connection to the cluster node will fail.</td>
+		string is specified, cluster name verification is not performed.</td>
 		</tr>
 		<tr>
 		<td>database</td>
 		<td>A database name to be connected. If omitted, it is automatically
 		connected to "public" database which can be accessed by all users.
 		The connected user can operate the Container belonging to the connected
-		database.
-		This property is supported on version 2.9 or later.</td>
+		database.</td>
 		</tr>
 		<tr>
 		<td>user</td>
@@ -4103,14 +4626,14 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		- @c EVENTUAL
 			- The updates by other clients may not be committed even after a
 			relevant transaction completes.
-			No update operation cannot be applied to @ref GSContainer .
+			No update operation cannot be applied to @ref GSContainer.
 		</td>
 		</tr>
 		<tr>
 		<td>transactionTimeout</td>
 		<td>The minimum value of transaction timeout time.
 		The transaction timeout is counted from the beginning of each
-		transaction in a relevant @ref GSContainer .
+		transaction in a relevant @ref GSContainer.
 		A string representing of a number from @c 0 to maximum value of
 		INTEGER-type in seconds.
 		If a value specified over the internal upper limit of timeout, timeout
@@ -4131,8 +4654,8 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<td>containerCacheSize</td>
 		<td>The maximum number of Container information on the Container cache.
 		A string representing of a number from @c 0 to maximum value of
-		INTEGER-type. The Container cache is not used if the　value is @c 0.
-		To obtain a @ref GSContainer , its Container information　might be
+		INTEGER-type. The Container cache is not used if the value is @c 0.
+		To obtain a @ref GSContainer, its Container information might be
 		obtained from the Container cache instead of request to GridDB.
 		A default number is used if omitted.
 		This property is supported on version 1.5 or later.</td>
@@ -4157,6 +4680,16 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		</tr>
 		</table>
 	@par
+		Cluster names, database names, user names and passwords
+		are case-sensitive. See the GridDB Technical Reference for
+		the details of the limitations, such as allowed characters
+		and maximum length. When a name violating
+		the limitations has been specified as a property
+		value, the error detection may not be delayed until
+		the authentication processing. And there are the cases that
+		the error is identified as an authentication error,
+		etc., not a violation error for the limitations.
+	@par
 		A new @ref GSGridStore instance is created by each call of this method.
 		Operations on different @ref GSGridStore instances and related resources
 		are thread safe. That is, if some two resources are each created based
@@ -4170,11 +4703,11 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		instance from two or more threads at an arbitrary time.
 	@param [in] factory
 		@ref GSGridStoreFactory instance of acquisition source.
-		In case of @c NULL , the same instance obtained by calling
+		In case of @c NULL, the same instance obtained by calling
 		@ref gsGetDefaultFactory will be used.
 	@param [in] properties
 		Properties specifying the settings for the object to be obtained.
-		This parameter is composed by the array of @ref GSPropertyEntry .
+		This parameter is composed by the array of @ref GSPropertyEntry.
 		If the number of entries is @c 0, it is possible to specify @c NULL
 		since the array is not accessed in this function.
 		It is prohibited to include @c NULL in the name or value which
@@ -4188,10 +4721,8 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
 		- if host name resolution fails
-		- if any specified property does not match the format shown above.
-			If the properties match the format, @ref GS_RESULT_OK is returned
-			even if connection or authentication will not succeed with their
-			values.
+		- if any specified property that does not match the format or
+			the limitations shown above is detected.
 		- if @c NULL is specified to @c store argument
 
 	@ENDL
@@ -4216,7 +4747,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 #define gsGetGridStore(factory, properties, propertyCount, store) \
 		gsGetGridStore(factory, properties, propertyCount, store)
 #endif
-#endif	
+#endif	// not GS_INTERNAL_DEFINITION_VISIBLE
 
 /*!
 	@JP
@@ -4232,15 +4763,15 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		<tr>
 		<td>maxConnectionPoolSize</td>
 		<td>内部で使用されるコネクションプールの最大コネクション数。
-		@c 0  からINTEGER型の最大値までの数値の文字列表現。
+		@c 0 からINTEGER型の最大値までの数値の文字列表現。
 		値が@c 0 の場合、コネクションプールを使用しないことを意味する。
 		省略時は既存の設定値を使用</td>
 		</tr>
 		<tr>
 		<td>failoverTimeout</td>
 		<td>フェイルオーバ処理にて新たな接続先が見つかるまで待機する時間の最低値。
-		@c 0  からINTEGER型の最大値までの数値の文字列表現であり、単位は秒。
-		@c 0  の場合、フェイルオーバ処理を行わない。省略時は既存の設定値を使用</td>
+		@c 0 からINTEGER型の最大値までの数値の文字列表現であり、単位は秒。
+		@c 0 の場合、フェイルオーバ処理を行わない。省略時は既存の設定値を使用</td>
 		</tr>
 		</table>
 	@param [in] factory
@@ -4290,11 +4821,11 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		</table>
 	@param [in] factory
 		@ref GSGridStoreFactory instance of acquisition source.
-		In case of @c NULL , the same instance obtained by calling
+		In case of @c NULL, the same instance obtained by calling
 		@ref gsGetDefaultFactory will be used.
 	@param [in] properties
 		Properties specifying the settings for the object to be obtained.
-		This parameter is composed by the array of @ref GSPropertyEntry .
+		This parameter is composed by the array of @ref GSPropertyEntry.
 		If the number of entries is @c 0, it is possible to specify @c NULL.
 		It is prohibited to include @c NULL in the name or value which
 		configures the entry.
@@ -4302,7 +4833,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		The number of entries specified @c properties argument.
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
-		-  if any specified property does not match the format shown above
+		- if any specified property does not match the format shown above
 		- if @c NULL is specified to @c properties argument
 
 	@ENDL
@@ -4325,8 +4856,11 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 #define gsSetFactoryProperties(factory, properties, propertyCount) \
 		gsSetFactoryProperties(factory, properties, propertyCount)
 #endif
-#endif	
+#endif	// not GS_INTERNAL_DEFINITION_VISIBLE
 
+//
+// GridStore API
+//
 
 /*!
 	@JP
@@ -4364,11 +4898,11 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 	@param [in] allRelated
 		Indicates whether all unclosed resources in the lower resources related
 		to the specified @ref GSGridStore will be closed or not.
-		The related lower resources point out @ref GSCollection ,
-		@ref GSTimeSeries , and its resources which are obtained via specified
-		@ref GSGridStore .
+		The related lower resources point out @ref GSCollection,
+		@ref GSTimeSeries, and its resources which are obtained via specified
+		@ref GSGridStore.
 		If @ref GS_FALSE is specified, it is necessary to individually close
-		the acquired resources through @ref GSGridStore . And the specified
+		the acquired resources through @ref GSGridStore. And the specified
 		@ref GSGridStore itself will be released when all resources are closed.
 
 	@ENDL
@@ -4381,10 +4915,8 @@ GS_DLL_PUBLIC void GS_API_CALL gsCloseGridStore(
 	@ingroup Group_GSGridStore
 	@brief 指定の名前を持つコレクションを削除します。
 	@par
-		削除済みの場合は何も変更しません。
-	@par
-		処理対象のコレクションにおいて実行中のトランザクションが存在する場合、
-		それらの終了を待ってから削除を行います。
+		削除済みの場合の扱い、トランザクションの扱い、削除要求完了直後の
+		状態に関しては、@ref gsDropContainer と同様です。
 	@param [in] store
 		処理対象の@ref GSGridStore
 	@param [in] name
@@ -4398,10 +4930,9 @@ GS_DLL_PUBLIC void GS_API_CALL gsCloseGridStore(
 	@ingroup Group_GSGridStore
 	@brief Deletes a Collection with the specified name.
 	@par
-		If the specified Collection is already deleted, nothing is changed.
-	@par
-		When a transaction(s) is active in a target Collection, it deletes the
-		Collection after waiting for the transaction completion.
+		The treatment of deleted cases, transaction handling, and the state
+		immediately after completion of deletion request are the same as
+		@ref gsDropContainer.
 	@param [in] store
 		@ref GSGridStore to be processed
 	@param [in] name
@@ -4425,8 +4956,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDropCollection(
 	@par
 		削除済みの場合は何も変更しません。
 	@par
-		処理対象の時系列において実行中のトランザクションが存在する場合、
-		それらの終了を待ってから削除を行います。
+		削除済みの場合の扱い、トランザクションの扱い、削除要求完了直後の
+		状態に関しては、@ref gsDropContainer と同様です。
 	@param [in] store
 		処理対象の@ref GSGridStore
 	@param [in] name
@@ -4442,8 +4973,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDropCollection(
 	@par
 		If the specified TimeSeries is already deleted, nothing is changed.
 	@par
-		When a transaction(s) is active in a target TimeSeries, it deletes the
-		TimeSeries after waiting for the transaction completion.
+		The treatment of deleted cases, transaction handling, and the state
+		immediately after completion of deletion request are the same as
+		@ref gsDropContainer.
 	@param [in] store
 		@ref GSGridStore to be processed
 	@param [in] name
@@ -4530,10 +5062,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetCollection(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, GSCollection **collection);
 
-#if GS_COMPATIBILITY_SUPPORT_2_1
+#if GS_COMPATIBILITY_SUPPORT_3_5
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV2_1(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV3_3(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists);
 #endif
@@ -4545,7 +5077,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV2_1(
 	@par
 		返却される@ref GSContainerInfo に含まれるコンテナ名は、GridDB上に
 		格納されているものが設定されます。したがって、指定したコンテナ名と比較すると、
-		ASCII大文字・小文字の表記が異なる場合があります。
+		ASCIIの大文字・小文字表記が異なる場合があります。
 	@par
 		カラム順序を無視するかどうかについては、無視しない状態に設定されます。
 		この設定は、@ref GSContainerInfo::columnOrderIgnorable を通じて
@@ -4580,12 +5112,12 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV2_1(
 	@brief Get information related to a Container with the specified name.
 	@par
 		A name stored in GridDB is set for the Container name to be included in
-		a returned @ref GSContainerInfo . Therefore, compared to the specified
+		a returned @ref GSContainerInfo. Therefore, compared to the specified
 		Container name, the notation of the ASCII uppercase characters and
 		lowercase characters may differ.
 	@par
 		The column sequence is set to Do Not Ignore. This setting can be
-		verified through @ref GSContainerInfo::columnOrderIgnorable .
+		verified through @ref GSContainerInfo::columnOrderIgnorable.
 	@attention
 		In order to store the variable-length data such as the column of column
 		information, it uses a temporary memory area which is managed by the
@@ -4622,6 +5154,18 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV2_1(
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetContainerInfo(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists) {
+	return gsGetContainerInfoV3_3(store, name, info, exists);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_2_1
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV2_1(
+		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
+		GSBool *exists);
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetContainerInfo(
+		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
+		GSBool *exists) {
 	return gsGetContainerInfoV2_1(store, name, info, exists);
 }
 
@@ -4643,7 +5187,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfo(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists);
 
-#endif	
+#endif	// not GS_COMPATIBILITY_SUPPORT_1_5
 
 /*!
 	@JP
@@ -4759,14 +5303,14 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL gsPutRowByPath(
 	@EN
 	@ingroup Group_GSGridStore
 	@brief Newly creates or update a Container with the specified binding
-		information and @ref GSContainerInfo .
+		information and @ref GSContainerInfo.
 	@par
 		Mainly used to create a new container with additional settings by
 		specifying the binding information.
 	@par
 		The behavior will be the same as @ref gsPutContainerGeneral except for
 		points such that the settings to ignore the column layout and column
-		order cannot be specified to @ref GSContainerInfo .
+		order cannot be specified to @ref GSContainerInfo.
 	@param [in] store
 		@ref GSGridStore to be processed
 	@param [in] name
@@ -4808,7 +5352,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainer(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container);
-#endif	
+#endif	// GS_COMPATIBILITY_SUPPORT_2_1
 
 /*!
 	@JP
@@ -4823,25 +5367,17 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainer(
 	@par
 		@c modifiable が@ref GS_TRUE であり、すでに同名のコレクションが
 		存在する場合、必要に応じカラムレイアウトを変更します。
-		 変更する際、要求したカラムと同一の名前・型の既存のカラムは保持されます。
-		 一致しないカラムのうち、既存のコレクションにない名前のカラムは追加し、要求側にない
-		 カラムはデータも含め削除します。型が異なる同名のカラムが存在する場合は
-		 失敗します。また、ロウキーに対応するカラムの追加と削除はできません。
+		変更する際、要求したカラムと同一の名前・型の既存のカラムは保持されます。
+		一致しないカラムのうち、既存のコレクションにない名前のカラムは追加し、要求側にない
+		カラムはデータも含め削除します。型が異なる同名のカラムが存在する場合は
+		失敗します。また、ロウキーに対応するカラムの追加と削除はできません。
 	@par
 		コンテナにトリガが設定されており、カラムレイアウト変更によってトリガが
 		通知対象としているカラムが削除された場合、そのカラムはトリガの通知対象
 		から削除されます。
 	@par
-		新たに追加されるカラムの値は、型ごとにそれぞれ次のように初期化されます。
-		カラム型 | 初期値
-		-|-
-		STRING | @c "" (長さ0の文字列)
-		BOOL | 偽(@ref GS_FALSE)
-		数値型 | @c 0
-		TIMESTAMP | <tt>1970-01-01T00:00:00Z</tt>
-		GEOMETRY | @c POINT(EMPTY)
-		BLOB | 長さ0のBLOBデータ
-		配列型 | 要素数0の配列
+		新たに追加されるカラムの値は、@ref GSContainer にて定義されている
+		空の値を初期値として初期化されます。
 	@par
 		指定の型とカラムレイアウトとの対応関係については、@ref GSContainer の定義を
 		参照してください。
@@ -4853,10 +5389,14 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainer(
 		@ref gsCreateIndex にて定義されているデフォルト種別の索引が作成されます。
 		この索引は、削除することができます。
 	@par
-		バージョン1.1またはそれ以前のバージョンでは、新規に作成された時点での
-		索引作成は行われませんでした。
+		現バージョンでは、コンテナの規模など諸条件を満たした場合、
+		カラムレイアウトの変更開始から終了までの間に、処理対象のコンテナに対して
+		コンテナ情報の参照、更新ロックなしでのロウの参照操作を行える場合が
+		あります。それ以外の操作は、@ref GSContainer での定義通り待機させる
+		場合があります。カラムレイアウトの変更途中に別の操作が行われる場合は、
+		変更前のカラムレイアウトが使用されます。
 	@param [in] store
-		処理対象の@ref GSGridStore 
+		処理対象の@ref GSGridStore
 	@param [in] name
 		処理対象のコレクションの名前
 	@param [in] binding
@@ -4889,7 +5429,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainer(
 		a Collection based on the Column layout defined by the specified binding
 		information. If a Container with the specified name already exists and
 		its whole Column layout matches the specified type, it behaves in the
-		same way as @ref gsGetCollection , except that it waits for active
+		same way as @ref gsGetCollection, except that it waits for active
 		transactions to be completed.
 	@par
 		If @c modifiable is @ref GS_TRUE and a Collection with the specified
@@ -4907,17 +5447,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainer(
 		the column will be deleted from the list of triggers subject to
 		notification.
 	@par
-		The values of Columns to be newly created are initialized according to
-		the type as follows:
-		Column type | Initial value
-		-|-
-		STRING | @c "" (0-length string)
-		BOOL | False(@ref GS_FALSE)
-		Numeric type | @c 0
-		TIMESTAMP | <tt>1970-01-01T00:00:00Z</tt>
-		GEOMETRY | @c POINT(EMPTY)
-		BLOB | 0-length BLOB data
-		Array type | An array with no element
+		The values of Columns to be newly created are initialized with
+		the empty value defined by @ref GSContainer.
 	@par
 		For the correspondence between a specified type and a Column layout,
 		see the description of Container.
@@ -4930,8 +5461,13 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainer(
 		Row key which is defined by @ref gsCreateIndex is created. The index is
 		removable.
 	@par
-		The default index is not available when creating a new Collection on
-		version 1.1 or earlier.
+		In the current version, when various conditions such as the size of
+		container are fulfilled, it is possible to reference container information
+		to the container to be processed and reference operation of the row without
+		updating the lock, from the start to the end of column layout change. Other
+		than these operations, you may have to wait as defined in @ref GSContainer.
+		If another operation is performed while changing the column layout, the column
+		layout prior to the change will be used.
 	@param [in] store
 		@ref GSGridStore to be processed
 	@param [in] name
@@ -4993,12 +5529,12 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesV2_0(
 	@par
 		@c modifiable が@ref GS_TRUE であり、すでに同名の時系列が
 		存在する場合、必要に応じカラムレイアウトを変更します。
-		 変更する際、要求したカラムと同一の名前・型の既存のカラムは保持されます。
-		 一致しないカラムのうち、既存の時系列にない名前のカラムは追加し、要求側にない
-		 カラムはデータも含め削除します。型が異なる同名のカラムが存在する場合は
-		 失敗します。また、ロウキーに対応するカラムの追加と削除、時系列構成オプションの
-		 変更はできません。時系列構成オプションを指定する場合は、既存の設定内容と
-		 すべて同値にする必要があります。
+		変更する際、要求したカラムと同一の名前・型の既存のカラムは保持されます。
+		一致しないカラムのうち、既存の時系列にない名前のカラムは追加し、要求側にない
+		カラムはデータも含め削除します。型が異なる同名のカラムが存在する場合は
+		失敗します。また、ロウキーに対応するカラムの追加と削除、時系列構成オプションの
+		変更はできません。時系列構成オプションを指定する場合は、既存の設定内容と
+		すべて同値にする必要があります。
 	@par
 		コンテナにトリガが設定されており、カラムレイアウト変更によってトリガが
 		通知対象としているカラムが削除された場合、そのカラムはトリガの通知対象
@@ -5020,7 +5556,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesV2_0(
 	@param [in] properties
 		時系列の構成オプション。@c NULL を指定すると、同名の時系列が存在する場合は
 		既存の設定が継承され、存在しない場合は初期設定を指定したものとみなされます。
-		初期設定とは、@ref GS_COLLECTION_PROPERTIES_INITIALIZER により
+		初期設定とは、@ref GS_TIME_SERIES_PROPERTIES_INITIALIZER により
 		初期化した時系列構成オプションと同値の設定のことです。
 	@param [in] modifiable
 		既存時系列のカラムレイアウト変更を許可するかどうか
@@ -5047,7 +5583,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesV2_0(
 		a TimeSeries based on the Column layout defined by the specified binding
 		information. If a TimeSeries with the specified name already exists and
 		its whole Column layout matches the specified type, it behaves in the
-		same way as @ref gsGetTimeSeries , except that it waits for active
+		same way as @ref gsGetTimeSeries, except that it waits for active
 		transactions to be completed.
 	@par
 		If @c modifiable is @ref GS_TRUE and a TimeSeries with the specified
@@ -5068,7 +5604,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesV2_0(
 		notification.
 	@par
 		For the initial values for newly created Columns, see the description of
-		@ref gsPutCollection .
+		@ref gsPutCollection.
 	@par
 		For the correspondence between a specified type and a Column layout,
 		see the description of Container.
@@ -5091,7 +5627,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesV2_0(
 		specified.
 		The initial configuration has the same values with TimeSeries
 		configuration initialized by
-		@ref GS_COLLECTION_PROPERTIES_INITIALIZER.
+		@ref GS_TIME_SERIES_PROPERTIES_INITIALIZER.
 	@param [in] modifiable
 		Indicates whether the column layout of the existing TimeSeries can be
 		modified or not
@@ -5122,7 +5658,7 @@ GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutTimeSeries(
 			store, name, binding, properties, modifiable, timeSeries);
 }
 
-#elif !GS_COMPATIBILITY_TIME_SETIES_PROPERTIES_0_0_10
+#elif !GS_COMPATIBILITY_TIME_SERIES_PROPERTIES_0_0_10
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeries(
 		GSGridStore *store, const GSChar *name,
@@ -5160,10 +5696,10 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 
-#if GS_COMPATIBILITY_SUPPORT_2_1
+#if GS_COMPATIBILITY_SUPPORT_3_5
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV2_1(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV3_3(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container);
@@ -5180,7 +5716,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV2_1(
 			ならびに、必要に応じ時系列構成オプションを指定する
 		- 返却される @ref GSContainer のロウオブジェクトの型が常に@ref GSRow
 			となる
-		それぞれの同名の引数@c modifiable についても同様です。
+		それぞれの同名の引数@c modifiable の用法についても同様です。
 	@par
 		コンテナに関する情報の指定方法の一覧は次の通りです。
 		<table>
@@ -5244,7 +5780,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV2_1(
 	@EN
 	@ingroup Group_GSGridStore
 	@brief Newly creates or update a Container with the specified
-		@ref GSContainerInfo .
+		@ref GSContainerInfo.
 	@par
 		The behavior will be the same as @ref gsPutCollection or
 		@ref gsPutTimeSeries except for points below.
@@ -5265,19 +5801,19 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV2_1(
 		both sides.</td></tr>
 		<tr><td>Container type</td><td>@c info</td>
 		<td>If @ref GS_CONTAINER_COLLECTION is specified, the behavior will be
-		the same as @ref gsPutCollection .
+		the same as @ref gsPutCollection.
 		If @ref GS_CONTAINER_TIME_SERIES is	specified, the behavior will be
-		the same as @ref gsPutTimeSeries .</td></tr>
+		the same as @ref gsPutTimeSeries.</td></tr>
 		<tr><td>column layout</td><td>@c info</td>
 		<td>Set the @ref GSColumnInfo list and whether there is any Row key
-		so as to conform to the restrictions stipulated in @ref GSContainer .
+		so as to conform to the restrictions stipulated in @ref GSContainer.
 		</td></tr>
 		<tr><td>ignore column order</td><td>@c info</td>
 		<td>If ignored, no verification of the conformance with the column order
 		of existing Containers with the same name will be carried out.</td></tr>
 		<tr><td>TimeSeries composition option</td><td>@c info</td>
 		<td>A value that is not @c NULL can be specified only if the Container
-		type is @ref GS_CONTAINER_TIME_SERIES .</td></tr>
+		type is @ref GS_CONTAINER_TIME_SERIES.</td></tr>
 		<tr><td>index setting</td><td>@c info</td>
 		<td>Ignored in the current version. In future versions, if settings that
 		do not conform to the rules of @ref gsCreateIndex are included,
@@ -5328,6 +5864,21 @@ GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutContainerGeneral(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container) {
+	return gsPutContainerGeneralV3_3(
+			store, name, info, modifiable, container);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_2_1
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV2_1(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container);
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutContainerGeneral(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container) {
 	return gsPutContainerGeneralV2_1(
 			store, name, info, modifiable, container);
 }
@@ -5370,7 +5921,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneral(
 			不一致に伴うエラーが発生しない
 		- 返却される @ref GSContainer のロウオブジェクトの型が常に@ref GSRow
 			となる
-		それぞれの同名の引数@c nameの用法ついても同様です。
+		それぞれの同名の引数@c name の用法についても同様です。
 	@param [in] store
 		処理対象の@ref GSGridStore
 	@param [in] name
@@ -5394,7 +5945,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneral(
 	@EN
 	@ingroup Group_GSGridStore
 	@brief Get a @ref GSContainer instance whose Rows can be processed using a
-		@ref GSRow .
+		@ref GSRow.
 	@par
 		The behavior will be the same as @ref gsGetCollection or
 		@ref gsGetTimeSeries except for points below.
@@ -5419,7 +5970,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneral(
 		@ref GSCollection specific function can be used if the Container with
 		the specified name exists and its type is @ref GS_CONTAINER_COLLECTION,
 		or @ref GSTimeSeries specific function can be used if the Container with
-		the specified name exists and its type is @ref GS_CONTAINER_TIME_SERIES .
+		the specified name exists and its type is @ref GS_CONTAINER_TIME_SERIES.
 		@c NULL is stored to corresponding pointer variable if pointer is not
 		@c NULL and non-@ref GS_RESULT_OK is returned as the execution result.
 	@return Return code of the execution result. It returns the value except
@@ -5436,10 +5987,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneral(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerGeneral(
 		GSGridStore *store, const GSChar *name, GSContainer **container);
 
-#if GS_COMPATIBILITY_SUPPORT_2_1
+#if GS_COMPATIBILITY_SUPPORT_3_5
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV2_1(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV3_3(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container);
@@ -5477,7 +6028,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV2_1(
 	@EN
 	@ingroup Group_GSGridStore
 	@brief Newly creates or update a Collection with the specified
-		@ref GSContainerInfo .
+		@ref GSContainerInfo.
 	@par
 		The behavior will be the same as @ref gsPutContainerGeneral except for
 		points where the Container type is limited to
@@ -5500,7 +6051,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV2_1(
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
 		- If specifications other than the Container type do not conform to the
-			rules of @ref gsPutContainerGeneral . If the specifications do not
+			rules of @ref gsPutContainerGeneral. If the specifications do not
 			conform to the restrictions related to the Container type as well
 		- if a timeout occurs during this operation, or a connection failure
 			occurs
@@ -5510,6 +6061,21 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV2_1(
 
 	@ENDL
  */
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutCollectionGeneral(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSCollection **collection) {
+	return gsPutCollectionGeneralV3_3(
+			store, name, info, modifiable, collection);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_2_1
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV2_1(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container);
+
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutCollectionGeneral(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
@@ -5525,7 +6091,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneral(
 		const GSContainerInfo *info,
 		GSBool modifiable, GSCollection **collection);
 
-#endif	
+#endif	// not GS_COMPATIBILITY_SUPPORT_2_1
 
 /*!
 	@JP
@@ -5555,7 +6121,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneral(
 	@EN
 	@ingroup Group_GSGridStore
 	@brief Get a @ref GSCollection instance whose Rows can be processed using a
-		@ref GSRow .
+		@ref GSRow.
 	@par
 		The behavior will be the same as @ref gsGetContainerGeneral except for
 		points where the expected Container type is limited to
@@ -5585,10 +6151,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneral(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetCollectionGeneral(
 		GSGridStore *store, const GSChar *name, GSCollection **collection);
 
-#if GS_COMPATIBILITY_SUPPORT_2_1
+#if GS_COMPATIBILITY_SUPPORT_3_5
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV2_1(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV3_3(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSTimeSeries **timeSeries);
@@ -5626,7 +6192,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV2_1(
 	@EN
 	@ingroup Group_GSGridStore
 	@brief Newly creates or update a TimeSeries with the specified
-		@ref GSContainerInfo .
+		@ref GSContainerInfo.
 	@par
 		The behavior will be the same as @ref gsPutTimeSeriesGeneral except for
 		points where the Container type is limited to
@@ -5649,7 +6215,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV2_1(
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
 		- if specifications other than the Container type do not conform to the
-			rules of @ref gsPutContainerGeneral . If the specifications do not
+			rules of @ref gsPutContainerGeneral. If the specifications do not
 			conform to the restrictions related to the Container type as well
 		- if a timeout occurs during this operation, or a connection failure
 			occurs
@@ -5659,6 +6225,21 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV2_1(
 
 	@ENDL
  */
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutTimeSeriesGeneral(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSTimeSeries **timeSeries) {
+	return gsPutTimeSeriesGeneralV3_3(
+			store, name, info, modifiable, timeSeries);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_2_1
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV2_1(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSTimeSeries **timeSeries);
+
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutTimeSeriesGeneral(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
@@ -5719,7 +6300,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneral(
 	@EN
 	@ingroup Group_GSGridStore
 	@brief Get a @ref GSTimeSeries instance whose Rows can be processed using a
-		@ref GSRow .
+		@ref GSRow.
 	@par
 		The behavior will be the same as @ref gsGetContainerGeneral except for
 		points where the expected Container type is limited to
@@ -5758,6 +6339,12 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetTimeSeriesGeneral(
 	@par
 		処理対象のコンテナにおいて実行中のトランザクションが存在する場合、
 		それらの終了を待ってから削除を行います。
+	@par
+		コンテナの削除要求が完了した直後は、削除したコンテナの索引や
+		ロウなどのために使用されていたメモリやストレージ領域を他の用途に
+		ただちに再利用できない場合があります。また、削除処理に関連した処理が
+		クラスタ上で動作することにより、削除前と比べて負荷が高まる期間が
+		一定程度継続する場合があります。
 	@param [in] store
 		処理対象の@ref GSGridStore
 	@param [in] name
@@ -5777,6 +6364,12 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetTimeSeriesGeneral(
 	@par
 		When a transaction(s) is active in a target Container, it deletes the
 		Container after waiting for the transaction completion.
+	@par
+		Immediately after the container deletion request is completed, the index
+		of deleted container, the memory used for row, and the storage area may
+		not be immediately reused for other usage. When cluster operation related
+		to deletion is performed, you may experience an increase of load for
+		a certain period of time as compared to prior the deletion.
 	@param [in] store
 		@ref GSGridStore to be processed
 	@param [in] name
@@ -5795,6 +6388,13 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetTimeSeriesGeneral(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsDropContainer(
 		GSGridStore *store, const GSChar *name);
 
+#if GS_COMPATIBILITY_SUPPORT_3_5
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStoreV3_3(
+		GSGridStore *store, const GSContainerInfo *info, GSRow **row);
+#endif
+
 /*!
 	@JP
 	@ingroup Group_GSGridStore
@@ -5810,10 +6410,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDropContainer(
 		を呼び出したとしても、常に固定の値である@ref GS_CONTAINER_COLLECTION
 		がコンテナ種別として設定された@ref GSContainerInfo が求まります。
 	@par
-		作成された@ref GSRow の各フィールドには、既定の初期値が設定されます。
-		この初期値は、@ref gsPutContainerGeneral にて新規に追加されたカラムの
-		各フィールドの値と同一となります。
-		具体的な値の一覧については、@ref gsPutCollection の定義を参照してください。
+		作成された@ref GSRow の各フィールドには、@ref GSContainer にて定義
+		されている空の値が初期値として設定されます。
 	@param [in] store
 		処理対象の@ref GSGridStore
 	@param [in] info
@@ -5830,22 +6428,20 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDropContainer(
 
 	@EN
 	@ingroup Group_GSGridStore
-	@brief Creates a new @ref GSRow with the specified @ref GSContainerInfo .
+	@brief Creates a new @ref GSRow with the specified @ref GSContainerInfo.
 	@par
 		Include the @ref GSColumnInfo list and whether there is any Row key
-		so as to conform to the restrictions stipulated in @ref GSContainer .
-		Specify the column layout in @ref GSContainerInfo .
+		so as to conform to the restrictions stipulated in @ref GSContainer.
+		Specify the column layout in @ref GSContainerInfo.
 	@par
-		In addition, by including the Container type in @ref GSContainerInfo , it
+		In addition, by including the Container type in @ref GSContainerInfo, it
 		can be verified whether the restrictions unique to a specific Container
 		type are conformed to or not. However, the @ref GSContainerInfo which
 		has @ref GS_CONTAINER_COLLECTION in Container type will be returned even
-		if a @ref gsGetRowSchema is invoked against the created @ref GSRow .
+		if a @ref gsGetRowSchema is invoked against the created @ref GSRow.
 	@par
-		The existing initial value is set in each field of the created
-		@ref GSRow . This initial value is the same as the value of each field in
-		the column newly added in @ref gsPutContainerGeneral . Refer to the
-		definition of @ref gsPutCollection for a list of the specific values.
+		Each existing field of the created @ref GSRow is initialized with the empty
+		value defined by @ref GSContainer.
 	@param [in] store
 		@ref GSGridStore to be processed
 	@param [in] info
@@ -5865,8 +6461,17 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDropContainer(
 
 	@ENDL
  */
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsCreateRowByStore(
+		GSGridStore *store, const GSContainerInfo *info, GSRow **row) {
+	return gsCreateRowByStoreV3_3(store, info, row);
+}
+
+#else
+
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStore(
 		GSGridStore *store, const GSContainerInfo *info, GSRow **row);
+
+#endif
 
 /*!
 	@JP
@@ -5909,7 +6514,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStore(
 	@par
 		一度に大量のロウを取得しようとした場合、GridDBノードが管理する
 		通信バッファのサイズの上限に到達し、失敗することがあります。
-		上限サイズについては、付録の値の範囲を参照してください。
+		上限サイズについては、GridDBテクニカルリファレンスを参照してください。
 	@param [in] store
 		処理対象の@ref GSGridStore
 	@param [in] queryList
@@ -5936,14 +6541,14 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStore(
 	@EN
 	@ingroup Group_GSGridStore
 	@brief Query execution and fetch is carried out on a specified arbitrary
-		number of @ref GSQuery , with the request unit enlarged as much as
+		number of @ref GSQuery, with the request unit enlarged as much as
 		possible.
 	@par
 		For each @ref GSQuery included in a specified query column, perform a
 		similar query execution and fetch as when @ref gsFetch is performed
 		individually and set the @ref GSRowSet in the results.
 		Use @ref gsGetRowSet to extract the execution results of each
-		@ref GSQuery . However, unlike the case when carried out individually,
+		@ref GSQuery. However, unlike the case when carried out individually,
 		the target node is requested for the same storage destination, etc. with
 		a unit that is as large as possible. Based on this, the larger the
 		number of elements in the list, the higher is the possibility that the
@@ -5953,7 +6558,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStore(
 		Only a @ref GSQuery that has not been closed, including corresponding
 		@ref GSContainer acquired via the specified @ref GSGridStore instance,
 		can be included in a specified query column.
-		Like a @ref gsFetch , the Row operations via @ref GSRowSet finally
+		Like a @ref gsFetch, the Row operations via @ref GSRowSet finally
 		generated and held by each @ref GSQuery will be unavailable.
 		If the same instance is included multiple times in an array, the
 		behavior will be the same as the case in which the respective instances
@@ -5973,21 +6578,21 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStore(
 		each @ref GSContainer will not be aborted so long as the transaction
 		timeout time has not been reached.
 	@par
-		If an exception occurs in the midst of processing each @ref GSQuery , a
-		new @ref GSRowSet may be set for only some of the @ref GSQuery .
+		If an exception occurs in the midst of processing each @ref GSQuery, a
+		new @ref GSRowSet may be set for only some of the @ref GSQuery.
 		In addition, uncommitted transactions of each @ref GSQuery corresponding
 		to the designated @ref GSContainer may be aborted.
 	@par
 		If the system tries to acquire a large number of Rows all at once, the
 		upper limit of the communication buffer size managed by the GridDB node
 		may be reached, possibly resulting in a failure.
-		Refer to "System limiting values" in the Appendix for the upper limit
+		Refer to the GridDB Technical Reference for the upper limit
 		size.
 	@param [in] store
 		@ref GSGridStore to be processed
 	@param [in] queryList
 		The target query column. It consists of the array of pointers to
-		@ref GSQuery .
+		@ref GSQuery.
 		If @c 0 is set to @c queryCount, @c NULL can be specified since the
 		array is not referred in this function.
 	@param [in] queryCount
@@ -6087,7 +6692,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsFetchAll(
 		- エントリ列に含まれるロウオブジェクトへのアドレスとして@ref GSRow 以外の
 			ものが含まれており、異常検知に成功した場合
 		- エントリ列を構成するエントリのコンテナ名として@c NULL が含まれていた場合、
-			ロウオブジェクト列の要素数が正であるいにも関わらずロウオブジェクト列の
+			ロウオブジェクト列の要素数が正であるにも関わらずロウオブジェクト列の
 			配列アドレスとして@c NULL が含まれていた場合、また、ロウオブジェクト列の
 			要素として@c NULL が含まれていた場合
 	@see gsPutRow
@@ -6162,8 +6767,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsFetchAll(
 	@param [in] entryList
 		A entry column made up of a column of Row objects and target Container
 		names.
-		It consists of the array of @ref GSContainerRowEntry .
-		If @c 0 is set to @c entryCount , @c NULL can be specified since the
+		It consists of the array of @ref GSContainerRowEntry.
+		If @c 0 is set to @c entryCount, @c NULL can be specified since the
 		array is not referred in this function.
 	@param [in] entryCount
 		The number of elements in the entry column
@@ -6222,19 +6827,19 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutMultipleContainerRows(
 		ただし、コンテナの構成によっては評価できない取得条件が存在します。
 		具体的な制限については、@ref GSRowKeyPredicate に対する各種設定機能の
 		定義を参照してください。
-		また、指定のコンテナ名は、実在するコンテナのものでなければなりません。
 		コンテナ名または取得条件として@c NULL を設定することはできません。
 	@par
-		取得するエントリ列は、コンテナ名とロウオブジェクト列との組からなるエントリ
-		により構成されます。取得するエントリ列には、取得条件として指定した
-		エントリ列に含まれるすべてのエントリが含まれます。
+		取得するエントリ列は、コンテナ名とロウオブジェクト列との組からなる
+		エントリにより構成されます。また、取得するエントリ列には、取得条件として
+		指定したエントリ列のうち、リクエスト時点で実在するコンテナに関する
+		エントリのみが含まれます。
 		同一のコンテナを指す複数のエントリが指定の条件エントリ列に含まれていた場合、
 		取得するエントリ列にはこれらを1つにまとめたエントリが格納されます。
 		同一のリストに複数のロウオブジェクトが含まれる場合、格納される順序は
 		コンテナ種別と対応する@ref GSContainer から派生した個別のコンテナ型の
 		定義に従います。
 		指定のコンテナに対応するロウが1つも存在しない場合、対応する
-		ロウオブジェクト列の要素数は@c 0となります。
+		ロウオブジェクト列の要素数は@c 0 となります。
 	@par
 		他のコンテナ・ロウ操作と同様、異なるコンテナ間での整合性は保証されません。
 		したがって、あるコンテナに対する処理の結果は、その処理の開始前に完了した
@@ -6245,7 +6850,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutMultipleContainerRows(
 	@par
 		一度に大量のロウを取得しようとした場合、GridDBノードが管理する
 		通信バッファのサイズの上限に到達し、失敗することがあります。
-		上限サイズについては、付録の値の範囲を参照してください。
+		上限サイズについては、GridDBテクニカルリファレンスを参照してください。
 	@attention
 		取得するエントリ列ならびにその中に含まれるコンテナ名やロウオブジェクト列の
 		可変長のデータを格納するために、指定の@ref GSGridStore インスタンス上で
@@ -6272,8 +6877,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutMultipleContainerRows(
 		実行結果として@ref GS_RESULT_OK 以外が返される場合、このポインタ値が
 		@c NULL 以外の値であれば、対応するポインタ変数に@c NULL が格納されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
-		- 対象とするコンテナが存在しない場合、また、指定のコンテナに関して評価できない
-			取得条件が指定された場合
+		- 指定のコンテナに関して評価できない取得条件が指定された場合
 		- 特定コンテナ種別固有の制限に反する操作を行った場合
 		- この処理または関連するトランザクションのタイムアウト、接続障害が発生した場合
 		- @c predicateList 以外のポインタ型引数に@c NULL が指定された場合
@@ -6315,15 +6919,16 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutMultipleContainerRows(
 		condition.
 	@par
 		An acquired entry column is composed of entries that adopt the Container
-		name as its key and column of Row objects as its value. All entries
-		included in a specified entry as acquisition conditions are included in
-		an acquired entry column.
+		name as its key and column of Row objects as its value.
+		Only the entries for real Containers at the request included
+		in specified entries as acquisition conditions are included in
+		acquired entries.
 		If multiple entries pointing the same Container are included in a
 		specified condition entry column, a single entry consolidating these is
 		stored in the acquired entry column. If multiple Row objects are
 		included in the same list, the stored order follows the Container type
 		and the definition of the individual Container type derived from the
-		corresponding @ref GSContainer . If there is no Row corresponding to the
+		corresponding @ref GSContainer. If there is no Row corresponding to the
 		specified Container, the number of elements in corresponding column of
 		Row object will be @c 0.
 	@par
@@ -6332,14 +6937,13 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutMultipleContainerRows(
 		Container may be affected by other operation commands that have been
 		completed prior to the start of the process.
 	@par
-		Like @ref gsGetRowForUpdate or @ref gsFetch , a transaction cannot be
+		Like @ref gsGetRowForUpdate or @ref gsFetch, a transaction cannot be
 		maintained and requests for updating locks cannot be made.
 	@par
 		If the system tries to acquire a large number of Rows all at once, the
 		upper limit of the communication buffer size managed by the GridDB node
 		may be reached, possibly resulting in a failure.
-		Refer to "System limiting values" in the Appendix for the upper limit
-		size.
+		Refer to the GridDB Technical Reference for the upper limit size.
 	@attention
 		In order to store the variable-length data such as the entry column to
 		be obtained and the Container name or the column of Row object included
@@ -6355,8 +6959,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutMultipleContainerRows(
 	@param [in] predicateList
 		The column of condition entry consisting of a combination of the target
 		Container name and the acquisition condition.
-		It consists of the array of @ref GSContainerRowEntry .
-		If @c 0 is set to @c predicateCount , @c NULL can be specified since the
+		It consists of the array of @ref GSContainerRowEntry.
+		If @c 0 is set to @c predicateCount, @c NULL can be specified since the
 		array is not referred in this function.
 	@param [in] predicateCount
 		The number of elements in the condition entry column
@@ -6364,7 +6968,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutMultipleContainerRows(
 		The pointer to a pointer variable to store the address of entry column
 		for acquisition result.
 		The entry column for acquisition result consists of the array of
-		@ref GSContainerRowEntry .
+		@ref GSContainerRowEntry.
 		@c NULL is stored to corresponding pointer variable if pointer is not
 		@c NULL and non-@ref GS_RESULT_OK is returned as the execution result.
 	@param [out] entryCount
@@ -6374,7 +6978,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutMultipleContainerRows(
 		@c NULL and non-@ref GS_RESULT_OK is returned as the execution result.
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
-		- if the target Container does not exist, or if acquisition conditions
+		- if acquisition conditions
 			which cannot be evaluated with a specified Container are specified
 		- When an operation violating the restrictions unique to a specific
 			Container type is carried out
@@ -6474,10 +7078,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionController(
 		type of Row key.
 	@par
 		The target Container must have a Row key, and it must be the same type
-		as the specified @ref GSType .
+		as the specified @ref GSType.
 	@par
 		The type of Row key that can be set must be the same type that is
-		allowed by the individual Container type derived from @ref GSContainer .
+		allowed by the individual Container type derived from @ref GSContainer.
 	@param [in] store
 		@ref GSGridStore to be processed
 	@param [in] keyType
@@ -6499,8 +7103,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionController(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowKeyPredicate(
 		GSGridStore *store, GSType keyType, GSRowKeyPredicate **predicate);
 
-#endif	
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
 
+//
+// Container API
+//
 
 /*!
 	@JP
@@ -6549,11 +7156,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowKeyPredicate(
 	@param [in] allRelated
 		Indicates whether all unclosed resources in the lower resources related
 		to the specified @ref GSContainer will be closed or not.
-		The related lower resources point out @ref GSQuery ,
-		@ref GSAggregationResult , and its resources which are obtained via
-		specified @ref GSContainer .
+		The related lower resources point out @ref GSQuery,
+		@ref GSAggregationResult, and its resources which are obtained via
+		specified @ref GSContainer.
 		If @ref GS_FALSE is specified, it is necessary to individually close
-		the acquired resources through @ref GSContainer . And the specified
+		the acquired resources through @ref GSContainer. And the specified
 		@ref GSContainer itself will be released when all resources are closed.
 
 	@ENDL
@@ -6643,7 +7250,7 @@ GS_DLL_PUBLIC void GS_API_CALL gsCloseContainer(
 		- URL format
 			-
 	‾‾‾
-	http://(host name):(port nunmber)/(path)
+	http://(host name):(port number)/(path)
 	‾‾‾
 		- MIME type
 			- application/json
@@ -6665,7 +7272,7 @@ GS_DLL_PUBLIC void GS_API_CALL gsCloseContainer(
 		operations such as creation, updates, or deletion in the specified
 		Container as well as some other Containers.
 		Therefore, an invalid notification destination URL is recommended
-		to be deleted by using @ref gsDropEventNotification .
+		to be deleted by using @ref gsDropEventNotification.
 	@par
 		When a transaction(s) is active in a target Container, it configures
 		the settings after waiting for the transaction(s) to complete.
@@ -6686,7 +7293,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 	GSResult GS_API_CALL gsCreateEventNotification(
 	GSContainer *container, const GSChar *url));
 
-#endif	
+#endif	// GS_DEPRECATED_FUNC_ENABLED
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 /*!
@@ -6699,7 +7306,16 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		指定されたトリガと同名のトリガが存在した場合、設定内容が上書きされます。
 	@par
 		トリガ設定内容の詳細は、@ref GSTriggerInfo の定義を参照してください。
-		トリガ種別、通知条件、通知先URI、通知内容の詳細は以下の通りです。
+		トリガ名、トリガ種別、通知条件、通知先URI、通知内容の詳細は以下の通り
+		です。
+
+	@par トリガ名
+		トリガ種別や通知条件などの違いによらず、1つのコンテナのトリガ間で、
+		ASCIIの大文字・小文字表記を含め同一の名前のものを複数定義することは
+		できません。その他、トリガの定義において使用できるトリガ名の文字種や
+		長さには制限があります。具体的には、GridDBテクニカルリファレンスを
+		参照してください。特に記載のない限り、トリガ名を指定する操作では、
+		ASCIIの大文字・小文字表記の違いが区別されます。
 
 	@par トリガ種別
 		次のトリガ種別をサポートします。
@@ -6743,9 +7359,9 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 
 	@par 通知先URI
 		通知先URIは次の書式で記述します。
-	‾‾‾
+	~~~
 		(メソッド名)://(ホスト名):(ポート番号)/(パス)
-	‾‾‾
+	~~~
 		ただし、トリガ種別がRESTの場合、メソッド名にはhttpのみ指定できます。
 
 	@par 通知内容
@@ -6763,17 +7379,17 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 
 	@par 通知方法―RESTの場合
 		以下のようなJSON文字列を、MIMEタイプapplication/jsonで送信します。
-	‾‾‾
+	~~~
 		{
-		  "container" : "(コンテナ名)",
-		  "event" : "(更新操作名)",
-		  "row" : {
-			"(カラム名)" : (カラムデータ),
-			"(カラム名)" : (カラムデータ),
-			...
-		  }
+			"container" : "(コンテナ名)",
+			"event" : "(更新操作名)",
+			"row" : {
+				"(カラム名)" : (カラムデータ),
+				"(カラム名)" : (カラムデータ),
+				...
+			}
 		}
-	‾‾‾
+	~~~
 
 	@par 通知方法―JMSの場合
 		javax.jms.TextMessageを、指定されたデスティネーション種別・
@@ -6802,15 +7418,15 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		したがって、無効となった通知先URIを持つトリガは
 		@ref gsDropTrigger により削除することが推奨されます。
 	@par
-		一つのコンテナに対して設定できるトリガの最大数、ならびに、トリガの
-		各種設定値の上限については、付録の値の範囲を参照してください。
+		一つのコンテナに対して設定できるトリガの最大数、ならびに、トリガの各種
+		設定値の上限については、GridDBテクニカルリファレンスを参照してください。
 
 	@param [in] container
 		設定対象の@ref GSContainer
 	@param [in] info
 		設定対象のトリガ情報
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
-		- トリガ名が@c NULL または空の場合
+		- トリガ名が@c NULL 空、またはその他の規則に合致しない場合
 		- 監視対象更新操作の指定がない場合
 		- 通知先のURIが規定の構文に合致しない場合
 		- トリガ種別でJMSが指定され、かつJMSデスティネーション種別が@c NULL 、
@@ -6831,9 +7447,19 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		will be overwritten.
 	@par
 		Refer to the definition of @ref GSTriggerInfo for the detailed trigger
-		settings. The details of the trigger type, notification conditions,
+		settings. The details of the trigger name, the trigger type, notification conditions,
 		notification destination URI and notification contents are as shown
 		below.
+
+	@par Trigger name
+		Multiple trigger names which are identified as the same,
+		including the names only different in ASCII uppercase and
+		lowercase characters, even if they have different types or
+		notification conditions, in a container cannot be
+		defined. And there are the limitations, the allowed characters
+		and the length, on the trigger names. See the GridDB
+		Technical Reference for the details. Trigger names are
+		case-sensitive unless otherwise noted.
 
 	@par Trigger type
 		The following trigger types are supported.
@@ -6854,9 +7480,9 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		</table>
 
 	@par Notification condition
-		Create new Row/ update Row for the specified Container (@ref gsPutRow ,
-		@ref gsPutMultipleRows , @ref gsPutMultipleContainerRows ,
-		@ref gsUpdateCurrentRow), delete (@ref gsDeleteRow ,
+		Create new Row/ update Row for the specified Container (@ref gsPutRow,
+		@ref gsPutMultipleRows, @ref gsPutMultipleContainerRows,
+		@ref gsUpdateCurrentRow), delete (@ref gsDeleteRow,
 		@ref gsDeleteCurrentRow) Perform notification immediately after
 		executing operation command. If multiple operations are specified as
 		monitoring targets, perform notification after executing any one of
@@ -6879,9 +7505,9 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 
 	@par Notification destination URI
 		A notification destination URI is described in the following format.
-	‾‾‾
+	~~~
 		(method name)://(host name):(port number)/(path)
-	‾‾‾
+	~~~
 		However, if the trigger type is REST, only http can be specified in the
 		method name.
 
@@ -6902,17 +7528,17 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 	@par Notification method - For REST
 		JSON character strings such as those shown below are sent with the MIME
 		type application/json.
-	‾‾‾
+	~~~
 		{
-		  "container" : "(container name)",
-		  "event" : "(update operation name)",
-		  "row" : {
-			"(column name)" : (column data),
-			"(column name)" : (column data),
-			...
-		  }
+			"container" : "(container name)",
+			"event" : "(update operation name)",
+			"row" : {
+				"(column name)" : (column data),
+				"(column name)" : (column data),
+				...
+			}
 		}
-	‾‾‾
+	~~~
 
 	@par Notification method - For JMS
 		A javax.jms.TextMessage is sent with the specified destination type and
@@ -6927,8 +7553,8 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		<tt>javax.jms.Message#setXXXProperty("(column name)", (column data))</tt>
 		in accordance with the column type.
 	@par
-		When the column layout is changed by a @ref gsPutCollection ,
-		@ref gsPutTimeSeries , etc. in relation to a Container with a set
+		When the column layout is changed by a @ref gsPutCollection,
+		@ref gsPutTimeSeries, etc. in relation to a Container with a set
 		trigger, if a column subject to trigger notification is deleted or if
 		its name is changed, the corresponding column will be deleted from the
 		trigger notification targets.
@@ -6939,9 +7565,9 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		standby process becomes a cause for the delay in serving notification of
 		an update in the Container as well as some other containers. Therefore,
 		a trigger having an invalid notification destination URI is recommended
-		to be deleted by using @ref gsDropTrigger .
+		to be deleted by using @ref gsDropTrigger.
 	@par
-		Refer to "System limiting values" in the Appendix for the maximum number
+		Refer to the GridDB Technical Reference for the maximum number
 		of triggers that can be set for a single Container and the upper limit
 		of the values for various trigger settings.
 
@@ -6951,15 +7577,15 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		Target trigger information to be set
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
-		- if the trigger name is @c NULL , or blank
+		- if the trigger name is @c NULL, or blank
 		- if the update operation subject to monitoring is not specified
 		- if the notification destination URI does not conform to the stipulated
 			syntax
 		- if the JMS is specified by the trigger type, and the JMS destination
-			type is @c NULL , or is blank, or does not conform to the specified
+			type is @c NULL, or is blank, or does not conform to the specified
 			format
 		- if the JMS is specified by the trigger type, and the JMS destination
-			name is @c NULL , or is blank
+			name is @c NULL, or is blank
 		- if a timeout occurs during this operation, a specified Container is
 			deleted, a connection failure occurs
 		- if @c NULL is specified in the argument(s)
@@ -6970,16 +7596,103 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateTrigger(
 		GSContainer *container, const GSTriggerInfo *info);
 
-#endif	
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
 
 /*!
 	@JP
 	@ingroup Group_GSContainer
-	@brief 指定カラムに対し、指定種別の索引を作成します。
+	@brief 指定された名前のカラムに対し、指定された種別で名前のない索引を
+		作成します。
 	@par
-		@ref GS_INDEX_FLAG_DEFAULT を指定した場合、
-		コンテナの種別、対応するカラムの型などに基づき、
-		次の索引種別が選択されます。
+		カラム名と種別のみが設定された@ref GSIndexInfo を指定して
+		@ref gsCreateIndexDetail を呼び出した場合と同様に振る舞います。
+		ただし、@c flags にデフォルト種別を含め一つも種別が指定されていない
+		場合、索引は作成されません。
+	@param [in] container
+		処理対象の@ref GSContainer
+	@param [in] columnName
+		処理対象のカラムの名前
+	@param [in] flags
+		作成する索引種別のフラグ値のビット和。
+		指定できる値は@ref gsCreateIndexDetail の場合と同様です
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 指定のカラム名と種別が@ref gsCreateIndexDetail の規則に合致しない場合
+		- この処理のタイムアウト、指定のコンテナの削除もしくはスキーマ変更、接続障害が
+			発生した場合
+		- @c flags 以外の引数に@c NULL が指定された場合
+
+	@EN
+	@ingroup Group_GSContainer
+	@brief Create an unnamed index with the specified type for column with a specified name.
+	@par
+		It behaves as if @ref gsCreateIndexDetail is called with @ref GSIndexInfo with only
+		column name and type set.
+		However, if none of the default types are included in @c flags, no index is created.
+	@param [in] container
+		@ref GSContainer to be processed
+	@param [in] columnName
+		Column name to be processed
+	@param [in] flags
+		Sum of bits of flag value of index type to be created.
+		Possible values are the same as in @ref gsCreateIndexDetail.
+	@return Return code of the execution result. It returns the value except
+		@ref GS_RESULT_OK in the following cases.
+		- If the specified column name and type does not match the rule of @ref gsCreateIndexDetail.
+		- if a timeout occurs during this operation, a specified Container is
+			deleted or its schema is changed, a connection failure occurs
+		- if @c NULL is specified to arguments except @c flags
+
+	@ENDL
+ */
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndex(
+		GSContainer *container,
+		const GSChar *columnName, GSIndexTypeFlags flags);
+
+#if GS_COMPATIBILITY_SUPPORT_3_5
+
+/*!
+	@JP
+	@brief @ref GSIndexInfo で設定されている内容に従い、索引を作成します。
+	@par
+		作成対象の索引のカラムについては、カラム名またはカラム番号の
+		少なくとも一方が設定されており、かつ、対応するコンテナにおいて実在する
+		ものが設定されている必要があります。カラム名とカラム番号が共に設定
+		されていた場合、対応するカラムが互いに一致しなければなりません。
+	@par
+		索引種別が一つも設定されていないか@ref GS_INDEX_FLAG_DEFAULT が設定
+		されていた場合、後述の基準に従い、デフォルト種別の索引が選択されます。
+		それ以外の場合、対象のカラムにおいて許されている索引種別である限り、
+		一つ以上の種別を指定できます。複数個の種別が設定されていた場合、
+		作成途中に一部の索引のみが作成された状態のコンテナ情報を参照できる
+		ことや、エラーが生じるとその状態まま作成操作が終了することがあります。
+	@par
+		1つのコンテナの索引間で、ASCIIの大文字・小文字表記だけが異なる
+		名前のものを複数定義することはできません。その他、索引の定義において
+		使用できる索引名の文字種や長さには制限があります。具体的には、
+		GridDBテクニカルリファレンスを参照してください。特に記載のない限り、
+		索引名を指定する操作では、ASCIIの大文字・小文字表記の違いは
+		区別されません。
+	@par
+		既存の同名の索引が存在した場合、後述の条件を満たす同一設定の
+		@ref GSIndexInfo を指定しなければならず、その場合新たな索引は作成
+		されません。一方、既存の異なる名前の索引または名前のない索引と同一
+		設定の@ref GSIndexInfo を指定することはできません。
+	@par
+		索引名が設定されていない場合は、名前のない索引の作成が要求された
+		ものとみなされます。名前を除いて同一設定の索引がすでに存在していた場合、
+		名前のない索引でなければならず、その場合新たな索引は作成されません。
+	@par
+		現バージョンでは、少なくとも@ref GSContainer を通じて作成された
+		索引において、次の条件を満たす場合に索引名を除いて同一設定の
+		索引であるとみなされます。
+		- 索引対象のカラムが一致すること。カラム名、カラム番号といった、
+			カラムの指定方法の違いは無視される
+		- 索引種別が一致すること。デフォルト指定の有無といった索引種別の
+			指定方法の違いは無視される
+	@par
+		現バージョンにおける、@ref gsGetDefaultFactory を基に生成された
+		@ref GSContainer インスタンスでは、コンテナの種別、対応するカラムの
+		型などに基づき、次の索引種別がデフォルトとして選択されます。
 		カラムの型 | コレクション | 時系列
 		-|-|-
 		STRING | @ref GS_INDEX_FLAG_TREE | @ref GS_INDEX_FLAG_TREE
@@ -6989,80 +7702,122 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateTrigger(
 		GEOMETRY | @ref GS_INDEX_FLAG_SPATIAL | (なし)
 		BLOB | (なし) | (なし)
 		配列型 | (なし) | (なし)
+	@par
 		時系列のロウキー(TIMESTAMP型)には索引を設定できません。
 	@par
-		トランザクションを保持している場合、未コミットの更新内容はすべて元に戻されます。
+		この@ref GSContainer インスタンスが未コミットのトランザクションを
+		保持していた場合、コミットしてから作成を行います。処理対象のコンテナ
+		において実行中の他のトランザクションが存在する場合、それらの終了を
+		待機してから作成を行います。すでに索引が存在しており新たな索引が
+		作成されなかった場合、他のトランザクションによって待機するかどうかは
+		未定義です。またこの場合、この@ref GSContainer インスタンスが保持
+		している未コミットのトランザクションが常にコミットされるかどうかは
+		未定義です。
 	@par
-		作成済みの場合は何も変更しません。
-	@par
-		処理対象のコンテナにおいて実行中のトランザクションが存在する場合、
-		それらの終了を待機してから作成を行います。
-	@par
-		バージョン1.1またはそれ以前のバージョンにおけるコレクションのGEOMETRY型
-		カラムには、デフォルト索引が選択されませんでした。
+		現バージョンでは、コンテナの規模など諸条件を満たした場合、索引の
+		作成開始から終了までの間に、処理対象のコンテナに対してコンテナ情報の
+		参照、一部の索引操作、トリガ操作、ロウ操作(更新含む)を行える場合が
+		あります。それ以外の操作は、@ref GSContainer での説明通り待機させる
+		場合があります。索引の作成途中に別の操作が行われる場合は、
+		作成途中の索引に関する情報はコンテナ情報には含まれません。
 	@param [in] container
 		処理対象の@ref GSContainer
-	@param [in] columnName
-		処理対象のカラムの名前
-	@param [in] flags
-		設定する索引種別のフラグ。
-		複数指定した場合、GridDBに対して指定した個数だけ個別に索引作成処理を
-		要求します。したがって、途中で失敗した場合、一部の索引のみが作成された
-		状態となることがあります。
-	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
-		- 対応する名前のカラムが存在しない場合
+	@param [in] info
+		処理対象の索引の情報
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を
+		返します。
+		- 作成対象のカラム、索引名が上記の規則に合致しない場合
 		- この処理のタイムアウト、指定のコンテナの削除もしくはスキーマ変更、接続障害が
 			発生した場合
-		- @c flags 以外の引数に@c NULL が指定された場合
+		- 指定のカラムにおいてサポートされていない索引種別が指定された場合
+		- 引数に@c NULL が指定された場合
+	@since 3.5
 
 	@EN
-	@ingroup Group_GSContainer
-	@brief Creates a specified type of index on the specified Column.
+	@brief Create index according to the contents set in @ref GSIndexInfo.
 	@par
-		If @ref GS_INDEX_FLAG_DEFAULT is specified, the following types of
-		indexes are selected depending on the Container type and corresponding
-		Column type.
-		Column type | Collection | TimeSeries
+		For the column of the index to be created, at least one of the column name
+		and column number must be set, and the actual container must be set in the
+		corresponding container.If both column name and column number are set,
+		the corresponding columns must match each other.
+	@par
+		If no index type is set but @ref GS_INDEX_FLAG_DEFAULT is set, the default
+		type index is selected according to the criteria described below.
+		In other cases, you can specify one or more types as long as it is an allowed
+		index type in the target column. If more than one type is set, it is possible
+		to refer to container information in which only a part of the index is created
+		during creation, or the creation operation may be terminated in that state
+		if an error occurs.
+	@par
+		If an index name is set, a new index will be created only if there is no index
+		with the same name in the target container. Only ASCII alphanumeric characters
+		and underscores ("_") are allowed in index names. However, numbers cannot be used
+		at the beginning. Please also note that the name is case-insensitive.
+		Please refer to the GridDB Technical Reference for the upper limit of name length.
+	@par
+		If an existing index with the same name exists, you must specify @ref GSIndexInfo
+		of the same setting that satisfies the conditions described below. In this case
+		no new index will be created. On the other hand, it is not possible to specify
+		@ref GSIndexInfo with the same setting as the existing index of different name
+		or unnamed.
+	@par
+		When the index name is not set, it will be treated as an unnamed index. Excluding names,
+		if an index with the same setting already exists, it is considered as an unnamed index,
+		which in this case no new index will be created.
+	@par
+		In the current version, the index created using @ref GSContainer is considered to
+		be identical if the following conditions are satisfied.
+		- The columns to be indexed are matching. The differences in column specification
+		methods, such as column names and column numbers are not taken into consideration.
+		- Index types are matching. Differences in the specification method of index type
+		such as existence of default designation are not taken into consideration.
+	@par
+		In the current version, for @ref GSContainer instances generated based on
+		@ref gsGetDefaultFactory, the following index types are selected as defaults
+		depending on the type of container, the type of the corresponding column, and so on.
+		Column type | collection | time series
 		-|-|-
 		STRING | @ref GS_INDEX_FLAG_TREE | @ref GS_INDEX_FLAG_TREE
 		BOOL | @ref GS_INDEX_FLAG_TREE | @ref GS_INDEX_FLAG_TREE
-		Numeric type | @ref GS_INDEX_FLAG_TREE | @ref GS_INDEX_FLAG_TREE
-		TIMESTAMP | @ref GS_INDEX_FLAG_TREE | @ref GS_INDEX_FLAG_TREE ※制限あり
-		GEOMETRY | @ref GS_INDEX_FLAG_SPATIAL | (-)
-		BLOB | (-) | (-)
-		Array type | (-) | (-)
-		No index cannot be set on a TimeSeries Row key (TIMESTAMP type).
+		NUMBER | @ref GS_INDEX_FLAG_TREE | @ref GS_INDEX_FLAG_TREE
+		TIMESTAMP | @ref GS_INDEX_FLAG_TREE | @ref GS_INDEX_FLAG_TREE ※there is a limitation
+		GEOMETRY | @ref GS_INDEX_FLAG_SPATIAL | (None)
+		BLOB | (None) | (None)
+		ARRAY | (None) | (None)
 	@par
-		When a transaction is held, uncommitted updates will be rolled back.
+		Index cannot be set for time-series row keys (TIMESTAMP).
 	@par
-		If an index is already set on the specified Column, nothing is changed.
+		If this @ref GSContainer instance holds an uncommitted transaction, it will be created
+		after the commit. If there are other transactions being executed in the container, wait
+		for them to finish prior to the creation. If an index already exists and a new index is
+		not created, it is undefined whether to wait by another transaction. Also in this case
+		it is undefined whether uncommitted transactions held by this @ref GSContainer instance
+		will always be committed or not.
 	@par
-		When a transaction(s) is active in a target Container, it creates an
-		index after waiting for the transaction(s) to complete.
-	@par
-		In version 1.1 or earlier, the default index is not selected to the
-		GEOMETRY-type Column in a Collection Container.
+		In the current version, when various conditions such as the size of a container are satisfied,
+		during the period from the creation of the index to the end, it may be possible to reference
+		container information, some index operations, trigger operations, row operations
+		(including updating) for the container to be processed. For other operations, as described in
+		@ref GSContainer, you may have to wait. If another operation is performed during index creation,
+		the index information will not be included in the container information.
 	@param [in] container
-		@ref GSContainer to be processed
-	@param [in] columnName
-		Column name to be processed
-	@param [in] flags
-		Flags for index type to be set.
-		If multiple flags are specified, the corresponding number of index
-		creation processing will be requested individually to GridDB.
-		Therefore, it may become a state in which only part of the index has
-		been created if it fails in the middle of processing.
-	@return Return code of the execution result. It returns the value except
-		@ref GS_RESULT_OK in the following cases.
-		- if no Column has the specified name
-		- if a timeout occurs during this operation, a specified Container is
-			deleted or its schema is changed, a connection failure occurs
-		- if @c NULL is specified to arguments except @c flags
+		@ref GSContainer to be processed.
+	@param [in] info
+		Information on index to be processed.
+	@return code number of the results. In the following case, a value other than @ref GS_RESULT_OK
+		will be returned.
+		- If the column or index name to be created does not conform to the above rule
+		- When a connection failure, deletion of specified container, schema change or timeout occurs.
+		- When an unsupported index type is specified in the specified column
+		- When @c NULL is specified as an argument
+	@since 3.5
 
 	@ENDL
- */
-GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndex(GSContainer *container,
-		const GSChar *columnName, GSIndexTypeFlags flags);
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndexDetail(
+		GSContainer *container, const GSIndexInfo *info);
+
+#endif	// GS_COMPATIBILITY_SUPPORT_3_5
 
 #if GS_DEPRECATED_FUNC_ENABLED
 /*!
@@ -7106,7 +7861,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 	GSResult GS_API_CALL gsDropEventNotification(
 	GSContainer *container, const GSChar *url));
 
-#endif	
+#endif	// GS_DEPRECATED_FUNC_ENABLED
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 /*!
@@ -7146,38 +7901,38 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsDropTrigger(
 		GSContainer *container, const GSChar *name);
 
-#endif	
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
 
 /*!
 	@JP
 	@ingroup Group_GSContainer
-	@brief 指定カラムの索引のうち、指定種別のものを削除します。
+	@brief 指定された名前のカラムのうち、指定された種別の索引のみを削除します。
 	@par
-		指定の索引が存在しない場合は何も変更しません。
-	@par
-		処理対象のコンテナにおいて実行中のトランザクションが存在する場合、
-		それらの終了を待機してから削除を行います。
+		カラム名と種別のみが設定された@ref GSIndexInfo を指定して
+		@ref gsDropIndexDetail を呼び出した場合と同様に振る舞います。
+		ただし、@c flags にデフォルト種別を含め一つも種別が指定されていない
+		場合、いずれの索引も削除対象にはなりません。
 	@param [in] container
 		処理対象の@ref GSContainer
 	@param [in] columnName
 		処理対象のカラムの名前
 	@param [in] flags
-		削除する索引種別のフラグ。
-		複数指定した場合、GridDBに対して指定した個数だけ個別に索引削除処理を
-		要求します。したがって、途中で失敗した場合、一部の索引のみが削除された
-		状態となることがあります。
+		削除する索引種別のフラグ値のビット和。
+		指定できる値は@ref gsDropIndexDetail の場合と同様です
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
-		- 対応する名前のカラムが存在しない場合
+		- 指定のカラム名と種別が@ref gsDropIndexDetail の規則に合致しない場合
 		- この処理のタイムアウト、指定のコンテナの削除もしくはスキーマ変更、接続障害が
 			発生した場合
 		- @c flags 以外の引数に@c NULL が指定された場合
 
 	@EN
 	@ingroup Group_GSContainer
-	@brief Removes the specified type of index among indexes on the specified
-		Column.
+	@brief Removes the index of the specified type from the columns with the specified name.
 	@par
-		Nothing is changed if the specified index is not found.
+		Specifying @ref gsDropIndexDetail with setting only the column name and type
+		is the same as calling @ref GSIndexInfo.
+		However, if no category is specified for @c flags including the default type,
+		neither index will be deleted.
 	@par
 		When a transaction(s) is active in a target Container, it removes the
 		index after waiting for the transaction(s) to be completed.
@@ -7186,22 +7941,133 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDropTrigger(
 	@param [in] columnName
 		Column name to be processed
 	@param [in] flags
-		Flags for index type to be deleted.
-		If multiple flags are specified, the corresponding number of index
-		deletion processing will be requested individually to GridDB.
-		Therefore, it may become a state in which only part of the index has
-		been deleted if it fails in the middle of processing.
+		Sum of bits of flag value of index type to be deleted.
+		The possible values are the same as @ref gsDropIndexDetail
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
-		- if no Column has the specified name
+		- If the specified column name and type does not match the rule of @ref gsDropIndexDetail
 		- if a timeout occurs during this operation, a specified Container is
 			deleted or its schema is changed, a connection failure occurs
 		- if @c NULL is specified to arguments except @c flags
 
 	@ENDL
  */
-GS_DLL_PUBLIC GSResult GS_API_CALL gsDropIndex(GSContainer *container,
+GS_DLL_PUBLIC GSResult GS_API_CALL gsDropIndex(
+		GSContainer *container,
 		const GSChar *columnName, GSIndexTypeFlags flags);
+
+#if GS_COMPATIBILITY_SUPPORT_3_5
+
+/*!
+	@JP
+	@brief @ref GSIndexInfo で設定されている内容に一致する、すべての索引を
+		削除します。
+	@par
+		@ref GSIndexInfo の設定内容は、削除対象の索引を絞り込む条件として
+		使用されます。絞り込み条件は、カラム、索引種別、索引名の3つに分類
+		されます。それぞれ設定するかどうかは任意です。いずれも設定されていない
+		場合は、作成済みのすべての索引が削除されます。
+	@par
+		カラム名 またはカラム番号が設定されている場合、対応するコンテナにおいて
+		実在するものである必要があります。カラム名とカラム番号が共に設定されている
+		場合、対応するカラムが互いに一致している必要があります。カラム名ならびに
+		カラム番号が共に設定されていない場合、他の絞り込み条件(索引種別、
+		索引名)を満たす任意のカラムに対する索引が削除対象となります。
+	@par
+		索引種別が設定されている場合、指定の種別の索引のみが削除対象と
+		なります。@ref GS_INDEX_FLAG_DEFAULT が設定されている場合、
+		@ref gsCreateIndexDetail の基準に従い、デフォルト種別の索引が
+		選択されます。それ以外の場合、対象のカラムにおいて許されている索引種別
+		である限り、任意個数の種別を指定できます。複数個の種別が設定されていた
+		場合、削除途中に一部の索引のみが削除された状態のコンテナ情報を参照
+		できることや、エラーが生じるとその状態まま削除操作が終了することが
+		あります。索引をサポートしていないカラムや指定の種別の索引をサポート
+		していないカラムについては、削除対象にはなりません。索引種別が設定されて
+		いない場合、他の絞り込み条件(カラム、索引名)を満たす任意の種別の索引が
+		削除対象となります。
+	@par
+		索引名が設定されている場合、指定の名前の索引のみが削除対象と
+		なります。索引名の同一性は、@ref gsCreateIndexDetail の基準に
+		従います。索引名が設定されていない場合、他の絞り込み条件(カラム、
+		索引種別)を満たす、任意の名前の索引ならびに名前のない索引が削除対象
+		となります。
+	@par
+		削除対象となる索引が一つも存在しない場合、索引の削除は行われません。
+	@par
+		トランザクションの扱いは、@ref gsCreateIndexDetail と同様です。また、
+		索引種別としてデフォルト種別または単一の種別が設定されており、かつ、
+		複数の索引が削除対象となった場合に、一部の索引のみが 削除された状態で
+		他のトランザクションが実行されることがありうるかどうかは未定義です。
+	@par
+		索引の削除要求の完了直後の状態に関しては、@ref gsDropContainer
+		と同様です。
+	@param [in] container
+		処理対象の@ref GSContainer
+	@param [in] info
+		処理対象の索引の情報
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を
+		返します。
+		- 削除対象のカラム、索引名が上記の規則に合致しない場合
+		- この処理のタイムアウト、指定のコンテナの削除もしくはスキーマ変更、接続障害が
+			発生した場合
+		- 引数に@c NULL が指定された場合
+	@since 3.5
+
+	@EN
+	@brief Delete all indexes that match the contents set in @ref GSIndexInfo
+	@par
+		The contents of @ref GSIndexInfo are used as a condition to narrow down
+		the index to be deleted. Filtering conditions are classified into three categories:
+		column, index type, and index name. It is optional to set these categories.
+		If none of them are set, all created indexes will be deleted.
+	@par
+		When setting column name or column number, it must be done within the
+		corresponding container. When both column name and column number are set,
+		the corresponding columns must match each other. If neither the column name
+		nor the column number are set, the index for any column that meets other
+		narrowing conditions (index type, index name) will be deleted.
+	@par
+		When index type is set, only the index of the specified type will be deleted.
+		If @ref GS_INDEX_FLAG_DEFAULT is set, the default type index is selected
+		according to the criteria of @ref gsCreateIndexDetail. Otherwise, you can
+		specify any number of types as long as it is the allowed index type of the target
+		column. When multiple types are set, the container information in which only
+		some indexes are deleted during the deletion can be referenced, and when an error
+		occurs, the deletion operation may end in that state. Columns that do not support
+		indexes nor support indices of the specified type cannot be deleted. If the index
+		type is not set, index of any type satisfying other narrowing conditions (column,
+		index name) will be deleted.
+	@par
+		If an index name is set, only the index with the specified name will be deleted.
+		The identity of the index name follows the criteria of @ref gsCreateIndexDetail.
+		If an index name is not set, an index with an arbitrary name and an unnamed index
+		satisfying other refinement conditions (column, index type) will be deleted.
+	@par
+		If there is no index to be deleted, the index will not be deleted。
+	@par
+		Transaction handling is similar to @ref gsCreateIndexDetail. In the case when
+		default or single is set as the index type and multiple indexes are to be deleted,
+		it is not clear whether other transactions could be performed or not.
+	@par
+		In regards to the immediate state after index deletion request is completed,
+		it is the same as @ref gsDropContainer.
+	@param [in] container
+		to be processed @ref GSContainer
+	@param [in] info
+		information about the index to be processed.
+	@return The execution result of code number. In the next case it will return a value
+		other than @ref GS_RESULT_OK.
+		- When the column or index name to be deleted does not conform to the above rule
+		- Processing timeout, deletion of a specified container or schema changes, connection failure
+		- when @c NULL is specified as an argument.
+	@since 3.5
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsDropIndexDetail(
+		GSContainer *container, const GSIndexInfo *info);
+
+#endif	// GS_COMPATIBILITY_SUPPORT_3_5
 
 /*!
 	@JP
@@ -7310,7 +8176,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsFlush(GSContainer *container);
 		In order to store the variable-length data such as string or array, it
 		uses a temporary memory area which is managed by the specified
 		@ref GSGridStore instance corresponding to the specified
-		@ref GSContainer .
+		@ref GSContainer.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -7407,7 +8273,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRow(
 			また、指定のロウオブジェクト内のロウキー以外のフィールドについて、
 			文字列など可変長サイズのデータへのポインタ値に
 			@c NULL が含まれていた場合。もしくは、ロウキーに対応するカラムが
-			存在し@c key が@c NULLであるにもかかわらず、ロウキーの フィールドに
+			存在し@c key が@c NULL であるにもかかわらず、ロウキーの フィールドに
 			同様に@c NULL が含まれていた場合
 
 	@EN
@@ -7451,7 +8317,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRow(
 		the pointer to a variable to store the target Row key.
 		The relationship between the type of Row key in Container defined by
 		@ref GSContainer and the type of argument is same as in the case of
-		@ref gsGetRow .
+		@ref gsGetRow.
 		@c NULL should be specified if the column corresponding to Row key is
 		not existed, or if Row key in specified Row object is used.
 	@param [in] rowObj
@@ -7473,11 +8339,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRow(
 			a specified Container is deleted, its schema is changed or
 			a connection failure occurs
 		- if an unsupported value is set in the Row key or the Row object
-		- if @c NULL is specified to arguments except @c exists ,
+		- if @c NULL is specified to arguments except @c exists,
 			or if @c NULL is included in the pointer to the data whose size is
 			variable-length like string in the fields other than Row key in the
 			specified Row object, or even though the column corresponding to
-			Row key exists and @c key is @c NULL , @c NULL is included in the
+			Row key exists and @c key is @c NULL, @c NULL is included in the
 			field of Row key as well
 
 	@ENDL
@@ -7490,13 +8356,24 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRow(
 	@JP
 	@ingroup Group_GSContainer
 	@brief 指定のロウオブジェクト集合に基づき、任意個数のロウをまとめて
-		新規作成します。
+		新規作成または更新します。
 	@par
-		指定のロウオブジェクト集合内のロウキーと同一の既存ロウが存在する場合や、
-		指定のロウオブジェクト集合内に同一のロウキーを持つ複数のロウが存在する場合は
-		使用できません。
+		指定のロウオブジェクト集合の各ロウについて、配列要素の順序にしたがって
+		@ref gsPutRow を呼び出した場合と同様に新規作成または更新操作を行います。
 	@par
-		手動コミットモードの場合、対象のロウはロックされます。
+		指定のロウオブジェクト集合内に同一のロウキーを持つ複数のロウが存在する場合、
+		ロウオブジェクト集合を構成する配列要素の順序を基準として、
+		同一のロウキーを持つ最も後方にあるロウオブジェクトの内容が反映されます。
+	@par
+		コンテナの種別ならびに設定によっては、操作できるロウの内容について
+		@ref gsPutRow と同様の制限が設けられています。
+		具体的な制限事項は、個別のコンテナ種別の定義を参照してください。
+	@par
+		手動コミットモードの場合、対象のロウがロックされます。
+	@par
+		自動コミットモードのときに、コンテナならびにロウに対する処理の途中で
+		例外が発生した場合、コンテナの一部のロウに対する操作結果のみが反映された
+		ままとなることがあります。
 	@attention
 		指定の@ref GSContainer にバインドされたロウオブジェクトの型と
 		指定のロウオブジェクトの型とが一致しない場合、この処理の動作は未定義です。
@@ -7516,9 +8393,6 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRow(
 		現バージョンでは、ポインタ値が@c NULL ではない限り常に@ref GS_FALSE が
 		格納されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
-		- 指定のロウオブジェクト集合内のロウキーと同一の既存ロウが存在する場合、
-			または指定のロウオブジェクト集合内に同一のロウキーを持つ複数の
-			ロウが存在する場合
 		- 特定コンテナ種別固有の制限に反する操作を行った場合
 		- この処理またはトランザクションのタイムアウト、
 			指定のコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
@@ -7534,14 +8408,25 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRow(
 
 	@EN
 	@ingroup Group_GSContainer
-	@brief Newly creates an arbitrary number of Rows together based on the
+	@brief Newly creates or updates an arbitrary number of Rows together based on the
 		specified Row objects group.
 	@par
-		It cannot be used if a Row which is same as Row key in the specified
-		Row object group exists, or if multiple Rows which have the same Row
-		key exist in the specified Row object group.
+		For each row of the specified row object set, when calling @ref gsPutRow,
+		create or update is performed according to the order of the array elements.
+	@par
+		When there are multiple rows with the same row key in the specified row object
+		set, the contents of the same most rear row object with the same row key are
+		reflected based on the order of the array elements constituting the row object set.
+	@par
+		Depending on the container type and setting, the content of operable row have
+		the same restriction as @ref gsPutRow.
+		Please refer to the definition of individual container type for details of the
+		restrictions.
 	@par
 		In the manual commit mode, the target Row is locked.
+	@par
+		In automatic commit mode, when an exception occurs during containers and rows' processing,
+		only the operation result for some of the containers' row will be reflected.
 	@attention
 		The behavior is undefined if the type of Row object bound to the
 		specified @ref GSContainer and the type of specified Row object
@@ -7564,12 +8449,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRow(
 		process will complete successfully without creating a new Row.
 	@param [out] exists
 		In the current version, @ref GS_FALSE is always stored unless the
-		pointer value is not @c NULL .
+		pointer value is not @c NULL.
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
-		- if a Row which is same as Row key in the specified Row object group
-			exists, or if multiple Rows which have the same Row key exist in
-			the specified Row object group
 		- When an operation violating the restrictions unique to a specific
 			Container type is carried out
 		- if a timeout occurs during this operation or the transaction,
@@ -7577,7 +8459,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRow(
 			a connection failure occurs
 		- if an unsupported value is included in the Row object
 		- if @c NULL is specified to @c container
-		- if @c NULL is specified to pointer type arguments except @c exists ,
+		- if @c NULL is specified to pointer type arguments except @c exists,
 			or if @c NULL is included in the pointer to the data whose size is
 			variable-length like string in the fields within the specified Row
 			object
@@ -7607,7 +8489,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 #define gsPutMultipleRows(container, rowObjs, rowCount, exists) \
 		gsPutMultipleRows(container, rowObjs, rowCount, exists)
 #endif
-#endif	
+#endif	// not GS_INTERNAL_DEFINITION_VISIBLE
 
 /*!
 	@JP
@@ -7632,7 +8514,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 	@ingroup Group_GSContainer
 	@brief Creates a query to execute the specified TQL statement.
 	@par
-		When obtaining a set of Rows using @ref gsFetch , the option of locking
+		When obtaining a set of Rows using @ref gsFetch, the option of locking
 		for update can be enabled only for the queries that will not select Rows
 		which do not exist in specified Container. For example, it cannot be
 		enabled for a query containing an interpolation operation.
@@ -7721,7 +8603,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		the pointer to a variable to store the target Row key.
 		The relationship between the type of Row key in Container defined by
 		@ref GSContainer and the type of argument is same as in the case of
-		@ref gsGetRow .
+		@ref gsGetRow.
 		@c NULL should be specified if the column corresponding to Row key is
 		not existed, or if Row key in specified Row object is used.
 	@param [out] exists
@@ -7815,7 +8697,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerType(
 		Container.
 	@par
 		The default initial values are set in each field of the created
-		@ref GSRow , similar to the case when it is created using a
+		@ref GSRow, similar to the case when it is created using a
 		@ref gsCreateRowByStore.
 	@param [in] container
 		@ref GSContainer to be processed
@@ -7833,8 +8715,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerType(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByContainer(
 		GSContainer *container, GSRow **row);
 
-#endif	
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
 
+//
+// Container API (Transaction)
+//
 
 /*!
 	@JP
@@ -7978,7 +8863,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCommit(GSContainer *container);
 		In order to store the variable-length data such as string or array, it
 		uses a temporary memory area which is managed by the specified
 		@ref GSGridStore instance corresponding to the specified
-		@ref GSContainer .
+		@ref GSContainer.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -7990,7 +8875,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCommit(GSContainer *container);
 		The pointer to a variable to store the target Row key.
 		The relationship between the type of Row key in Container defined by
 		@ref GSContainer and the type of argument is same as in the case of
-		@ref gsGetRow .
+		@ref gsGetRow.
 	@param [out] rowObj
 		The Row object to store the contents of target Row to be obtained.
 		Nothing will be changed in the contents of Row object if the target Row
@@ -8063,7 +8948,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowForUpdate(
 		@ref GSContainer to be processed
 	@param [in] enabled
 		indicates whether it enables auto commit mode or not. if @ref GS_TRUE,
-		auto commit mode is enabled. if @ref GS_FALSE, manual commit mode is 
+		auto commit mode is enabled. if @ref GS_FALSE, manual commit mode is
 		enabled.
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
@@ -8077,6 +8962,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowForUpdate(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsSetAutoCommit(
 		GSContainer *container, GSBool enabled);
 
+//
+// Container API (Type safe key)
+//
 
 /*!
 	@JP
@@ -8161,7 +9049,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetAutoCommit(
 		In order to store the variable-length data such as string or array, it
 		uses a temporary memory area which is managed by the specified
 		@ref GSGridStore instance corresponding to the specified
-		@ref GSContainer .
+		@ref GSContainer.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -8285,7 +9173,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByInteger(
 		In order to store the variable-length data such as string or array, it
 		uses a temporary memory area which is managed by the specified
 		@ref GSGridStore instance corresponding to the specified
-		@ref GSContainer .
+		@ref GSContainer.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -8410,7 +9298,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByLong(
 		In order to store the variable-length data such as string or array, it
 		uses a temporary memory area which is managed by the specified
 		@ref GSGridStore instance corresponding to the specified
-		@ref GSContainer .
+		@ref GSContainer.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -8535,7 +9423,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByTimestamp(
 		In order to store the variable-length data such as string or array, it
 		uses a temporary memory area which is managed by the specified
 		@ref GSGridStore instance corresponding to the specified
-		@ref GSContainer .
+		@ref GSContainer.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -8613,7 +9501,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByString(
 			また、指定のロウオブジェクト内のロウキー以外のフィールドについて、
 			文字列など可変長サイズのデータへのポインタ値に
 			@c NULL が含まれていた場合。もしくは、ロウキーに対応するカラムが
-			存在し@c key が@c NULLであるにもかかわらず、ロウキーの フィールドに
+			存在し@c key が@c NULL であるにもかかわらず、ロウキーの フィールドに
 			同様に@c NULL が含まれていた場合
 	@see gsPutRow
 
@@ -8658,11 +9546,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByString(
 			a specified Container is deleted, its schema is changed or
 			a connection failure occurs
 		- if an unsupported value is included in the Row object
-		- if @c NULL is specified to arguments except @c exists ,
+		- if @c NULL is specified to arguments except @c exists,
 			or if @c NULL is included in the pointer to the data whose size is
 			variable-length like string in the fields other than Row key in the
 			specified Row object, or even though the column corresponding to
-			Row key exists and @c key is @c NULL , @c NULL is included in the
+			Row key exists and @c key is @c NULL, @c NULL is included in the
 			field of Row key as well
 	@see gsPutRow
 
@@ -8708,7 +9596,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRowByInteger(
 			また、指定のロウオブジェクト内のロウキー以外のフィールドについて、
 			文字列など可変長サイズのデータへのポインタ値に
 			@c NULL が含まれていた場合。もしくは、ロウキーに対応するカラムが
-			存在し@c key が@c NULLであるにもかかわらず、ロウキーの フィールドに
+			存在し@c key が@c NULL であるにもかかわらず、ロウキーの フィールドに
 			同様に@c NULL が含まれていた場合
 	@see gsPutRow
 
@@ -8753,11 +9641,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRowByInteger(
 			a specified Container is deleted, its schema is changed or
 			a connection failure occurs
 		- if an unsupported value is included in the Row object
-		- if @c NULL is specified to arguments except @c exists ,
+		- if @c NULL is specified to arguments except @c exists,
 			or if @c NULL is included in the pointer to the data whose size is
 			variable-length like string in the fields other than Row key in the
 			specified Row object, or even though the column corresponding to
-			Row key exists and @c key is @c NULL , @c NULL is included in the
+			Row key exists and @c key is @c NULL, @c NULL is included in the
 			field of Row key as well
 	@see gsPutRow
 
@@ -8869,7 +9757,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRowByLong(
 			a specified Container is deleted, its schema is changed or
 			a connection failure occurs
 		- if an unsupported value is set in the Row key or the Row object
-		- if @c NULL is specified to arguments except @c exists ,
+		- if @c NULL is specified to arguments except @c exists,
 			or if @c NULL is included in the pointer to the data whose size is
 			variable-length like string in the fields within the specified Row
 			object
@@ -8960,7 +9848,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRowByTimestamp(
 			a specified Container is deleted, its schema is changed or
 			a connection failure occurs
 		- if an unsupported value is set in the Row key or the Row object
-		- if @c NULL is specified to arguments except @c exists ,
+		- if @c NULL is specified to arguments except @c exists,
 			or if @c NULL is included in the pointer to the data whose size is
 			variable-length like string in the fields other than Row key in the
 			specified Row object
@@ -9230,6 +10118,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByTimestamp(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByString(
 		GSContainer *container, const GSChar *key, GSBool *exists);
 
+//
+// Collection API
+//
 
 /*!
 	@JP
@@ -9260,7 +10151,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByString(
 	@brief Creates a query to obtain a set of Rows which are matched to
 		specified geometry range conditions.
 	@par
-		When obtaining a set of Rows using @ref gsFetch , the option of locking
+		When obtaining a set of Rows using @ref gsFetch, the option of locking
 		for update can be enabled.
 	@param [in] collection
 		@ref GSCollection to be processed
@@ -9321,11 +10212,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsQueryByGeometry(
 		specified geometry range conditions with exclusion range.
 	@par
 		Obtains a set of Rows which has the column values that intersect with
-		@c geometryIntersection and do not intersect with @c geometryDisjoint .
+		@c geometryIntersection and do not intersect with @c geometryDisjoint.
 		Conditions of the intersection determination is the same as the
 		@ref GS_GEOMETRY_OPERATOR_INTERSECT.
 	@par
-		When obtaining a set of Rows using @ref gsFetch , the option of locking
+		When obtaining a set of Rows using @ref gsFetch, the option of locking
 		for update can be enabled.
 	@param [in] collection
 		@ref GSCollection to be processed
@@ -9362,6 +10253,9 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		GSQuery **query));
 #endif
 
+//
+// TimeSeries API
+//
 
 /*!
 	@JP
@@ -9402,7 +10296,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		Columns, based on the specified start and end times.
 	@par
 		The parameter @c column might be ignored depending on the parameter
-		@c aggregation . The boundary Rows whose timestamps are identical with
+		@c aggregation. The boundary Rows whose timestamps are identical with
 		the start or end time are included in the range of operation. If the
 		specified start time is later than the end time, all Rows are excluded
 		from the range.
@@ -9419,7 +10313,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		An aggregation method
 	@param [out] aggregationResult
 		The pointer to a pointer variable to store the aggregation result as
-		@ref GSAggregationResult . @c NULL may be set depending on the contents
+		@ref GSAggregationResult. @c NULL may be set depending on the contents
 		and the aggregation method of the target TimeSeries. Refer to the
 		definition of @ref GSAggregation for more detail.
 		@c NULL is stored to corresponding pointer variable if pointer is not
@@ -9490,7 +10384,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAggregateTimeSeries(
 	@brief Newly creates or updates a Row with a Row key of the current time on
 		GridDB.
 	@par
-		It behaves in the same way as @ref gsPutRow , except that it sets as a
+		It behaves in the same way as @ref gsPutRow, except that it sets as a
 		Row key the TIMESTAMP value equivalent to the current time on GridDB.
 		The Row key in the specified Row object is ignored.
 	@par
@@ -9527,7 +10421,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAggregateTimeSeries(
 			a specified Container is deleted, its schema is changed or
 			a connection failure occurs
 		- if an unsupported value is included in the Row object
-		- if @c NULL is specified to arguments except @c exists ,
+		- if @c NULL is specified to arguments except @c exists,
 			or if @c NULL is included in the pointer to the data whose size is
 			variable-length like string in the specified Row object
 	@see gsPutRow
@@ -9587,7 +10481,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAppendTimeSeriesRow(
 		In order to store the variable-length data such as string or array, it
 		uses a temporary memory area which is managed by the specified
 		@ref GSGridStore instance corresponding to the specified
-		@ref GSTimeSeries .
+		@ref GSTimeSeries.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -9701,7 +10595,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByBaseTime(
 		In order to store the variable-length data such as string or array, it
 		uses a temporary memory area which is managed by the specified
 		@ref GSGridStore instance corresponding to the specified
-		@ref GSTimeSeries .
+		@ref GSTimeSeries.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -9779,7 +10673,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsInterpolateTimeSeriesRow(
 		timestamp to a later timestamp.
 	@par
 		The option of locking for update can be enabled when obtaining a set of
-		Rows using @ref gsFetch .
+		Rows using @ref gsFetch.
 	@param [in] timeSeries
 		@ref GSTimeSeries to be processed
 	@param [in] start
@@ -9842,7 +10736,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsQueryByTimeSeriesRange(
 		later than the end time, all Rows are excluded from the range.
 	@par
 		The option of locking for update can be enabled when obtaining a set of
-		Rows using @ref gsFetch .
+		Rows using @ref gsFetch.
 	@param [in] timeSeries
 		@ref GSTimeSeries to be processed
 	@param [in] start
@@ -9937,7 +10831,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsQueryByTimeSeriesOrderedRange(
 		Rows whose timestamps are identical with each sampling time point, or
 		the interpolated values according to the @c columnSet and @c mode
 		if such a Row is not found. For specific interpolation methods, see the
-		description of @ref GSInterpolationMode .
+		description of @ref GSInterpolationMode.
 	@par
 		If there is no Rows to be referenced for interpolation at a specific
 		sampling time point, a corresponding Row is not generated, and thus the
@@ -9947,7 +10841,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsQueryByTimeSeriesOrderedRange(
 		depending on the interpolation method.
 	@par
 		The option of locking for update cannot be enabled when obtaining a set
-		of Rows using @ref gsFetch .
+		of Rows using @ref gsFetch.
 	@param [in] timeSeries
 		@ref GSTimeSeries to be processed
 	@param [in] start
@@ -9995,7 +10889,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL
 #endif
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-#if GS_COMPATIBILITY_TIME_SETIES_SAMPLING_BETA_0_1
+#if GS_COMPATIBILITY_TIME_SERIES_SAMPLING_BETA_0_1
 #define gsQueryByTimeSeriesSampling( \
 				timeSeries, start, end, columnSet, interval, intervalUnit, query) \
 		gsCompatibleFunc_QueryByTimeSeriesSampling1( \
@@ -10008,8 +10902,11 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL
 				timeSeries, start, end, columnSet, columnCount, \
 				mode, interval, intervalUnit, query)
 #endif
-#endif	
+#endif	// not GS_INTERNAL_DEFINITION_VISIBLE
 
+//
+// Row API
+//
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 
@@ -10041,10 +10938,10 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL
  */
 GS_DLL_PUBLIC void GS_API_CALL gsCloseRow(GSRow **row);
 
-#if GS_COMPATIBILITY_SUPPORT_2_1
+#if GS_COMPATIBILITY_SUPPORT_3_5
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV2_1(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV3_3(
 		GSRow *row, GSContainerInfo *schemaInfo);
 #endif
 
@@ -10087,7 +10984,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV2_1(
 		In order to store the variable-length data such as the column of column
 		information, it uses a temporary memory area which is managed by the
 		specified @ref GSGridStore instance corresponding to the specified
-		@ref GSRow .
+		@ref GSRow.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -10109,6 +11006,16 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV2_1(
 
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetRowSchema(
 		GSRow *row, GSContainerInfo *schemaInfo) {
+	return gsGetRowSchemaV3_3(row, schemaInfo);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_2_1
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV2_1(
+		GSRow *row, GSContainerInfo *schemaInfo);
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetRowSchema(
+		GSRow *row, GSContainerInfo *schemaInfo) {
 	return gsGetRowSchemaV2_1(row, schemaInfo);
 }
 
@@ -10117,7 +11024,7 @@ GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetRowSchema(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchema(
 		GSRow *row, GSContainerInfo *schemaInfo);
 
-#endif	
+#endif	// not GS_COMPATIBILITY_SUPPORT_2_1
 
 /*!
 	@JP
@@ -10132,12 +11039,17 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchema(
 	@param [in] column
 		対象フィールドのカラム番号。@c 0 以上かつカラム数未満の値
 	@param [in] fieldValue
-		対象フィールドの値
+		対象フィールドの値。
+		@c type として@ref GS_TYPE_NULL が指定された場合は、指定の内容が
+		参照されることはありません。ただし、@c NULL 以外のポインタ値を指定する
+		必要があります
 	@param [in] type
 		対象フィールドの値の型
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- ポインタ型引数に@c NULL が指定された場合
 		- 範囲外のカラム番号が指定された場合
+		- NOT NULL制約の設定されたカラムに対して、フィールド値の型として
+			@ref GS_TYPE_NULL が指定された場合
 		- フィールドの値の構成要素のポインタ値として@c NULL が含まれていた場合
 		- フィールドの値がカラムの型と一致しない場合
 	@since 1.5
@@ -10157,12 +11069,16 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchema(
 		minus one.
 	@param [in] fieldValue
 		the value of the target field
+		If @ref GS_TYPE_NULL is specified as the @c type, the specified content will
+		not be referenced. However, you need to specify a pointer value other than @c NULL.
 	@param [in] type
 		the value type of the target field
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
 		- if @c NULL is specified to pointer type arguments
 		- if the specified Column number is out of range
+		- If @ref GS_TYPE_NULL is specified as the field value type for the column
+			with the NOT NULL constraint
 		- if @c NULL is included as a pointer value in the element of field
 			value
 		- if the type of the specified field does not match the type of the
@@ -10211,7 +11127,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldGeneral(
 	@attention
 		In order to store the variable-length data included in field value, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRow .
+		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -10242,6 +11158,86 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldGeneral(
  */
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldGeneral(
 		GSRow *row, int32_t column, GSValue *fieldValue, GSType *type);
+
+#if GS_COMPATIBILITY_SUPPORT_3_5
+
+/*!
+	@JP
+	@brief 指定のフィールドにNULLを設定します。
+	@param [in] row
+		処理対象の@ref GSRow
+	@param [in] column
+		対象フィールドのカラム番号。@c 0 以上かつカラム数未満の値
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を
+		返します。
+		- ポインタ型引数に@c NULL が指定された場合
+		- 範囲外のカラム番号が指定された場合
+		- NOT NULL制約の設定されたカラムが指定された場合
+	@since 3.5
+
+	@EN
+	@brief Sets NULL to the specified field.
+	@param [in] row
+		@ref GSRow to be processed
+	@param [in] column
+		the Column number of the target field, from @c 0 to number of Columns
+		minus one.
+	@return Return code of the execution result. It returns the value except
+		@ref GS_RESULT_OK in the following cases.
+		- if @c NULL is specified to pointer type arguments
+		- if the specified Column number is out of range
+		- if Column with NOT NULL constraint is specified
+	@since 3.5
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldNull(
+		GSRow *row, int32_t column);
+
+/*!
+	@JP
+	@brief 指定のフィールドにNULLが設定されているかどうかを返します。
+	@par
+		NOT NULL制約の設定されたカラムが指定された場合、常に@ref GS_FALSE
+		を返します。
+	@param [in] row
+		処理対象の@ref GSRow
+	@param [in] column
+		対象フィールドのカラム番号。@c 0 以上かつカラム数未満の値
+	@param [out] nullValue
+		NULLが設定されているかどうか受け取る変数へのポインタ値
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を
+		返します。
+		- ポインタ型引数に@c NULL が指定された場合
+		- 範囲外のカラム番号が指定された場合
+	@since 3.5
+
+	@EN
+	@brief Returns whether the specified field is set to NULL.
+	@par
+		Whenever a Column with a NOT NULL constraint is specified,
+		it always returns @ref GS_FALSE.
+@param [in] row
+		@ref GSRow to be processed
+	@param [in] column
+		the Column number of the target field, from @c 0 to number of Columns
+		minus one.
+	@param [out] nullValue
+		Whenever a Column with a NOT NULL constraint is specified,
+		it always returns @ref GS_FALSE.
+	@return Return code of the execution result. It returns the value except
+		@ref GS_RESULT_OK in the following cases.
+		- if @c NULL is specified to pointer type arguments
+		- if the specified Column number is out of range
+		- if Column with NOT NULL constraint is specified
+	@since 3.5
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldNull(
+		GSRow *row, int32_t column, GSBool *nullValue);
+
+#endif	// GS_COMPATIBILITY_SUPPORT_3_5
 
 /*!
 	@JP
@@ -10313,7 +11309,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByString(
 	@attention
 		In order to store the variable-length data included in field value, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRow .
+		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -11062,7 +12058,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByGeometry(
 	@attention
 		In order to store the variable-length data included in field value, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRow .
+		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -11159,7 +12155,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByBlob(
 	@attention
 		In order to store the variable-length data included in field value, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRow .
+		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -11268,7 +12264,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByStringArray(
 	@attention
 		In order to store the variable-length data included in field value, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRow .
+		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -11382,7 +12378,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByBoolArray(
 	@attention
 		In order to store the variable-length data included in field value, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRow .
+		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -11496,7 +12492,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByByteArray(
 	@attention
 		In order to store the variable-length data included in field value, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRow .
+		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -11610,7 +12606,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByShortArray(
 	@attention
 		In order to store the variable-length data included in field value, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRow .
+		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -11724,7 +12720,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByIntegerArray(
 	@attention
 		In order to store the variable-length data included in field value, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRow .
+		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -11838,7 +12834,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByLongArray(
 	@attention
 		In order to store the variable-length data included in field value, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRow .
+		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -11952,7 +12948,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByFloatArray(
 	@attention
 		In order to store the variable-length data included in field value, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRow .
+		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -12066,7 +13062,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByDoubleArray(
 	@attention
 		In order to store the variable-length data included in field value, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRow .
+		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -12180,7 +13176,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByTimestampArray(
 	@attention
 		In order to store the variable-length data included in field value, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRow .
+		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -12214,8 +13210,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldAsTimestampArray(
 		GSRow *row, int32_t column, const GSTimestamp **fieldValue,
 		size_t *size);
 
-#endif	
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
 
+//
+// Query API
+//
 
 /*!
 	@JP
@@ -12256,12 +13255,9 @@ GS_DLL_PUBLIC void GS_API_CALL gsCloseQuery(GSQuery **query);
 		新たなロウ集合を取得すると、指定のクエリについて直近に実行した結果の
 		@ref GSRowSet を介するロウ操作はできなくなります。
 	@par
-		バージョン1.1またはそれ以前のバージョンでは、直近に実行した結果の
-		@ref GSRowSet を介するロウ操作ができなくなることはありませんでした。
-	@par
 		一度に大量のロウを取得しようとした場合、GridDBノードが管理する
 		通信バッファのサイズの上限に到達し、失敗することがあります。
-		上限サイズについては、付録の値の範囲を参照してください。
+		上限サイズについては、GridDBテクニカルリファレンスを参照してください。
 	@param [in] query
 		処理対象の@ref GSQuery
 	@param [in] forUpdate
@@ -12288,7 +13284,7 @@ GS_DLL_PUBLIC void GS_API_CALL gsCloseQuery(GSQuery **query);
 	@brief Executes a specified query with the specified option and returns a
 		set of Rows as an execution result.
 	@par
-		It locks all target Rows if @ref GS_TRUE is specified as @c forUpdate .
+		It locks all target Rows if @ref GS_TRUE is specified as @c forUpdate.
 		If the target Rows are locked, update operations on the Rows by any
 		other transactions are blocked while a relevant transaction is active.
 		@ref GS_TRUE can be specified only if the auto commit mode is disabled
@@ -12297,13 +13293,10 @@ GS_DLL_PUBLIC void GS_API_CALL gsCloseQuery(GSQuery **query);
 		When new set of Rows are obtained, any Row operation via @ref GSRowSet
 		as the last result of specified query is prohibited.
 	@par
-		In version 1.1 or earlier, any Row operation via @ref GSRowSet obtained
-		as the last query result is allowed.
-	@par
 		If the system tries to acquire a large number of Rows all at once, the
 		upper limit of the communication buffer size managed by the GridDB node
 		may be reached, possibly resulting in a failure.
-		Refer to "System limiting values" in the Appendix for the upper limit
+		Refer to the GridDB Technical Reference for the upper limit
 		size.
 	@param [in] query
 		@ref GSQuery to be processed
@@ -12341,9 +13334,6 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsFetch(
 	@par
 		設定可能なオプション項目と値の定義については、@ref GSFetchOptionTag を
 		参照してください。
-	@par
-		バージョン1.1またはそれ以前のバージョンでは、対応する@ref GSContainer
-		のクローズ後も呼び出すことができました。
 	@attention
 		@c valueType と@c value の型との対応が正しくない場合、
 		この処理の動作は未定義です。
@@ -12371,9 +13361,6 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsFetch(
 	@par
 		Refer @ref GSFetchOptionTag for the definitions of available options
 		and values.
-	@par
-		In version 1.1 or earlier, it is allowed to call this function after
-		closing corresponding @ref GSContainer .
 	@attention
 		The behavior is undefined if the @c valueType and the type of @c value
 		does not match.
@@ -12413,6 +13400,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetFetchOption(
 	@par
 		一度取得すると、以降新たに指定のクエリを実行するまで@ref GSRowSet
 		が取得できなくなります。
+	@par
+		@ref GS_FETCH_PARTIAL_EXECUTION が有効に設定されていた場合、
+		クエリ実行処理の続きを行う場合があります。
 	@param [in] query
 		処理対象の@ref GSQuery
 	@param [out] rowSet
@@ -12422,7 +13412,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetFetchOption(
 		実行結果として@ref GS_RESULT_OK 以外が返される場合、このポインタ値が
 		@c NULL 以外の値であれば、対応するポインタ変数に@c NULL が格納されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
-		- 対応する@ref GSContainer のクローズ後に呼び出された場合
+		- この処理または関連するトランザクションのタイムアウト、
+			対応するコンテナの削除もしくはスキーマ変更、接続障害が発生した場合、
+			または@ref GSContainer のクローズ後に呼び出された場合
 		- ポインタ型引数に@c NULL が指定された場合
 	@since 1.5
 
@@ -12432,12 +13424,16 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetFetchOption(
 	@par
 		Once @ref GSRowSet is returned, it cannot be obtained until the new
 		query is executed.
+	@par
+		When @ref GS_FETCH_PARTIAL_EXECUTION has been set
+		to be effective, the continuation of the query execution may
+		be executed in this method.
 	@param [in] query
 		@ref GSQuery to be processed
 	@param [out] rowSet
 		the pointer to a pointer variable to store @ref GSRowSet instance as
 		the latest result. @c NULL is set if already acquired, or if there is
-		no query execution.		
+		no query execution.
 		@c NULL is stored to corresponding pointer variable if pointer is not
 		@c NULL and non-@ref GS_RESULT_OK is returned as the execution result.
 	@return Return code of the execution result. It returns the value except
@@ -12452,8 +13448,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetFetchOption(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSet(
 		GSQuery *query, GSRowSet **rowSet);
 
-#endif	
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
 
+//
+// RowSet API
+//
 
 /*!
 	@JP
@@ -12505,7 +13504,7 @@ GS_DLL_PUBLIC void GS_API_CALL gsCloseRowSet(GSRowSet **rowSet);
 	@brief Deletes the Row at the current cursor position.
 	@par
 		It can be used only for @ref GSRowSet obtained with locking enabled.
-		Like @ref gsDeleteRow , further limitations are placed depending on the
+		Like @ref gsDeleteRow, further limitations are placed depending on the
 		type and settings of a Container.
 	@param [in] rowSet
 		@ref GSRowSet to be processed
@@ -12531,9 +13530,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteCurrentRow(
 	@ingroup Group_GSRowSet
 	@brief ロウ集合内の後続のロウにカーソル移動し、移動後の位置にあるロウオブジェクトを
 		取得します。
-	@par
-		バージョン1.1またはそれ以前のバージョンでは、対応する@ref GSContainer
-		のクローズ後も呼び出すことができました。
+		@par
+		@ref GS_FETCH_PARTIAL_EXECUTION が有効に設定されていた場合、
+		クエリ実行処理の続きを行う場合があります。
 	@attention
 		対応する@ref GSContainer にバインドされたロウオブジェクトの型と
 		指定のロウオブジェクトの型とが一致しない場合、この処理の動作は未定義です。
@@ -12554,6 +13553,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteCurrentRow(
 		- 指定のロウ集合の種別が@ref GS_ROW_SET_CONTAINER_ROWS 以外の場合
 		- 対象位置のロウが存在しない場合
 		- 引数に@c NULL が指定された場合
+		- この処理または関連するトランザクションのタイムアウト、
+			対応するコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
 		- 対応する@ref GSContainer のクローズ後に呼び出された場合
 
 	@EN
@@ -12561,8 +13562,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteCurrentRow(
 	@brief Moves the cursor to the next Row in a Row set and returns the Row
 		object at the moved position.
 	@par
-		In version 1.1 or earlier, it is allowed to call this function after
-		closing corresponding @ref GSContainer .
+		When @ref GS_FETCH_PARTIAL_EXECUTION has been set
+		to be effective, the continuation of the query execution may
+		be executed in this method.
 	@attention
 		The behavior is undefined if the type of Row object bound to
 		corresponding @ref GSContainer and the type of specified Row object
@@ -12573,7 +13575,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteCurrentRow(
 		In order to store the variable-length data such as string or array, it
 		uses a temporary memory area which is managed by the specified
 		@ref GSGridStore instance corresponding to the specified
-		@ref GSRowSet .
+		@ref GSRowSet.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -12604,9 +13606,6 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetNextRow(
 	@ingroup Group_GSRowSet
 	@brief ロウ集合内の後続のロウにカーソル移動し、移動後の位置にある集計結果を
 		取得します。
-	@par
-		バージョン1.1またはそれ以前のバージョンでは、対応する@ref GSContainer
-		のクローズ後も呼び出すことができました。
 	@param [in] rowSet
 		処理対象の@ref GSRowSet
 	@param [out] aggregationResult
@@ -12624,14 +13623,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetNextRow(
 	@ingroup Group_GSRowSet
 	@brief Moves the cursor to the next Row in a Row set and returns the
 		aggregation result at the moved position.
-	@par
-		In version 1.1 or earlier, it is allowed to call this function after
-		closing corresponding @ref GSContainer .
 	@param [in] rowSet
 		@ref GSRowSet to be processed
 	@param [out] aggregationResult
 		the pointer to a pointer variable to store the aggregation result as
-		@ref GSAggregationResult .
+		@ref GSAggregationResult.
 		@c NULL is stored to corresponding pointer variable if pointer is not
 		@c NULL and non-@ref GS_RESULT_OK is returned as the execution result.
 	@return Return code of the execution result. It returns the value except
@@ -12653,9 +13649,6 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetNextAggregation(
 	@ingroup Group_GSRowSet
 	@brief ロウ集合内の後続のロウにカーソル移動し、移動後の位置にある
 		クエリ解析結果エントリを取得します。
-	@par
-		バージョン1.1またはそれ以前のバージョンでは、対応する@ref GSContainer
-		のクローズ後も呼び出すことができました。
 	@param [in] rowSet
 		処理対象の@ref GSRowSet
 	@param [out] queryAnalysis
@@ -12673,9 +13666,6 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetNextAggregation(
 	@ingroup Group_GSRowSet
 	@brief Moves the cursor to the next Row in a Row set and returns the query
 		analysis result entry at the moved position.
-	@par
-		In version 1.1 or earlier, it is allowed to call this function after
-		closing corresponding @ref GSContainer .
 	@param [in] rowSet
 		@ref GSRowSet to be processed
 	@param [out] queryAnalysis
@@ -12737,14 +13727,22 @@ GS_DLL_PUBLIC GSRowSetType GS_API_CALL gsGetRowSetType(GSRowSet *rowSet);
 	@JP
 	@ingroup Group_GSRowSet
 	@brief ロウ集合のサイズ、すなわちロウ集合作成時点におけるロウの数を返します。
+	@par
+		@ref GS_FETCH_PARTIAL_EXECUTION が有効に設定されていた場合、
+		クエリ実行処理の進行状況によらず、結果を求めることはできません。
 	@param [in] rowSet
 		処理対象の@ref GSRowSet
-	@return ロウ集合のサイズ。ただし、@c rowSet に@c NULL が指定された場合は@c -1
+	@return ロウ集合のサイズ。ただし、@c rowSet に@c NULL が指定された場合、
+		またはオプション設定の影響によりロウの数を取得できない場合は@c -1
 
 	@EN
 	@ingroup Group_GSRowSet
 	@brief Returns the size of Row set, i.e. the number of Row when a Row set
 		is created.
+	@par
+		When @ref GS_FETCH_PARTIAL_EXECUTION has been set to be effective,
+		it is not possible to get the results despite the status of the query
+		execution progress.
 	@param [in] rowSet
 		@ref GSRowSet to be processed
 	@return The size of Row set. However, @c -1 is returned if @c NULL is
@@ -12818,7 +13816,7 @@ GS_DLL_PUBLIC GSBool GS_API_CALL gsHasNextRow(GSRowSet *rowSet);
 		terminated by the access violation.
 	@par
 		It can be used only for @ref GSRowSet obtained with locking enabled.
-		Like @ref gsPutRow , further limitations are placed depending on the
+		Like @ref gsPutRow, further limitations are placed depending on the
 		type and settings of a Container.
 	@param [in] rowSet
 		@ref GSRowSet to be processed
@@ -12844,6 +13842,9 @@ GS_DLL_PUBLIC GSBool GS_API_CALL gsHasNextRow(GSRowSet *rowSet);
 GS_DLL_PUBLIC GSResult GS_API_CALL gsUpdateCurrentRow(
 		GSRowSet *rowSet, const void *rowObj);
 
+//
+// AggregationResult API
+//
 
 /*!
 	@JP
@@ -12945,7 +13946,7 @@ GS_DLL_PUBLIC void GS_API_CALL gsCloseAggregationResult(
 		to any of the type that can be specified as @c value, no value is
 		stored.
 		If the type of @c valueType is not retrievable by comparing to the type
-		of value which is hold in @c aggregationResult , @c 0 is stored as
+		of value which is hold in @c aggregationResult, @c 0 is stored as
 		initial value.
 	@param [in] valueType
 		The type of retrieved value
@@ -12961,6 +13962,143 @@ GS_DLL_PUBLIC GSBool GS_API_CALL gsGetAggregationValue(
 		GSAggregationResult *aggregationResult, void *value,
 		GSType valueType);
 
+#if GS_COMPATIBILITY_SUPPORT_3_5
+
+/*!
+	@JP
+	@brief 数値型の集計値をLONG型(@c int64_t)として取得します。
+	@par
+		数値型以外の値を保持している場合、@c assigned 引数には@ref GS_FALSE
+		が格納されます。LONG型以外の数値を保持している場合、LONG型に変換した
+		ものが格納されます。
+	@param [in] aggregationResult
+		取得対象の@ref GSAggregationResult
+	@param [out] value
+		集計値を格納するための変数へのポインタ値
+	@param [out] assigned
+		期待の型の値を取得できたかどうかを格納するための変数へのポインタ値。
+		@c NULL が指定された場合、取得できたかどうかの情報は格納されません
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を
+		返します。
+		- @c assigned 以外の引数に@c NULL が指定された場合
+	@since 3.5
+
+	@EN
+	@brief Gets the aggregate value of numeric type as LONG (@c int64_t).
+	@par
+		If a non-numeric value is saved, the @c assigned argument contains
+		@ref GS_FALSE. If a numeric value other than LONG is held、a converted
+		LONG type will be stored.
+	@param [in] aggregationResult
+		Target acquisition of @ref GSAggregationResult
+	@param [out] value
+		The pointer value to the variable for storing the aggregate value
+	@param [out] assigned
+		A pointer value to a variable for storing whether or not the expected
+		type value can be acquired. When @c NULL is specified, the information
+		on whether or not it was acquired is not stored.
+	@return Return code of the execution result. It returns the value except
+		@ref GS_RESULT_OK in the following cases.
+		- If @c NULL is specified as an argument other than "assigned"
+	@since 3.5
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsLong(
+		GSAggregationResult *aggregationResult, int64_t *value,
+		GSBool *assigned);
+
+/*!
+	@JP
+	@brief 数値型の集計値をDOUBLE型(@c double)として取得します。
+	@par
+		数値型以外の値を保持している場合、@c assigned 引数には@ref GS_FALSE
+		が格納されます。DOUBLE型以外の数値を保持している場合、DOUBLE型に変換した
+		ものが格納されます。
+	@param [in] aggregationResult
+		取得対象の@ref GSAggregationResult
+	@param [out] value
+		集計値を格納するための変数へのポインタ値
+	@param [out] assigned
+		期待の型の値を取得できたかどうかを格納するための変数へのポインタ値。
+		@c NULL が指定された場合、取得できたかどうかの情報は格納されません
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を
+		返します。
+		- @c assigned 以外の引数に@c NULL が指定された場合
+	@since 3.5
+
+	@EN
+	@brief Gets the aggregate value of numeric type as DOUBLE (@c double).
+	@par
+		If a non-numeric value is saved, the @c assigned argument contains
+		@ref GS_FALSE. If a numeric value other than DOUBLE is held、a converted
+		DOUBLE type will be stored.
+	@param [in] aggregationResult
+		Target acquisition of @ref GSAggregationResult
+	@param [out] value
+		The pointer value to the variable for storing the aggregate value
+	@param [out] assigned
+		A pointer value to a variable for storing whether or not the expected
+		type value can be acquired. When @c NULL is specified, the information
+		on whether or not it was acquired is not stored.
+	@return Return code of the execution result. It returns the value except
+		@ref GS_RESULT_OK in the following cases.
+		- If @c NULL is specified as an argument other than "assigned"
+	@since 3.5
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsDouble(
+		GSAggregationResult *aggregationResult, double *value,
+		GSBool *assigned);
+
+/*!
+	@JP
+	@brief 時刻型の集計値をTIMESTAMP型(@ref GSTimestamp)で取得します。
+	@par
+		TIMESTAMP型以外の値を保持している場合、@c assigned 引数には
+		@ref GS_FALSE が格納されます。
+	@param [in] aggregationResult
+		取得対象の@ref GSAggregationResult
+	@param [out] value
+		集計値を格納するための変数へのポインタ値
+	@param [out] assigned
+		期待の型の値を取得できたかどうかを格納するための変数へのポインタ値。
+		@c NULL が指定された場合、取得できたかどうかの情報は格納されません
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を
+		返します。
+		- @c assigned 以外の引数に@c NULL が指定された場合
+	@since 3.5
+
+	@EN
+	@brief Gets the aggregate value of numeric type as TIMESTAMP (@c GSTimestamp).
+	@par
+		If a non TIMESTAMP value is saved, the @c assigned argument contains
+		@ref GS_FALSE.
+	@param [in] aggregationResult
+		Target acquisition of @ref GSAggregationResult
+	@param [out] value
+		The pointer value to the variable for storing the aggregate value
+	@param [out] assigned
+		A pointer value to a variable for storing whether or not the expected
+		type value can be acquired. When @c NULL is specified, the information
+		on whether or not it was acquired is not stored.
+	@return Return code of the execution result. It returns the value except
+		@ref GS_RESULT_OK in the following cases.
+		- If @c NULL is specified as an argument other than "assigned"
+	@since 3.5
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsTimestamp(
+		GSAggregationResult *aggregationResult, GSTimestamp *value,
+		GSBool *assigned);
+
+#endif	// GS_COMPATIBILITY_SUPPORT_3_5
+
+//
+// RowKeyPredicate API
+//
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 
@@ -13060,7 +14198,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateKeyType(
 	@attention
 		In order to allocate the area for storing the value, it might use a
 		temporary memory area which is managed by @ref GSGridStore instance
-		related to specified @ref GSRowKeyPredicate .
+		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -13116,7 +14254,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyGeneral(
 	@attention
 		In order to allocate the area for storing the value, it might use a
 		temporary memory area which is managed by @ref GSGridStore instance
-		related to specified @ref GSRowKeyPredicate .
+		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -13174,7 +14312,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsString(
 	@attention
 		In order to allocate the area for storing the value, it might use a
 		temporary memory area which is managed by @ref GSGridStore instance
-		related to specified @ref GSRowKeyPredicate .
+		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -13232,7 +14370,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsInteger(
 	@attention
 		In order to allocate the area for storing the value, it might use a
 		temporary memory area which is managed by @ref GSGridStore instance
-		related to specified @ref GSRowKeyPredicate .
+		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -13290,7 +14428,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsLong(
 	@attention
 		In order to allocate the area for storing the value, it might use a
 		temporary memory area which is managed by @ref GSGridStore instance
-		related to specified @ref GSRowKeyPredicate .
+		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -13347,7 +14485,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsTimestamp(
 	@attention
 		In order to allocate the area for storing the value, it might use a
 		temporary memory area which is managed by @ref GSGridStore instance
-		related to specified @ref GSRowKeyPredicate .
+		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -13403,7 +14541,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyGeneral(
 	@attention
 		In order to allocate the area for storing the value, it might use a
 		temporary memory area which is managed by @ref GSGridStore instance
-		related to specified @ref GSRowKeyPredicate .
+		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -13461,7 +14599,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsString(
 	@attention
 		In order to allocate the area for storing the value, it might use a
 		temporary memory area which is managed by @ref GSGridStore instance
-		related to specified @ref GSRowKeyPredicate .
+		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -13519,7 +14657,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsInteger(
 	@attention
 		In order to allocate the area for storing the value, it might use a
 		temporary memory area which is managed by @ref GSGridStore instance
-		related to specified @ref GSRowKeyPredicate .
+		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -13577,7 +14715,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsLong(
 	@attention
 		In order to allocate the area for storing the value, it might use a
 		temporary memory area which is managed by @ref GSGridStore instance
-		related to specified @ref GSRowKeyPredicate .
+		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -13640,7 +14778,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsTimestamp(
 	@attention
 		In order to allocate the area for storing the value and its column, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRowKeyPredicate .
+		instance related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -13710,7 +14848,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysGeneral(
 	@attention
 		In order to allocate the area for storing the value and its column, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRowKeyPredicate .
+		instance related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -13783,7 +14921,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsString(
 	@attention
 		In order to allocate the area for storing the value and its column, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRowKeyPredicate .
+		instance related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -13855,7 +14993,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsInteger(
 	@attention
 		In order to allocate the area for storing the value and its column, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRowKeyPredicate .
+		instance related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -13927,7 +15065,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsLong(
 	@attention
 		In order to allocate the area for storing the value and its column, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSRowKeyPredicate .
+		instance related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -14006,7 +15144,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsTimestamp(
 	@param [in] predicate
 		@ref GSRowKeyPredicate to be processed
 	@param [in] startKey
-		the value of the Row key as the start position. If @c NULL , the setting
+		the value of the Row key as the start position. If @c NULL, the setting
 		is cancelled
 	@param [in] keyType
 		the type of the Row key as the start position
@@ -14055,7 +15193,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyGeneral(
 	@param [in] predicate
 		@ref GSRowKeyPredicate to be processed
 	@param [in] startKey
-		the value of the Row key as the start position. If @c NULL , the setting
+		the value of the Row key as the start position. If @c NULL, the setting
 		is cancelled
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
@@ -14102,7 +15240,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByString(
 	@param [in] predicate
 		@ref GSRowKeyPredicate to be processed
 	@param [in] startKey
-		the value of the Row key as the start position. If @c NULL , the setting
+		the value of the Row key as the start position. If @c NULL, the setting
 		is cancelled
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
@@ -14149,7 +15287,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByInteger(
 	@param [in] predicate
 		@ref GSRowKeyPredicate to be processed
 	@param [in] startKey
-		the value of the Row key as the start position. If @c NULL , the setting
+		the value of the Row key as the start position. If @c NULL, the setting
 		is cancelled
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
@@ -14196,7 +15334,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByLong(
 	@param [in] predicate
 		@ref GSRowKeyPredicate to be processed
 	@param [in] startKey
-		the value of the Row key as the start position. If @c NULL , the setting
+		the value of the Row key as the start position. If @c NULL, the setting
 		is cancelled
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
@@ -14254,7 +15392,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByTimestamp(
 	@param [in] predicate
 		@ref GSRowKeyPredicate to be processed
 	@param [in] finishKey
-		the value of the Row key as the end position. If @c NULL , the setting
+		the value of the Row key as the end position. If @c NULL, the setting
 		is cancelled
 	@param [in] keyType
 		the type of the Row key as the end position
@@ -14303,7 +15441,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyGeneral(
 	@param [in] predicate
 		@ref GSRowKeyPredicate to be processed
 	@param [in] finishKey
-		the value of the Row key as the end position. If @c NULL , the setting
+		the value of the Row key as the end position. If @c NULL, the setting
 		is cancelled
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
@@ -14350,7 +15488,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByString(
 	@param [in] predicate
 		@ref GSRowKeyPredicate to be processed
 	@param [in] finishKey
-		the value of the Row key as the end position. If @c NULL , the setting
+		the value of the Row key as the end position. If @c NULL, the setting
 		is cancelled
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
@@ -14397,7 +15535,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByInteger(
 	@param [in] predicate
 		@ref GSRowKeyPredicate to be processed
 	@param [in] finishKey
-		the value of the Row key as the end position. If @c NULL , the setting
+		the value of the Row key as the end position. If @c NULL, the setting
 		is cancelled
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
@@ -14444,7 +15582,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByLong(
 	@param [in] predicate
 		@ref GSRowKeyPredicate to be processed
 	@param [in] finishKey
-		the value of the Row key as the end position. If @c NULL , the setting
+		the value of the Row key as the end position. If @c NULL, the setting
 		is cancelled
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
@@ -14499,7 +15637,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByTimestamp(
 	@param [in] key
 		the value of Row key to be added as one of the elements in the
 		individual condition.
-		the value of the Row key as the end position. If @c NULL , the setting
+		the value of the Row key as the end position. If @c NULL, the setting
 		is cancelled
 	@param [in] keyType
 		the type of the Row key as the end position
@@ -14545,7 +15683,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyGeneral(
 	@param [in] key
 		the value of Row key to be added as one of the elements in the
 		individual condition.
-		the value of the Row key as the end position. If @c NULL , the setting
+		the value of the Row key as the end position. If @c NULL, the setting
 		is cancelled
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
@@ -14589,7 +15727,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByString(
 	@param [in] key
 		the value of Row key to be added as one of the elements in the
 		individual condition.
-		the value of the Row key as the end position. If @c NULL , the setting
+		the value of the Row key as the end position. If @c NULL, the setting
 		is cancelled
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
@@ -14633,7 +15771,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByInteger(
 	@param [in] key
 		the value of Row key to be added as one of the elements in the
 		individual condition.
-		the value of the Row key as the end position. If @c NULL , the setting
+		the value of the Row key as the end position. If @c NULL, the setting
 		is cancelled
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
@@ -14677,7 +15815,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByLong(
 	@param [in] key
 		the value of Row key to be added as one of the elements in the
 		individual condition.
-		the value of the Row key as the end position. If @c NULL , the setting
+		the value of the Row key as the end position. If @c NULL, the setting
 		is cancelled
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
@@ -14692,8 +15830,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByLong(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByTimestamp(
 		GSRowKeyPredicate *predicate, GSTimestamp key);
 
-#endif	
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
 
+//
+// PartitionController API
+//
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 
@@ -14894,7 +16035,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionContainerCount(
 	@attention
 		In order to allocate the area for storing the list of Container name, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSPartitionController .
+		instance related to specified @ref GSPartitionController.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -14908,7 +16049,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionContainerCount(
 		the start position of the acquisition range. A value must be greater
 		than or equal to @c 0
 	@param [in] limit
-		the upper limit of the number of cases acquired. If @c NULL , it is
+		the upper limit of the number of cases acquired. If @c NULL, it is
 		considered to be no upper limit
 	@param [out] nameList
 		the pointer to a pointer variable to store the array list of Container
@@ -14983,7 +16124,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionContainerNames(
 	@attention
 		In order to allocate the area for storing the list of address, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSPartitionController .
+		instance related to specified @ref GSPartitionController.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -15057,11 +16198,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionHosts(
 		partition.
 	@par
 		An owner node is a node that is always selected when @c "IMMEDIATE" is
-		specified as a consistency level in @ref gsGetGridStore .
+		specified as a consistency level in @ref gsGetGridStore.
 	@attention
 		In order to allocate the area for storing the address, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSPartitionController .
+		instance related to specified @ref GSPartitionController.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -15137,14 +16278,14 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionOwnerHost(
 	@par
 		A backup node is a node that is selected with a higher priority when
 		@c "EVENTUAL" is specified as a consistency level in
-		@ref gsGetGridStore .
+		@ref gsGetGridStore.
 	@par
 		The list will be compiled in no particular order. No duplicate address
 		will be included.
 	@attention
 		In order to allocate the area for storing the list of address, it
 		might use a temporary memory area which is managed by @ref GSGridStore
-		instance related to specified @ref GSPartitionController .
+		instance related to specified @ref GSPartitionController.
 		This area is valid until this function or similar functions which use a
 		temporary memory area managed by specified @ref GSGridStore instance or
 		by related resources is executed again.
@@ -15217,7 +16358,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionBackupHosts(
 		the partition index, from @c 0 to the number of partitions minus one
 	@param [in] host
 		the address of the host to be prioritized in the selection. IP address
-		(IPV4 only) is also available. For @c NULL , the setting is cancelled
+		(IPV4 only) is also available. For @c NULL, the setting is cancelled
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
 		- if @c NULL is specified to @c controller
@@ -15301,8 +16442,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionIndexOfContainer(
 		GSPartitionController *controller, const GSChar *containerName,
 		int32_t *partitionIndex);
 
-#endif	
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
 
+//
+// Timestamp API
+//
 
 /*!
 	@JP
@@ -15394,12 +16538,12 @@ GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddTime(
 	@param [out] strBuf
 		the output string buffer.
 		The string contains the termination character within a range that does
-		not exceed the @c bufSize .
+		not exceed the @c bufSize.
 		If @c bufSize is greater than or equal to @c 1 and less than the size
 		required to output, the termination character is set to the last
 		position in the buffer range and the string is output as much as
 		possible to the rest of the region.
-		If @c strBuf is @c NULL or @c bufSize is @c 0 , no string is output.
+		If @c strBuf is @c NULL or @c bufSize is @c 0, no string is output.
 	@param [in] bufSize
 		the size of output string buffer in bytes, including the termination
 		character
@@ -15458,6 +16602,9 @@ GS_DLL_PUBLIC size_t GS_API_CALL gsFormatTime(
 GS_DLL_PUBLIC GSBool GS_API_CALL gsParseTime(
 		const GSChar *str, GSTimestamp *timestamp);
 
+//
+// Error handling API
+//
 
 /*!
 	@JP
@@ -15579,7 +16726,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetErrorCode(
 		The string buffer to store the error message.
 		If @c NULL is specified, it is unable to get a valid result.
 		If this is not @c NULL and if it is unable to get a valid result in a
-		different cause and if a positive value is specified to @c bufSize ,
+		different cause and if a positive value is specified to @c bufSize,
 		then the empty string is stored.
 	@param [in] bufSize
 		The number of characters in the string buffer to store the error
@@ -15644,7 +16791,7 @@ GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorMessage(
 		The string buffer to store the error location information.
 		If @c NULL is specified, it is unable to get a valid result.
 		If this is not @c NULL and if it is unable to get a valid result in a
-		different cause and if a positive value is specified to @c bufSize ,
+		different cause and if a positive value is specified to @c bufSize,
 		then the empty string is stored.
 	@param [in] bufSize
 		The number of characters in the string buffer to store the error
@@ -15730,8 +16877,11 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
  */
 GS_DLL_PUBLIC GSBool GS_API_CALL gsIsTimeoutError(GSResult result);
 
-#endif	
+#endif	// GS_COMPATIBILITY_SUPPORT_1_5
 
+//
+// Experimental API
+//
 
 #if GS_EXPERIMENTAL_TOOL_ENABLED
 typedef struct GSExperimentalRowIdTag {
@@ -15787,7 +16937,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 		対応関係の定義名。関数名の一部として使用されます。
 	@param entries
 		構造体メンバとカラム定義との対応関係示す以下の定義の列を、
-		「@c , 」で区切らず順に並べます。
+		「,」で区切らず順に並べます。
 		- @ref GS_STRUCT_BINDING_NAMED_ELEMENT
 		- @ref GS_STRUCT_BINDING_NAMED_KEY
 		- @ref GS_STRUCT_BINDING_NAMED_ARRAY
@@ -15808,7 +16958,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 	@param entries
 		the columns of the following definitions showing correspondence between
 		the structure members and the column definition are arranged without
-		separating by a "@c , ".
+		separating by a ",".
 		- @ref GS_STRUCT_BINDING_NAMED_ELEMENT
 		- @ref GS_STRUCT_BINDING_NAMED_KEY
 		- @ref GS_STRUCT_BINDING_NAMED_ARRAY
@@ -15858,7 +17008,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 	member, sizeMember, elementType, options) \
 	GS_STRUCT_BINDING_CUSTOM_NAMED_ARRAY( \
 		#member, member, sizeMember, elementType, options)
-#endif	
+#endif	// GS_INTERNAL_DEFINITION_VISIBLE
 
 /*!
 	@JP
@@ -16050,4 +17200,4 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 }
 #endif
 
-#endif	
+#endif	// not GRIDSTORE_H_
