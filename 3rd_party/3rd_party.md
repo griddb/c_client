@@ -1,4 +1,4 @@
-This product contains third-party libyraries as below.
+This product contains third-party libraries as below.
 
 This product contains software from The MIT License (http://opensource.org/licenses/MIT) 
 (libebb).
