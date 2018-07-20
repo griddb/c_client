@@ -85,6 +85,7 @@ const int IOPollEvent::TYPE_ERROR = POLLERR;
 const int IOPollEvent::TYPE_READ_WRITE = (TYPE_READ | TYPE_WRITE);
 
 
+
 IOPollHandler::~IOPollHandler() {
 }
 
@@ -101,7 +102,8 @@ struct IOPollBase::InterruptionData : public IOPollHandler {
 
 	void interrupt();
 
-	Atomic<bool> interrupting_;
+	bool interrupting_;
+
 	Socket socketPair[2];
 };
 
@@ -153,7 +155,8 @@ File& IOPollBase::InterruptionData::getFile() {
 
 void IOPollBase::InterruptionData::interrupt() {
 	bool expected = false;
-	if (interrupting_.compareExchange(expected, true)) {
+	expected = true;
+	{ 
 #ifdef _WIN32
 		uint8_t buf[1] = { 0 };
 		socketPair[0].send(buf, sizeof(buf));

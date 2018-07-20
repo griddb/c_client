@@ -92,7 +92,7 @@ int stricmp(const char *x, const char *y) {
 	return stricmp(x, y);
 #endif
 #else
-#error 0
+#error
 #endif 
 }
 
@@ -1113,6 +1113,7 @@ std::ostream& StackTraceUtils::getStackTrace(std::ostream &stream) {
 
 	return stream;
 }
+
 }	
 
 

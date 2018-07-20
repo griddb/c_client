@@ -51,9 +51,6 @@
 #define UTIL_TYPE_H_
 
 
-#ifndef UTIL_MINOR_MODULE_ENABLED
-#define UTIL_MINOR_MODULE_ENABLED 0
-#endif
 
 #ifndef UTIL_FAILURE_SIMULATION_ENABLED
 #define UTIL_FAILURE_SIMULATION_ENABLED 0
@@ -83,7 +80,7 @@
 #endif
 
 #if defined(_MSC_VER) && defined(_M_X64) && !defined(_WIN64)
-#error 0
+#error
 #endif
 
 #ifdef _WIN32
@@ -356,7 +353,7 @@ typedef std::basic_string< char8_t, std::char_traits<char8_t> > NormalString;
 #elif defined(__GNUC__)
 #define UTIL_NORETURN(func) func __attribute__((noreturn))
 #else
-#error 0
+#error
 #endif
 
 namespace util {
