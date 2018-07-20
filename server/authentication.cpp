@@ -24,6 +24,7 @@
 #include "uuid_utils.h"
 
 
+
 const Auth::Mode Auth::Challenge::DEFAULT_MODE = Auth::MODE_CHALLENGE;
 
 const char8_t *const Auth::Challenge::DEFAULT_METHOD = "POST";
@@ -176,6 +177,11 @@ bool Auth::Challenge::getResponse(
 		util::ArrayByteInStream &in, const Allocator &alloc, Mode &mode,
 		Challenge &challenge) {
 	const Mode respMode = getMode(in);
+	if (respMode != MODE_NONE && !challengeEnabled_) {
+		GS_COMMON_THROW_USER_ERROR(
+				GS_ERROR_AUTH_INTERNAL_ILLEGAL_MESSAGE, "");
+	}
+
 	if (respMode != mode) {
 		if (respMode == MODE_BASIC) {
 			mode = MODE_BASIC;
@@ -510,7 +516,7 @@ Auth::Mode Auth::Challenge::getDefaultMode() {
 }
 
 Auth::Mode Auth::Challenge::getMode(util::ArrayByteInStream &in) {
-	if (challengeEnabled_ && in.base().remaining() > 0) {
+	if (in.base().remaining() > 0) {
 		int8_t base;
 		in >> base;
 		return static_cast<Mode>(base);

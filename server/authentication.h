@@ -220,11 +220,12 @@ template<typename T> void Auth::Challenge::putResponse(
 }
 
 template<typename T> bool Auth::Challenge::putMode(T &out, Mode mode) {
+	out << static_cast<int8_t>(mode);
+
 	if (mode == MODE_NONE) {
 		return false;
 	}
 
-	out << static_cast<int8_t>(mode);
 	return true;
 }
 
