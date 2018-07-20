@@ -1,5 +1,12 @@
 This product contains third-party libraries as below.
 
+This product contains software from Apache License, Version 2.0(http://www.apache.org/licenses/LICENSE-2.0)
+(omaha).
+See below for the copyrights and terms of use/disclaimers of the respective software. 
+                #  
+                3rd_party/Apache_License-2.0.txt  
+                3rd_party/omaha
+
 This product contains software from The MIT License (http://opensource.org/licenses/MIT) 
 (libebb).
 See below for the copyrights and terms of use/disclaimers of the respective software. 
