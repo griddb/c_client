@@ -18,9 +18,10 @@
 	@file
 	@brief Definition of Geometry encoder/decoder
 */
+#ifndef GEOMETRY_CODER_H_
+#define GEOMETRY_CODER_H_
 
 #include "util/type.h"
-#include <assert.h> 
 
 
 class GeometryCoder {
@@ -50,3 +51,5 @@ public:
 	virtual ~TextHandler();
 	virtual void accept(const char8_t *text) = 0;
 };
+
+#endif	
