@@ -15114,6 +15114,8 @@ GSResult GSRowTag::setPrimitiveField(GSRow *row, int32_t columnId,
 
 		FieldSetter setter(generalValue, expectedType);
 		RowMapper::invokeTypedOperation(*row, setter, entry);
+
+		row->setNullDirect(columnId, entry, false, false);
 	}
 	catch (...) {
 		return GSResourceHeader::setCurrentException(row);
@@ -15142,6 +15144,8 @@ GSResult GSRowTag::setArrayField(GSRow *row, int32_t columnId,
 
 		FieldSetter setter(generalValue, expectedType);
 		RowMapper::invokeTypedOperation(*row, setter, entry);
+
+		row->setNullDirect(columnId, entry, false, false);
 	}
 	catch (...) {
 		return GSResourceHeader::setCurrentException(row);
