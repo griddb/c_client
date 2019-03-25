@@ -41,6 +41,7 @@ GridDB server need to be started in advance.
       <GridDB cluster name> <GridDB user> <GridDB password>
       -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
 
+Note: GEOMETRY type is not available for C Client(Community Edition).  
 Note: The gridstore.h file on client/c/include folder is used for building.  
 Note: There are some samples on client/c/sample folder.
 

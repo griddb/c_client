@@ -39,6 +39,7 @@ GridDB CクライアントはC言語用のインタフェースを提供します。
       <GridDB cluster name> <GridDB user> <GridDB password>
       -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
 
+※Cクライアント(Community Edittion)では空間型は利用できません。  
 ※client/c/includeフォルダの下に、ビルドに使われるgridstore.hファイルがあります。  
 ※client/c/sampleフォルダの下に、サンプルプログラムがあります。
 
