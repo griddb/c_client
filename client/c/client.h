@@ -511,6 +511,19 @@ public:
 	static const GSType NULLABLE_MASK =
 			~static_cast<GSType>((1U << (CHAR_BIT - 1)) - 1);
 
+	struct TypeOptionMask {
+		static const GSTypeOption MASK_NULLABLE =
+				GS_TYPE_OPTION_NULLABLE | GS_TYPE_OPTION_NOT_NULL;
+		static const GSTypeOption MASK_DEFAULT_VALUE =
+				GS_TYPE_OPTION_DEFAULT_VALUE_NULL |
+				GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL;
+
+		static const GSTypeOption MASK_GENERAL_SUPPORTED =
+				MASK_NULLABLE | MASK_DEFAULT_VALUE;
+		static const GSTypeOption MASK_BINDING_SUPPORTED =
+				GS_TYPE_OPTION_KEY | MASK_GENERAL_SUPPORTED;
+	};
+
 	struct Tool;
 	struct KeyStorage;
 	struct Config;
@@ -584,6 +597,7 @@ public:
 	GSType getElementType(int32_t columnId) const;
 	bool isArray(int32_t columnId) const;
 	bool hasAnyTypeColumn() const;
+	bool isDefaultValueSpecified() const;
 
 	static GSBinding importSchema(
 			ArrayByteInStream &in, VarDataPool *varDataPool,
@@ -719,12 +733,18 @@ public:
 	static GSType toNullable(GSType type, bool nullable = true);
 	static GSType toNonNullable(GSType type);
 
+	static bool isOptionNullable(GSTypeOption options);
+	static bool isOptionInitialValueNull(GSTypeOption options);
+
 	static GSTypeOption filterTypeOptions(
 			const GSBindingEntry &entry,
 			bool anyTypeAllowed, bool nullableAllowed);
-	static bool filterNullable(
+	static GSTypeOption filterNullable(
 			GSTypeOption options, GSTypeOption nullableDefault,
 			bool nullableAllowed, const GSChar *columnName);
+	static GSTypeOption filterInitialValueNull(
+			GSTypeOption options, bool nullable,
+			const GSChar *columnName);
 
 	static const ContainerInfoRef<true> toInfoRef(
 			const GSContainerInfo *info, const ClientVersion &version) throw();
@@ -2583,10 +2603,12 @@ public:
 			int32_t protocolVersion);
 
 private:
-	typedef util::NormalSortedList<void*> ResourceList;
+	typedef std::set<void*> ResourceSet;
 	typedef NodeConnection::OptionalRequestSource OptionalRequestSource;
 	typedef GridStoreChannel::ContainerCache ContainerCache;
 	typedef std::multimap<ContainerKey, GSContainer*> ContainerMap;
+
+	struct ContainerPropertiesOption;
 
 	struct MultiQueryStatement {
 		explicit MultiQueryStatement(GridStoreChannel::Context &context);
@@ -2697,6 +2719,9 @@ private:
 			XArrayByteOutStream &reqOut, GridStoreChannel::Context &context,
 			bool forCreationDDL, const OptionalRequestSource *source = NULL);
 
+	static ContainerPropertiesOption containerPropertiesToOption(
+			const RowMapper &mapper);
+
 	static void exportContainerProperties(
 			XArrayByteOutStream &out, const GSContainerType type,
 			const GSContainerInfo *info, const RowMapper &mapper);
@@ -2764,11 +2789,14 @@ private:
 	util::NormalXArray<uint8_t> &req_;
 	util::NormalXArray<uint8_t> &resp_;
 	RowMapper::VarDataPool varDataPool_;
-	ResourceList resourceList_;
+	ResourceSet activeResources_;
 	ContainerMap containerMap_;
 	ErrorStack stack_;
 };
 
+struct GSGridStoreTag::ContainerPropertiesOption {
+	const OptionalRequestSource* get() const;
+};
 
 struct GSContainerTag {
 public:
@@ -2855,12 +2883,12 @@ public:
 			GridStoreChannel::ConnectionId &connectionId);
 
 	void removeRow(
-			const RowMapper &resolvedMapper,
-			int64_t transactionId, int64_t rowId, const void *key);
+			const RowMapper &resolvedMapper, int64_t transactionId,
+			const bool *transactionStarted, int64_t rowId, const void *key);
 	void updateRow(
-			const RowMapper &resolvedMapper,
-			int64_t transactionId, int64_t rowId,
-			const void *key, const void *rowObj);
+			const RowMapper &resolvedMapper, int64_t transactionId,
+			const bool *transactionStarted, int64_t rowId, const void *key,
+			const void *rowObj);
 
 	void abort();
 	void commit();
@@ -2910,7 +2938,7 @@ public:
 	GSRow* createRow();
 
 private:
-	typedef std::vector<void*> ResourceList;
+	typedef std::set<void*> ResourceSet;
 	typedef NodeConnection::OptionalRequestSource OptionalRequestSource;
 	typedef GridStoreChannel::ContainerCache ContainerCache;
 
@@ -3051,7 +3079,8 @@ private:
 	bool isResultRowIdIncluded(QueryResultType type);
 
 	void checkTransactionPreserved(
-			bool forUpdate, int64_t transactionId, bool updatable);
+			bool forUpdate, int64_t transactionId,
+			const bool *transactionStarted, bool updatable);
 
 	bool filterIndexInfo(
 			const GSIndexInfo &info, bool forCreation,
@@ -3072,7 +3101,7 @@ private:
 	size_t referenceCount_;
 
 	GSGridStore *store_;
-	ResourceList activeResources_;
+	ResourceSet activeResources_;
 
 	RowMapper::Reference mapper_;
 	const int32_t schemaVerId_;
@@ -3155,7 +3184,7 @@ struct GSContainerTag::QueryParameters {
 	bool isForUpdate(bool forUpdate) const;
 
 	QueryParameters inherit(
-			bool forUpdate, int64_t transactionId,
+			bool forUpdate, int64_t transactionId, bool transactionStarted,
 			const PartialExecutionStatus &executionStatus) const;
 
 	Statement::Id statement_;
@@ -3167,6 +3196,7 @@ struct GSContainerTag::QueryParameters {
 	bool executionPartial_;
 	bool forUpdate_;
 	bool transactionIdSpecified_;
+	bool initialTransactionStarted_;
 	int64_t initialTransactionId_;
 };
 
@@ -3264,6 +3294,7 @@ public:
 
 	GSContainer* getContainer() const;
 	int64_t getTransactionId() const;
+	bool isTransactionStarted() const;
 	int64_t getRowId() const;
 	const void* getRowKey() const;
 

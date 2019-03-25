@@ -12,7 +12,7 @@ Library building and program execution are checked in the environment below.
 
     OS:             CentOS 7.3(x64)
     GCC:            Version 4.8.5
-    GridDB server:  Version 4.0 CE(Community Edition)
+    GridDB server:  Version 4.1 CE(Community Edition)
 
 ## Quick start
 

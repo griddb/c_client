@@ -1,5 +1,5 @@
 ﻿/*------------------------------------------------------------------*/
-// Copyright (c) 2017 TOSHIBA Digital Solutions Corporation
+// Copyright (c) 2017 TOSHIBA Digital Solutions Corporation. All Rights Reserved.
 /*------------------------------------------------------------------*/
 
 
@@ -23,7 +23,7 @@
 
 #ifndef GS_CLIENT_VERSION_MINOR
 
-#define GS_CLIENT_VERSION_MINOR 0
+#define GS_CLIENT_VERSION_MINOR 1
 #endif
 
 
@@ -159,6 +159,14 @@ extern "C" {
 #define GS_COMPATIBILITY_SUPPORT_4_0 1
 #else
 #define GS_COMPATIBILITY_SUPPORT_4_0 0
+#endif
+
+#if !defined(GS_COMPATIBILITY_SUPPORT_4_1) && \
+	(GS_CLIENT_VERSION_MAJOR > 4 || \
+	(GS_CLIENT_VERSION_MAJOR == 4 && GS_CLIENT_VERSION_MINOR >= 1))
+#define GS_COMPATIBILITY_SUPPORT_4_1 1
+#else
+#define GS_COMPATIBILITY_SUPPORT_4_1 0
 #endif
 
 #endif	
@@ -557,7 +565,16 @@ enum GSTypeOptionTag {
 	
 	GS_TYPE_OPTION_NOT_NULL = 1 << 2,
 
-#endif
+#if GS_COMPATIBILITY_SUPPORT_4_1
+	
+	GS_TYPE_OPTION_DEFAULT_VALUE_NULL = 1 << 3,
+
+	
+	GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL = 1 << 4
+
+#endif	
+
+#endif	
 
 };
 

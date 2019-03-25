@@ -1,5 +1,5 @@
 ﻿/*------------------------------------------------------------------*/
-// Copyright (c) 2017 TOSHIBA Digital Solutions Corporation
+// Copyright (c) 2017 TOSHIBA Digital Solutions Corporation. All Rights Reserved.
 /*------------------------------------------------------------------*/
 /*!
 	@JP
@@ -100,7 +100,7 @@
 
 	@ENDL
 */
-#define GS_CLIENT_VERSION_MINOR 0
+#define GS_CLIENT_VERSION_MINOR 1
 #endif
 
 // C API
@@ -236,6 +236,14 @@ extern "C" {
 #define GS_COMPATIBILITY_SUPPORT_4_0 1
 #else
 #define GS_COMPATIBILITY_SUPPORT_4_0 0
+#endif
+
+#if !defined(GS_COMPATIBILITY_SUPPORT_4_1) && \
+	(GS_CLIENT_VERSION_MAJOR > 4 || \
+	(GS_CLIENT_VERSION_MAJOR == 4 && GS_CLIENT_VERSION_MINOR >= 1))
+#define GS_COMPATIBILITY_SUPPORT_4_1 1
+#else
+#define GS_COMPATIBILITY_SUPPORT_4_1 0
 #endif
 
 #endif	// GS_INTERNAL_DEFINITION_VISIBLE
@@ -1186,7 +1194,7 @@ enum GSFetchOptionTag {
 			部分実行モードを有効にした場合に@ref GSRowSet に対して使用
 			できない操作や特有の挙動については、個別の定義を参照してください。
 		@par
-			サポートされる設定値の型は、@ref GSBool のみです。
+			サポートされる設定値の型は、BOOLのみです。
 			部分実行モードを有効にするには、@ref GS_TRUE と一致する値を
 			指定します。現バージョンでは、未設定の場合には部分実行モードを有効に
 			しません。
@@ -1234,7 +1242,7 @@ enum GSFetchOptionTag {
 			individual definitions.
 		@par
 			The only supported type for this setting is
-			@ref GSBool. The value matching to @ref GS_TRUE
+			BOOL. The value matching to @ref GS_TRUE
 			must be specified to activate
 			this mode. In this version, the partial
 			execution mode is not effective unless setting
@@ -2386,9 +2394,11 @@ typedef GSEnum GSType;
 /*!
 	@JP
 	@brief カラムに関するオプション設定を示します。
+	@see GSTypeOption
 
 	@EN
-	@brief Indicates optional settings for Column
+	@brief Indicates optional settings for Column.
+	@see GSTypeOption
 
 	@ENDL
 */
@@ -2426,7 +2436,36 @@ enum GSTypeOptionTag {
 	*/
 	GS_TYPE_OPTION_NOT_NULL = 1 << 2,
 
-#endif
+#if GS_COMPATIBILITY_SUPPORT_4_1
+	/*!
+		@JP
+		@brief 初期値としてNULLを使用するカラムであることを示します。
+		@since 4.1
+
+		@EN
+		@brief Indicates use of NULL for the initial value.
+		@since 4.1
+
+		@ENDL
+	*/
+	GS_TYPE_OPTION_DEFAULT_VALUE_NULL = 1 << 3,
+
+	/*!
+		@JP
+		@brief 初期値としてNULLを使用しないカラムであることを示します。
+		@since 4.1
+
+		@EN
+		@brief Indicates no use of NULL for the initial value.
+		@since 4.1
+
+		@ENDL
+	*/
+	GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL = 1 << 4
+
+#endif	// GS_COMPATIBILITY_SUPPORT_4_1
+
+#endif	// GS_COMPATIBILITY_SUPPORT_3_5
 
 };
 
@@ -2434,21 +2473,56 @@ enum GSTypeOptionTag {
 	@JP
 	@brief カラムに関するオプション設定を示すフラグ値のビット和です。
 	@par
-		次のフラグ値を共に含めた場合、矛盾したオプション設定であると
-		みなされます。また、いずれも含まれていない場合、NOT NULL制約に
-		関して未設定状態であるとみなされます。
+		ある設定項目について、対応するフラグ値が複数含まれていた場合に、
+		オプション設定が矛盾しているとみなされるものが存在します。
+		それらの設定項目のうち、対応するフラグ値が一つも含まれていないものは、
+		未設定状態であるとみなされます。この制約に該当する設定項目と
+		フラグ値との対応は次の通りです。
+		<table>
+		<tr><th>設定項目</th><th>フラグ値</th></tr>
+		<tr>
+		<td>NOT NULL制約</td>
+		<td>
 		- @ref GS_TYPE_OPTION_NULLABLE
 		- @ref GS_TYPE_OPTION_NOT_NULL
+		</td>
+		</tr>
+		<tr>
+		<td>初期値でのNULL使用有無</td>
+		<td>
+		- @ref GS_TYPE_OPTION_DEFAULT_VALUE_NULL
+		- @ref GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL
+		</td>
+		</tr>
+		</table>
 	@see GSTypeOptionTag
 
 	@EN
-	@brief Sum of bits of value of the flag indicating the option setting for Column.
+	@brief Sum of bits of value of the flag indicating the option setting
+		for Column.
 	@par
-		When both of the following flag values are included, the option setting
-		is considered inconsistent. When neither are included, the NOT NULL
-		constraint is considered to be in an unconfigured state.
+		There are setting items that when more than one flag values for a
+		setting item are included, the option setting is considered
+		inconsistent. A setting item that neither of corresponding flag values
+		is included is considered to be in an unconfigured state. Following
+		flag values related to the setting items have those restrictions.
+		<table>
+		<tr><th>Setting item</th><th>Flag values</th></tr>
+		<tr>
+		<td>NOT NULL constraint state</td>
+		<td>
 		- @ref GS_TYPE_OPTION_NULLABLE
 		- @ref GS_TYPE_OPTION_NOT_NULL
+		</td>
+		</tr>
+		<tr>
+		<td>Whether to use of NULL for the initial value</td>
+		<td>
+		- @ref GS_TYPE_OPTION_DEFAULT_VALUE_NULL
+		- @ref GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL
+		</td>
+		</tr>
+		</table>
 	@see GSTypeOptionTag
 
 	@ENDL
@@ -3072,18 +3146,24 @@ typedef struct GSColumnInfoTag {
 		@JP
 		@brief カラムに関するオプション設定を示すフラグ値のビット和です。
 		@par
-			現バージョンでは、NOT NULL制約に関連する以下のフラグ値のみを含める
-			ことができます。
+			現バージョンでは、NOT NULL制約または初期値に関連する、以下の
+			フラグ値のみを含めることができます。
 			- @ref GS_TYPE_OPTION_NULLABLE
 			- @ref GS_TYPE_OPTION_NOT_NULL
+			- @ref GS_TYPE_OPTION_DEFAULT_VALUE_NULL
+			- @ref GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL
 		@since 3.5
 
 		@EN
-		@brief Sum of bits of value of the flag indicating the option setting for Column.
+		@brief Sum of bits of value of the flag indicating the option setting
+			for Column.
 		@par
-			In the current version, you can only include the following flag values for the NOT NULL constraint.
+			In the current version, it can only contain the following flag
+			values for the NOT NULL constraint or the initial value.
 			- @ref GS_TYPE_OPTION_NULLABLE
 			- @ref GS_TYPE_OPTION_NOT_NULL
+			- @ref GS_TYPE_OPTION_DEFAULT_VALUE_NULL
+			- @ref GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL
 		@since 3.5
 
 		@ENDL
@@ -5082,6 +5162,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV3_3(
 		カラム順序を無視するかどうかについては、無視しない状態に設定されます。
 		この設定は、@ref GSContainerInfo::columnOrderIgnorable を通じて
 		確認できます。
+	@par
+		現バージョンでは、初期値でのNULL使用有無は未設定状態で求まります。
+		この設定は、@ref GSColumnInfo::options を通じて確認できます。
 	@attention
 		カラム情報の列などの可変長データを格納するために、指定の@ref GSGridStore
 		インスタンス上で管理される一時的なメモリ領域を使用します。
@@ -5118,6 +5201,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV3_3(
 	@par
 		The column sequence is set to Do Not Ignore. This setting can be
 		verified through @ref GSContainerInfo::columnOrderIgnorable.
+	@par
+		In the current version, whether to use of NULL for the initial value
+		is not set. Note that it may be set in the future version. This
+		information can be acquired through @ref GSColumnInfo::options.
 	@attention
 		In order to store the variable-length data such as the column of column
 		information, it uses a temporary memory area which is managed by the
@@ -5732,7 +5819,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV3_3(
 		と同様の振る舞いとなる。</td></tr>
 		<tr><td>カラムレイアウト</td><td>@c info</td>
 		<td>@ref GSContainer にて規定された制約に合致するよう
-		@ref GSColumnInfo のリストならびにロウキーの有無を設定する。</td></tr>
+		@ref GSColumnInfo のリストならびにロウキーの有無を設定する。
+		ただし現バージョンでは、初期値でのNULL使用有無が設定された
+		@ref GSColumnInfo::options を持つ@ref GSColumnInfo を含めることは
+		できない。</td></tr>
 		<tr><td>カラム順序の無視</td><td>@c info</td>
 		<td>無視する場合、同名の既存のコンテナのカラム順序と一致するかどうかを
 		検証しない。</td></tr>
@@ -5807,6 +5897,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV3_3(
 		<tr><td>column layout</td><td>@c info</td>
 		<td>Set the @ref GSColumnInfo list and whether there is any Row key
 		so as to conform to the restrictions stipulated in @ref GSContainer.
+		However, in the current version, it is not allowed that the list
+		includes one or more @ref GSColumnInfo which has option
+		whether to use of NULL for the initial value in
+		@ref GSColumnInfo::options.
 		</td></tr>
 		<tr><td>ignore column order</td><td>@c info</td>
 		<td>If ignored, no verification of the conformance with the column order
@@ -6410,8 +6504,33 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStoreV3_3(
 		を呼び出したとしても、常に固定の値である@ref GS_CONTAINER_COLLECTION
 		がコンテナ種別として設定された@ref GSContainerInfo が求まります。
 	@par
-		作成された@ref GSRow の各フィールドには、@ref GSContainer にて定義
-		されている空の値が初期値として設定されます。
+		作成された@ref GSRow の各フィールドには、@ref GSContainerInfo に
+		含まれる各カラムの@ref GSColumnInfo に基づいた初期値が設定されます。
+		初期値として、@ref GSColumnInfo::options に含まれるオプションに応じた
+		次の値が使用されます。
+		<table>
+		<tr>
+		<th>オプション</th><th>初期値</th>
+		</tr>
+		<tr>
+		<td>@ref GS_TYPE_OPTION_DEFAULT_VALUE_NULL</td>
+		<td>NULL。ただし制約に反するロウは作成できない。</td>
+		</tr>
+		<tr>
+		<td>@ref GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL</td>
+		<td>空の値。@ref GSContainer の定義を参照。</td>
+		</tr>
+		<tr>
+		<td>(上記いずれも指定なし)</td>
+		<td>現バージョンでは、@ref GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL
+		が指定された場合と同様。</td>
+		</tr>
+		<tr>
+		<td>(上記オプションを両方指定)</td>
+		<td>@ref GSTypeOption の定義に基づき矛盾する設定と見なされ、ロウを作成
+		できない。</td>
+		</tr>
+		</table>
 	@param [in] store
 		処理対象の@ref GSGridStore
 	@param [in] info
@@ -6442,6 +6561,35 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStoreV3_3(
 	@par
 		Each existing field of the created @ref GSRow is initialized with the empty
 		value defined by @ref GSContainer.
+	@par
+		Each field will be set to the initial value which is based on
+		@ref GSColumnInfo of each column in the specified
+		@ref GSContainerInfo. The initial value corresponding to the option in
+		@ref GSColumnInfo::options is selected by the following way.
+		<table>
+		<tr>
+		<th>Option</th><th>Initial value</th>
+		</tr>
+		<tr>
+		<td>@ref GS_TYPE_OPTION_DEFAULT_VALUE_NULL</td>
+		<td>NULL. However a row which violates constraints can not be
+		created.</td>
+		</tr>
+		<tr>
+		<td>@ref GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL</td>
+		<td>The empty value. See the definition of @ref GSContainer.</td>
+		</tr>
+		<tr>
+		<td>(None of above)</td>
+		<td>In the current version, same as
+		@ref GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL.</td>
+		</tr>
+		<tr>
+		<td>(Both of above)</td>
+		<td>According to definition of @ref GSTypeOption, a row can not be
+		created because of conflicted options.</td>
+		</tr>
+		</table>
 	@param [in] store
 		@ref GSGridStore to be processed
 	@param [in] info
@@ -8563,8 +8711,6 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		処理対象のロウキーが格納された変数へのポインタ値。
 		@ref GSContainer において定義されているコンテナ上のロウキーの型と
 		この引数の型との関係は、@ref gsGetRow の場合と同様です。
-		ロウキーに対応するカラムが存在しない場合、もしくは指定のロウオブジェクト内の
-		キーを用いる場合は@c NULL を指定します。
 	@param [out] exists
 		処理対象のロウが存在したかどうかを格納するためのブール型変数へのポインタ値。
 		実行結果として@ref GS_RESULT_OK 以外が返される場合、
@@ -8604,8 +8750,6 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		The relationship between the type of Row key in Container defined by
 		@ref GSContainer and the type of argument is same as in the case of
 		@ref gsGetRow.
-		@c NULL should be specified if the column corresponding to Row key is
-		not existed, or if Row key in specified Row object is used.
 	@param [out] exists
 		the pointer to a BOOL-type variable to store the value which can be used
 		to identify whether the target Row exists or not.
@@ -13348,6 +13492,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsFetch(
 		-|-
 		INTEGER | int32_t*
 		LONG | int64_t*
+		BOOL | @ref GSBool*
 	@param [in] valueType
 		オプションの値の型
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
@@ -13376,6 +13521,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsFetch(
 		-|-
 		INTEGER | int32_t*
 		LONG | int64_t*
+		BOOL | @ref GSBool*
 	@param [in] valueType
 		a type of option value
 	@return Return code of the execution result. It returns the value except
@@ -16936,7 +17082,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 	@param type
 		対応関係の定義名。関数名の一部として使用されます。
 	@param entries
-		構造体メンバとカラム定義との対応関係示す以下の定義の列を、
+		構造体メンバとカラム定義との対応関係を示す以下の定義の列を、
 		「,」で区切らず順に並べます。
 		- @ref GS_STRUCT_BINDING_NAMED_ELEMENT
 		- @ref GS_STRUCT_BINDING_NAMED_KEY
