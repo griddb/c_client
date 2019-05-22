@@ -14,7 +14,8 @@ GS_STRUCT_BINDING(Point,
 	GS_STRUCT_BINDING_ELEMENT(voltage, GS_TYPE_DOUBLE));
 
 // Search and aggregation of time-series data
-int sample3(const char *addr, const char *port, const char *clusterName, const char *user, const char *passwd) {
+int sample3(const char *addr, const char *port, const char *clusterName,
+			const char *user, const char *password) {
 	GSGridStore *store;
 	GSTimeSeries *ts;
 	GSQuery *query;
@@ -27,11 +28,11 @@ int sample3(const char *addr, const char *port, const char *clusterName, const c
 			{ "notificationPort", port },
 			{ "clusterName", clusterName },
 			{ "user", user },
-			{ "password", passwd },
+			{ "password", password },
 			{ "consistency", "EVENTUAL" } };
 	const size_t propCount = sizeof(props) / sizeof(*props);
 
-	// Get a GridStore instance
+	// Acquiring a GridStore instance
 	gsGetGridStore(gsGetDefaultFactory(), props, propCount, &store);
 
 	// Obtain a TimeSeries
@@ -57,21 +58,22 @@ int sample3(const char *addr, const char *port, const char *clusterName, const c
 		GSChar hotStr[GS_TIME_STRING_SIZE_MAX];
 
 		ret = gsGetNextRow(rs, &hotPoint);
-		if (ret != GS_RESULT_OK) break;
+		if (!GS_SUCCEEDED(ret)) break;
 		hot = hotPoint.timestamp;
 
 		// Obtain the data around ten minutes before
 		start = gsAddTime(hot, -10, GS_TIME_UNIT_MINUTE);
 		gsGetRowByBaseTime(
-			ts, start, GS_TIME_OPERATOR_NEXT, &startPoint, NULL);
+				ts, start, GS_TIME_OPERATOR_NEXT, &startPoint, NULL);
 
 		// Calculate the average of the data for 20 minutes around the point
 		end = gsAddTime(hot, 10, GS_TIME_UNIT_MINUTE);
-		ret = gsAggregateTimeSeries(
-			ts, start, end, "voltage", GS_AGGREGATION_AVERAGE, &avg);
-		if (ret != GS_RESULT_OK) break;
+		gsAggregateTimeSeries(
+				ts, start, end, "voltage", GS_AGGREGATION_AVERAGE, &avg);
 
-		gsGetAggregationValue(avg, &avgValue, GS_TYPE_DOUBLE);
+		ret = gsGetAggregationValueAsDouble(avg, &avgValue, NULL);
+		if (!GS_SUCCEEDED(ret)) break;
+
 		gsFormatTime(hot, hotStr, sizeof(hotStr));
 
 		printf("[Alert] %s", hotStr);
@@ -80,7 +82,7 @@ int sample3(const char *addr, const char *port, const char *clusterName, const c
 		printf(" avg=%.1lf\n", avgValue);
 	}
 
-	// Release the resource
+	// Releasing resource
 	gsCloseGridStore(&store, GS_TRUE);
 
 	return (GS_SUCCEEDED(ret) ? EXIT_SUCCESS : EXIT_FAILURE);

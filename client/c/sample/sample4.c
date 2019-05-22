@@ -2,8 +2,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-// Operation on Collection data
-int sample4(const char *addr, const char *port, const char *clusterName, const char *user, const char *passwd) {
+// Schema definition using container information
+int sample4(const char *addr, const char *port, const char *clusterName,
+			const char *user, const char *password) {
 	static const int8_t personLob[] = { 65, 66, 67, 68, 69, 70, 71, 72, 73, 74 };
 	static const GSBool update = GS_TRUE;
 
@@ -22,12 +23,13 @@ int sample4(const char *addr, const char *port, const char *clusterName, const c
 			{ "notificationPort", port },
 			{ "clusterName", clusterName },
 			{ "user", user },
-			{ "password", passwd } };
+			{ "password", password } };
 	const size_t propCount = sizeof(props) / sizeof(*props);
 
-	// Get a GridStore instance
+	// Acquiring a GridStore instance
 	gsGetGridStore(gsGetDefaultFactory(), props, propCount, &store);
 
+	// Creating a container information
 	columnInfo.name = "name";
 	columnInfo.type = GS_TYPE_STRING;
 	columnInfoList[0] = columnInfo;
@@ -40,8 +42,8 @@ int sample4(const char *addr, const char *port, const char *clusterName, const c
 	columnInfo.type = GS_TYPE_LONG;
 	columnInfoList[2] = columnInfo;
 
-	columnInfo.name = "blob";
-	columnInfo.type = GS_TYPE_BLOB;
+	columnInfo.name = "lob";
+	columnInfo.type = GS_TYPE_BYTE_ARRAY;
 	columnInfoList[3] = columnInfo;
 
 	info.type = GS_CONTAINER_COLLECTION;
@@ -50,91 +52,90 @@ int sample4(const char *addr, const char *port, const char *clusterName, const c
 	info.columnInfoList = columnInfoList;
 	info.rowKeyAssigned = GS_TRUE;
 
-	// Create a Collection (Delete if schema setting is NULL)
+	// Creating a collection
 	gsPutContainerGeneral(store, NULL, &info, GS_FALSE, &container);
 
-	// Set the autocommit mode to OFF
-	gsSetAutoCommit(container, GS_FALSE);
-
-	// Set an index on the Row-key Column
-	gsCreateIndex(container, "name", GS_INDEX_FLAG_DEFAULT);
-
-	// Set an index on the Column
+	// Setting an index for a column
 	gsCreateIndex(container, "count", GS_INDEX_FLAG_DEFAULT);
 
-	// Prepare data for a Row
+	// Setting auto-commit off
+	gsSetAutoCommit(container, GS_FALSE);
+
+	// Preparing row data
 	{
 		const GSChar *name = "name01";
 		GSBool status = GS_FALSE;
 		int64_t count = 1;
-		GSBlob lob;
-		lob.data = personLob;
-		lob.size = sizeof(personLob);
+		const int8_t *lobData = personLob;
+		size_t lobSize = sizeof(personLob);
 
 		gsCreateRowByStore(store, &info, &row);
 		gsSetRowFieldByString(row, 0, name);
 		gsSetRowFieldByBool(row, 1, status);
 		gsSetRowFieldByLong(row, 2, count);
-		gsSetRowFieldByBlob(row, 3, &lob);
+		gsSetRowFieldByByteArray(row, 3, lobData, lobSize);
 	}
 
-	// Operate a Row on a K-V basis: RowKey = "name01"
-	gsPutRow(container, NULL, row, NULL);	// Add a Row
-	gsGetRowByString(container, "name01", row, update, NULL);	// Obtain the Row (acquiring a lock for update)
-	gsDeleteRowByString(container, "name01", NULL);	// Delete the Row
+	// Operating a row in KV format: RowKey is "name01"
+	gsPutRow(container, NULL, row, NULL);	// Registration
+	gsGetRowByString(container, "name01", row, update, NULL);	// Aquisition (Locking to update)
+	gsDeleteRowByString(container, "name01", NULL);	// Deletion
 
-	// Operate a Row on a K-V basis: RowKey = "name02"
-	gsPutRowByString(container, "name02", row, NULL);	// Add a Row (specifying RowKey)
+	// Operating a row in KV format: RowKey is "name02"
+	gsPutRowByString(container, "name02", row, NULL);	// Registration (Specifying RowKey)
 
+	// Release of an unnecessary row object
 	gsCloseRow(&row);
 
-	// Commit the transaction (Release the lock)
+	// Committing transaction (releasing lock)
 	gsCommit(container);
 
-	// Search the Collection for a Row
+	// Search rows in a container
 	gsQuery(container, "select * where name = 'name02'", &query);
 
-	// Fetch and update the searched Row
+	// Fetching and updating retrieved rows
 	gsFetch(query, update, &rs);
 	while (gsHasNextRow(rs)) {
 		const GSChar *name;
 		GSBool status;
 		int64_t count;
-		GSBlob lob;
+		const int8_t *lobData;
+		size_t lobSize;
 		size_t i;
 
 		gsCreateRowByContainer(container, &row);
 
-		// Update the searched Row
+		// Updating a retrived row
 		gsGetNextRow(rs, row);
 		gsGetRowFieldAsString(row, 0, &name);
 		gsGetRowFieldAsBool(row, 1, &status);
 		gsGetRowFieldAsLong(row, 2, &count);
-		gsGetRowFieldAsBlob(row, 3, &lob);
+		gsGetRowFieldAsByteArray(row, 3, &lobData, &lobSize);
 		count += 1;
 		ret = gsUpdateCurrentRow(rs, row);
-		if (ret != GS_RESULT_OK) break;
+		if (!GS_SUCCEEDED(ret) || name == NULL) break;
 
 		printf("Person:");
 		printf(" name=%s", name);
 		printf(" status=%s", status ? "true" : "false");
 		printf(" count=%d", (int) count);
 		printf(" lob=[");
-		for (i = 0; i < lob.size; i++) {
+		for (i = 0; i < lobSize; i++) {
 			if (i > 0) {
 				printf(", ");
 			}
-			printf("%d", (int) ((const int8_t*) lob.data)[i]);
+			printf("%d", (int) lobData[i]);
 		}
 		printf("]\n");
 	}
 
-	// Commit the transaction
+	// Committing transaction
 	ret = gsCommit(container);
 
+	// Deleting a collection
 	gsDropContainer(store, info.name);
 
-	//Release the resource
+	// Releasing resource
 	gsCloseGridStore(&store, GS_TRUE);
 
 	return (GS_SUCCEEDED(ret) ? EXIT_SUCCESS : EXIT_FAILURE);

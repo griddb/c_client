@@ -14,7 +14,8 @@ GS_STRUCT_BINDING(Point,
 	GS_STRUCT_BINDING_ELEMENT(voltage, GS_TYPE_DOUBLE));
 
 // Storage and extraction of a specific range of time-series data
-int sample2(const char *addr, const char *port, const char *clusterName, const char *user, const char *passwd) {
+int sample2(const char *addr, const char *port, const char *clusterName,
+			const char *user, const char *password) {
 	GSGridStore *store;
 	GSTimeSeries *ts;
 	Point point;
@@ -29,17 +30,17 @@ int sample2(const char *addr, const char *port, const char *clusterName, const c
 			{ "notificationPort", port },
 			{ "clusterName", clusterName },
 			{ "user", user },
-			{ "password", passwd } };
+			{ "password", password } };
 	const size_t propCount = sizeof(props) / sizeof(*props);
 
-	// Get a GridStore instance
+	// Acquiring a GridStore instance
 	gsGetGridStore(gsGetDefaultFactory(), props, propCount, &store);
 
-	// Create a TimeSeries (Only obtain the specified TimeSeries if it already exists)
+	// Creating a TimeSeries (Only obtain the specified TimeSeries if it already exists)
 	gsPutTimeSeries(store, "point01",
 			GS_GET_STRUCT_BINDING(Point), NULL, GS_FALSE, &ts);
 
-	// Prepare time-series element data
+	// Preparing time-series element data
 	point.active = GS_FALSE;
 	point.voltage = 100;
 
@@ -56,7 +57,7 @@ int sample2(const char *addr, const char *port, const char *clusterName, const c
 		GSChar timeStr[GS_TIME_STRING_SIZE_MAX];
 
 		ret = gsGetNextRow(rs, &point);
-		if (ret != GS_RESULT_OK) break;
+		if (!GS_SUCCEEDED(ret)) break;
 
 		gsFormatTime(point.timestamp, timeStr, sizeof(timeStr));
 		printf("Time=%s", timeStr);
@@ -64,7 +65,7 @@ int sample2(const char *addr, const char *port, const char *clusterName, const c
 		printf(" Voltage=%.1lf\n", point.voltage);
 	}
 
-	// Release the resource
+	// Releasing resource
 	gsCloseGridStore(&store, GS_TRUE);
 
 	return (GS_SUCCEEDED(ret) ? EXIT_SUCCESS : EXIT_FAILURE);
