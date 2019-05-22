@@ -59,6 +59,7 @@
 #include "service_address.h"
 #include "container_key_utils.h"
 #include "geometry_coder.h"
+#include "gs_error_common.h"
 #include "uuid/uuid.h"
 
 
@@ -271,6 +272,7 @@ struct Properties {
 	Properties(const GSPropertyEntry *properties, const size_t *propertyCount);
 
 	bool getInteger(const GSChar *name, int32_t &value) const;
+	bool getDouble(const GSChar *name, double &value) const;
 	bool getBool(const GSChar *name, bool &value) const;
 	bool getString(const GSChar *name, std::string &value) const;
 	const GSChar* getString(const GSChar *name) const;
@@ -293,136 +295,152 @@ struct Properties {
 };
 
 
+class ClientException : public GSCommonException {
+public:
+	typedef ClientException ParametersBuilder;
+
+	ClientException(UTIL_EXCEPTION_CONSTRUCTOR_ARGS_DECL) throw();
+	virtual ~ClientException() throw();
+
+	void appendParameter(const char8_t *name, const char8_t *value) throw();
+
+	size_t getParameterCount() const throw();
+	const char8_t* getParameterName(size_t index) const throw();
+	const char8_t* getParameterValue(size_t index) const throw();
+
+	void inheritParameters(const std::exception *causeInHandling) throw();
+	void inheritParameters(const ClientException &cause) throw();
+
+	static void formatMessageWithParameter(
+			std::ostream &os, const util::Exception &e,
+			const ClientException &params);
+
+	template<typename T> static T generateWithParameter(
+			const T &base, const std::exception *causeInHandling) throw() {
+		T exception = base;
+		exception.inheritParameters(causeInHandling);
+		return exception;
+	}
+
+private:
+	typedef std::pair<u8string, u8string> Parameter;
+	typedef std::vector<Parameter> ParameterList;
+
+	ParameterList parameterList_;
+};
+
+#define GS_CLIENT_EXCEPTION_CONVERT_CUSTOM(type, errorCode, cause, message) \
+		ClientException::generateWithParameter( \
+				GS_COMMON_EXCEPTION_CONVERT_CUSTOM( \
+						type, errorCode, cause, message), &(cause))
+#define GS_CLIENT_EXCEPTION_CONVERT(errorCode, cause, message) \
+		GS_CLIENT_EXCEPTION_CONVERT_CUSTOM( \
+				ClientException, errorCode, cause, message)
+
+#define GS_CLIENT_THROW_CUSTOM_ERROR(type, errorCode, message) \
+		throw GS_COMMON_EXCEPTION_CREATE_DETAIL(type, errorCode, NULL, message)
+#define GS_CLIENT_RETHROW_CUSTOM_ERROR(type, defaultCode, cause, message) \
+		throw GS_CLIENT_EXCEPTION_CONVERT_CUSTOM( \
+				type, defaultCode, cause, message)
+
+#define GS_CLIENT_THROW_ERROR(errorCode, message) \
+		GS_CLIENT_THROW_CUSTOM_ERROR(ClientException, errorCode, message)
+#define GS_CLIENT_RETHROW_ERROR(cause, message) \
+		GS_CLIENT_RETHROW_CUSTOM_ERROR(ClientException, 0, cause, message)
+#define GS_CLIENT_RETHROW_ERROR_CODED(errorCode, cause, message) \
+		GS_CLIENT_RETHROW_CUSTOM_ERROR( \
+				ClientException, errorCode, cause, message)
+
 
 struct ErrorStack {
 public:
-	struct Entry {
-		int32_t errorCode_;
-		std::string optionMessage_;
-		std::string type_;
-		std::string fileName_;
-		std::string functionName_;
-		int32_t lineNumber_;
-	};
-
 	size_t getSize() const throw();
+
 	GSResult getErrorCode(size_t index) const throw();
+	size_t formatErrorName(
+			size_t index, GSChar *strBuf, size_t bufSize) const throw();
+
+	size_t formatErrorDescription(
+			size_t index, GSChar *strBuf, size_t bufSize) const throw();
 	size_t formatErrorMessage(
 			size_t index, GSChar *strBuf, size_t bufSize) const throw();
+	static void formatErrorMessage(
+			std::ostream &os, const util::Exception &e, size_t index,
+			bool withCode);
+
 	size_t formatErrorLocation(
-			size_t index, GSChar *strBuf, size_t bufSize) const throw();
+			size_t index, GSChar *strBuf, size_t bufSize,
+			bool detail = false) const throw();
+
+	size_t getErrorParameterCount(size_t stackIndex) const throw();
+	size_t formatErrorParameterName(
+			size_t stackIndex, size_t parameterIndex,
+			GSChar *strBuf, size_t bufSize) const throw();
+	size_t formatErrorParameterValue(
+			size_t stackIndex, size_t parameterIndex,
+			GSChar *strBuf, size_t bufSize) const throw();
 
 	void clear() throw();
 	GSResult setFromCurrentException() throw();
-	static std::auto_ptr<ErrorStack> tryRead(
-			ArrayByteInStream &in, bool detailErrorMessageEnabled) throw();
+	static ErrorStack tryRead(
+			ArrayByteInStream &in,
+			const util::Exception::NamedErrorCode &defaultCode) throw();
 
-	const Entry* entryAt(size_t index) const throw();
+	ClientException& getException() throw();
+
+	static void setDetailErrorMessageEnabled(bool enabled);
 
 private:
-	GSResult setFromException(util::Exception &e, size_t startDepth = 0);
+	typedef ClientException BaseException;
 
-	std::vector<Entry> entryList_;
+	static volatile bool detailErrorMessageEnabled_;
+
+	BaseException exception_;
 };
 
 
-class RemoteException : public util::Exception {
-public:
-	RemoteException() throw();
-
-	RemoteException(
-			UTIL_EXCEPTION_CONSTRUCTOR_ARGS_DECL,
-			std::auto_ptr<ErrorStack> remoteErrorStack =
-					std::auto_ptr<ErrorStack>()) throw();
-
+class RemoteException : public ClientException {
+protected:
+	RemoteException(UTIL_EXCEPTION_CONSTRUCTOR_ARGS_DECL) throw();
 	virtual ~RemoteException() throw();
-
-	RemoteException(const RemoteException &another) throw();
-
-	RemoteException& operator=(const RemoteException &another) throw();
-
-	const ErrorStack* getRemoteErrorStack() const throw();
-
-	static std::auto_ptr<ErrorStack> extractRemoteErrorStack(
-			const RemoteException &ex) throw();
-
-	static std::auto_ptr<ErrorStack> extractRemoteErrorStack(
-			const std::exception &ex) throw();
-
-private:
-	void trySetRemoteErrorStack(const ErrorStack *stack) throw();
-
-	std::auto_ptr<ErrorStack> remoteErrorStack_;
 };
-
-#define GS_CLIENT_EXCEPTION_CREATE_WITH_STACK( \
-		type, errorCode, cause, message, errorStack) \
-	type( \
-			(errorCode), UTIL_EXCEPTION_CREATE_MESSAGE_CHARS(message), \
-			UTIL_EXCEPTION_POSITION_ARGS, cause, #type, \
-			util::Exception::STACK_TRACE_NONE, \
-			util::Exception::LITERAL_NORMAL, errorStack)
 
 
 class StatementException : public RemoteException {
 public:
-	StatementException(const StatementException &another) throw();
-
-	StatementException(
-			UTIL_EXCEPTION_CONSTRUCTOR_ARGS_DECL,
-			std::auto_ptr<ErrorStack> remoteErrorStack =
-					std::auto_ptr<ErrorStack>()) throw();
-
+	StatementException(UTIL_EXCEPTION_CONSTRUCTOR_ARGS_DECL) throw();
 	virtual ~StatementException() throw();
 };
 
-#define GS_CLIENT_THROW_STATEMENT(errorCode, message, errorStack) \
-	throw GS_CLIENT_EXCEPTION_CREATE_WITH_STACK( \
-			StatementException, errorCode, NULL, message, errorStack)
+#define GS_CLIENT_RETHROW_STATEMENT(cause, message) \
+		GS_CLIENT_RETHROW_CUSTOM_ERROR(StatementException, 0, cause, message)
 
 
 class ConnectionException : public RemoteException {
 public:
-	ConnectionException(
-			UTIL_EXCEPTION_CONSTRUCTOR_ARGS_DECL,
-			std::auto_ptr<ErrorStack> remoteErrorStack =
-					std::auto_ptr<ErrorStack>()) throw();
-
+	ConnectionException(UTIL_EXCEPTION_CONSTRUCTOR_ARGS_DECL) throw();
 	virtual ~ConnectionException() throw();
 };
 
-#define GS_CLIENT_THROW_CONNECTION_WITH_STACK(errorCode, message, errorStack) \
-	throw GS_CLIENT_EXCEPTION_CREATE_WITH_STACK( \
-			ConnectionException, errorCode, NULL, message, errorStack)
 #define GS_CLIENT_THROW_CONNECTION(errorCode, message) \
-	throw UTIL_EXCEPTION_CREATE_DETAIL( \
-			ConnectionException, errorCode, NULL, message)
-#define GS_CLIENT_RETHROW_CONNECTION(errorCode, cause, message) \
-	throw GS_CLIENT_EXCEPTION_CREATE_WITH_STACK( \
-			ConnectionException, errorCode, &(cause), message, \
-			RemoteException::extractRemoteErrorStack(cause))
+		GS_CLIENT_THROW_CUSTOM_ERROR(ConnectionException, errorCode, message)
+#define GS_CLIENT_RETHROW_CONNECTION(cause, message) \
+		GS_CLIENT_RETHROW_CUSTOM_ERROR(ConnectionException, 0, cause, message)
+#define GS_CLIENT_RETHROW_CONNECTION_CODED(errorCode, cause, message) \
+		GS_CLIENT_RETHROW_CUSTOM_ERROR( \
+				ConnectionException, errorCode, cause, message)
 
 
 class WrongNodeException : public ConnectionException {
 public:
-	WrongNodeException(
-			UTIL_EXCEPTION_CONSTRUCTOR_ARGS_DECL,
-			std::auto_ptr<ErrorStack> remoteErrorStack =
-					std::auto_ptr<ErrorStack>()) throw();
-
+	WrongNodeException(UTIL_EXCEPTION_CONSTRUCTOR_ARGS_DECL) throw();
 	virtual ~WrongNodeException() throw();
 };
 
-#define GS_CLIENT_THROW_WRONG_NODE_WITH_STACK(errorCode, message, errorStack) \
-	throw GS_CLIENT_EXCEPTION_CREATE_WITH_STACK( \
-			WrongNodeException, errorCode, NULL, message, errorStack)
 #define GS_CLIENT_THROW_WRONG_NODE(errorCode, message) \
-	throw UTIL_EXCEPTION_CREATE_DETAIL( \
-			WrongNodeException, errorCode, NULL, message)
-#define GS_CLIENT_RETHROW_WRONG_NODE(errorCode, cause, message) \
-	throw GS_CLIENT_EXCEPTION_CREATE_WITH_STACK( \
-			WrongNodeException, errorCode, &(cause), message, \
-			RemoteException::extractRemoteErrorStack(cause))
+		GS_CLIENT_THROW_CUSTOM_ERROR(WrongNodeException, errorCode, message)
+#define GS_CLIENT_RETHROW_WRONG_NODE(cause, message) \
+		GS_CLIENT_RETHROW_CUSTOM_ERROR(WrongNodeException, 0, cause, message)
 
 
 class ErrorReasonFormatter {
@@ -484,7 +502,9 @@ enum ClientErrorCode {
 	GS_ERROR_CC_ALLOCATION_FAILED,
 	GS_ERROR_CC_RECOVERABLE_CONNECTION_PROBLEM,
 	GS_ERROR_CC_RECOVERABLE_ROW_SET_LOST,
-	GS_ERROR_CC_ILLEGAL_CONFIG
+	GS_ERROR_CC_ILLEGAL_CONFIG,
+	GS_ERROR_CC_DATABASE_NOT_EMPTY, 
+	GS_ERROR_CC_PLATFORM_ERROR
 };
 
 
@@ -875,7 +895,7 @@ private:
 	void deallocate(VarDataPool *pool, void *rowObj, void *ptr) const;
 
 	void setupAccessInfo();
-	
+
 	template<typename Alloc, typename Mask>
 	struct ValueCopier {
 		ValueCopier(Alloc *alloc, const GSValue &src);
@@ -1443,7 +1463,6 @@ public:
 	NodeConnection(const util::SocketAddress &address, const Config &config);
 	~NodeConnection();
 
-	static void setDetailErrorMessageEnabled(bool enabled);
 	static int32_t getProtocolVersion();
 	int32_t getRemoteProtocolVersion() const;
 	static bool isSupportedProtocolVersion(int32_t protocolVersion);
@@ -1507,7 +1526,10 @@ public:
 private:
 	static const int32_t DEFAULT_PROTOCOL_VERSION;
 	static const int32_t STATEMENT_TYPE_NUMBER_V2_OFFSET;
-	static volatile bool detailErrorMessageEnabled_;
+
+	static const char8_t ERROR_PARAM_ADDRESS[];
+	static const char8_t ERROR_PARAM_PARTITION[];
+
 	static volatile int32_t protocolVersion_;
 	static bool tcpNoDelayEnabled_;
 
@@ -1591,7 +1613,8 @@ struct NodeConnection::LoginInfo {
 	LoginInfo(
 			const GSChar *user, const GSChar *password, bool ownerMode,
 			const GSChar *clusterName, const GSChar *dbName,
-			int64_t transactionTimeoutMillis);
+			int64_t transactionTimeoutMillis, const GSChar *applicationName,
+			double storeMemoryAgingSwapRate);
 	void setPassword(const GSChar *password);
 
 	std::allocator<uint8_t> alloc_;
@@ -1602,6 +1625,8 @@ struct NodeConnection::LoginInfo {
 	std::string clusterName_;
 	int32_t transactionTimeoutSecs_;
 	ClientId clientId_;
+	std::string applicationName_;
+	double storeMemoryAgingSwapRate_;
 };
 
 struct NodeConnection::OptionalRequest {
@@ -1617,7 +1642,9 @@ struct NodeConnection::OptionalRequest {
 		FETCH_LIMIT = 10002,
 		FETCH_SIZE = 10003,
 		CLIENT_ID = 11001,
-		FETCH_BYTES_SIZE = 11002
+		FETCH_BYTES_SIZE = 11002,
+		APPLICATION_NAME = 11009,
+		STORE_MEMORY_AGING_SWAP_RATE = 11010
 	};
 
 	typedef std::vector<uint8_t> ExtValue;
@@ -1644,6 +1671,8 @@ struct NodeConnection::OptionalRequest {
 	ClientId clientId_;
 	int32_t fetchBytesSize_;
 	std::auto_ptr<ExtMap> extRequestMap_;
+	std::string applicationName_;
+	double storeMemoryAgingSwapRate_;
 
 private:
 	struct Formatter;
@@ -1840,8 +1869,9 @@ private:
 	void updateNotificationMember();
 	bool updateConnectionAndClusterInfo(ClusterInfo &clusterInfo);
 	void updateMasterInfo(ClusterInfo &clusterInfo);
-	void invalidateMasterInternal(ClusterInfo &clusterInfo);
+	void invalidateMasterInternal(ClusterInfo &clusterInfo, bool inside);
 	void releaseMasterCache(bool forceClose);
+	void applyMasterCacheCounter(ClusterInfo &clusterInfo);
 
 	void acceptClusterInfo(
 			ClusterInfo &clusterInfo, const int32_t *partitionCount,
@@ -1877,6 +1907,7 @@ private:
 	util::NormalXArray<uint8_t> resp_;
 	int64_t notificationReceiveTimeoutMillis_;
 	int64_t providerTimeoutMillis_;
+	uint64_t masterCacheCounter_;
 	volatile size_t connectionTrialCounter_;
 	bool connectionFailedPreviously_;
 	NodeAddressSet cachedAddressSet_;
@@ -1939,6 +1970,7 @@ struct NodeResolver::ClusterInfo {
 	explicit ClusterInfo(const NodeConnection::LoginInfo &loginInfo);
 
 	bool invalidate();
+	bool acceptMasterInvalidation(uint64_t masterCacheCounter);
 
 	const int32_t* getPartitionCount() const;
 	const ContainerHashMode::Id* getHashMode() const;
@@ -1950,8 +1982,11 @@ struct NodeResolver::ClusterInfo {
 	ClusterInfoEntry<int32_t> partitionCount_;
 	ClusterInfoEntry<ContainerHashMode::Id> hashMode_;
 	ClusterInfoEntry<int64_t> databaseId_;
+	uint64_t lastMasterCacheCounter_;
 };
 
+
+class GSInterceptorManager;
 
 
 class GridStoreChannel {
@@ -2011,9 +2046,12 @@ public:
 	GridStoreChannel(const Config &config, const Source &source);
 
 	NodeConnectionPool& getConnectionPool();
+	GSInterceptorManager* getInterceptorManager() throw();
 	void apply(const Config &config);
 	int64_t getFailoverTimeoutMillis(const Context &context);
 	void setStatementRetryMode(int32_t statementRetryMode);
+	void setMonitoring(bool monitoring);
+	bool isMonitoring();
 
 	void initializeRequestBuffer(
 			util::NormalXArray<uint8_t> &req,
@@ -2084,9 +2122,11 @@ private:
 	NodeConnectionPool pool_;
 	Config config_;
 	int32_t statementRetryMode_;
+	util::Atomic<bool> monitoring_;
 	const Key key_;
 	NodeResolver nodeResolver_;
 	size_t reqHeadLength_;
+	GSInterceptorManager *interceptorManager_;
 	util::Mutex mutex_;
 };
 
@@ -2129,10 +2169,14 @@ struct GridStoreChannel::Source {
 
 	void set(const Properties &properties);
 
+	static double resolveStoreMemoryAgingSwapRate(
+			const Properties &properties);
+
 	Key key_;
 	int32_t partitionCount_;
 	LocalConfig localConfig_;
 	NodeConnection::LoginInfo loginInfo_;
+	GSInterceptorManager *interceptorManager_;
 };
 
 
@@ -2349,12 +2393,33 @@ public:
 
 		TYPE_ID_MAX
 	};
+
+	template<typename T>
+	struct Resolver {
+		static const Id TYPE =
+				util::IsSame<T, GSGridStoreFactory>::VALUE ?
+						GRID_STORE_FACTORY :
+				util::IsSame<T, GSGridStore>::VALUE ? GRID_STORE :
+				util::IsSame<T, GSContainer>::VALUE ? CONTAINER :
+				util::IsSame<T, GSQuery>::VALUE ? QUERY :
+				util::IsSame<T, GSRowSet>::VALUE ? ROW_SET :
+				util::IsSame<T, GSAggregationResult>::VALUE ?
+						AGGREGATION_RESULT :
+				util::IsSame<T, GSRow>::VALUE ? ROW :
+				util::IsSame<T, GSRowKeyPredicate>::VALUE ?
+						ROW_KEY_PREDICATE :
+				util::IsSame<T, GSPartitionController>::VALUE ?
+						PARTITION_CONTROLLER :
+				TYPE_ID_MAX;
+	};
 };
 
 
 struct GSResourceHeader {
 public:
-	GSResourceHeader(GSResourceType::Id type);
+	GSResourceHeader(
+			GSResourceType::Id type, void *parentResource,
+			GSInterceptorManager *interceptorManager);
 	~GSResourceHeader();
 
 	static bool getType(
@@ -2362,8 +2427,19 @@ public:
 	static bool checkType(
 			const void *resource, GSResourceType::Id type) throw();
 
+	template<typename T>
+	static GSResourceType::Id getStaticType(T *resource) throw();
+	template<typename T>
+	static GSResourceType::Id getStaticType(T **resource) throw();
+
 	static ErrorStack* findErrorStack(
 			void *resource, util::Mutex *&mutex) throw();
+	static GSInterceptorManager* findInterceptorManager(
+			void *resource) throw();
+	static void findStoreOrFactory(
+			void *resource, GSGridStore *&store,
+			GSGridStoreFactory *&factory) throw();
+
 	static void clearLastError(void *resource) throw();
 	static GSResult setCurrentException(void *resource) throw();
 
@@ -2373,10 +2449,17 @@ public:
 
 private:
 	static const uint32_t RESOURCE_TYPE_MASK;
+	static const uint32_t FLAG_INTERCEPTABLE;
+
+	static bool resolveInterceptable(
+			GSResourceType::Id type, void *parentResource,
+			GSInterceptorManager *interceptorManager);
 
 	GSResourceType::Id getType() const throw();
+	bool isInterceptable() const throw();
 
-	static uint32_t maskType(GSResourceType::Id type) throw();
+	static uint32_t maskType(
+			GSResourceType::Id type, bool interceptable) throw();
 	static GSResourceType::Id unmaskType(uint32_t maskedType) throw();
 
 	const uint32_t maskedType_;
@@ -2384,6 +2467,296 @@ private:
 #ifdef GS_CLIENT_UNIT_TEST
 	static int64_t resourceCountList_[];
 #endif
+};
+
+
+class GSInterceptor {
+public:
+	typedef uint32_t Id;
+
+	class FunctionInfo;
+	class Parameter;
+	class ParameterList;
+
+	explicit GSInterceptor(GSInterceptorManager &manager);
+	virtual ~GSInterceptor();
+
+	Id getId() const;
+
+	virtual bool isActivated(GSResourceType::Id type);
+
+	virtual bool start(
+			const FunctionInfo &funcInfo, const ParameterList &args,
+			const Parameter &ret);
+
+	virtual void finish(
+			const FunctionInfo &funcInfo, const ParameterList &args);
+
+private:
+
+	GSInterceptor(const GSInterceptor&);
+	GSInterceptor& operator=(const GSInterceptor&);
+
+	GSInterceptorManager &manager_;
+	Id id_;
+};
+
+class GSInterceptor::FunctionInfo {
+public:
+	FunctionInfo(const GSChar *rawName, GSResourceType::Id resourceType);
+
+	const GSChar* getRawName() const;
+	GSResourceType::Id getResourceType() const;
+
+	bool matchName(const GSChar *name) const;
+	void formatName(std::ostream &stream) const;
+
+	bool isEmpty() const;
+	static FunctionInfo emptyInfo();
+
+private:
+	static const GSChar* findMinorSuffix(const GSChar *rawName);
+
+	const GSChar *rawName_;
+	GSResourceType::Id resourceType_;
+};
+
+std::ostream& operator<<(
+		std::ostream &stream, const GSInterceptor::FunctionInfo &funcInfo);
+
+class GSInterceptor::Parameter {
+public:
+	explicit Parameter(const GSChar *name = NULL);
+
+	const GSChar* getName() const;
+
+	bool isResource() const;
+	GSResourceType::Id getResourceType() const;
+	void* findResource() const;
+
+	bool isString() const;
+	void setNoString();
+
+	bool isSize() const;
+	size_t& getSize() const;
+	size_t*& getSizePtr() const;
+
+	util::FalseType with(const util::FalseType&) const {
+		return util::FalseType();
+	}
+
+	template<typename T> Parameter with(T &value) const {
+		Parameter param = *this;
+		param.typeInfo_ = TypeInfo::create<T>();
+		param.storage_ = &value;
+		return param;
+	}
+
+	template<typename T> T& get() const {
+		typeInfo_.check(TypeInfo::create<T>());
+		return *static_cast<T*>(storage_);
+	}
+
+	void formatValue(std::ostream &os) const;
+
+private:
+	struct TypeInfo {
+		typedef void (*CheckerFunc)();
+		typedef void (*FormatterFunc)(std::ostream&, void*);
+
+		TypeInfo();
+
+		void check(const TypeInfo &another) const;
+
+		template<typename T>
+		static TypeInfo create() {
+			UTIL_STATIC_ASSERT(
+					util::IsPointer<T>::VALUE ||
+							(std::numeric_limits<T>::is_specialized &&
+							!util::IsSame<T, bool>::VALUE));
+			typedef typename util::Conditional<
+					util::IsPointer<T>::VALUE, void*, T>::Type FormatterType;
+			CheckerFunc sizeCheckerFunc = &checkerFunc<size_t>;
+
+			TypeInfo info;
+			info.resourceType_ = getResourceType(static_cast<T*>(NULL));
+			info.checkerFunc_ = &checkerFunc<T>;
+			info.formatterFunc_ = &formatterFunc<FormatterType>;
+			info.forString_ = (util::IsSame<const GSChar*, T>::VALUE);
+			info.forSize_ = (info.checkerFunc_ == sizeCheckerFunc);
+			return info;
+		}
+
+		template<typename R>
+		static GSResourceType::Id getResourceType(R**) {
+			return GSResourceType::Resolver<R>::TYPE;
+		}
+
+		template<typename T>
+		static GSResourceType::Id getResourceType(T*) {
+			return GSResourceType::TYPE_ID_MAX;
+		}
+
+		template<typename T>
+		static void checkerFunc() {}
+
+		template<typename V>
+		static void formatterFunc(std::ostream &os, void *ptr) {
+			UTIL_STATIC_ASSERT(
+					(!util::IsPointer<V>::VALUE || util::IsSame<void*, V>::VALUE));
+			typedef typename util::Conditional<
+					std::numeric_limits<V>::is_signed, int64_t, uint64_t>::Type
+					IntType;
+			typedef typename util::Conditional<
+					std::numeric_limits<V>::is_integer, IntType, V>::Type
+					FilteredType;
+			if (util::IsPointer<V>::VALUE) {
+				os << "0x";
+			}
+			os << static_cast<FilteredType>(*static_cast<V*>(ptr));
+		}
+
+		static void stringFormatterFunc(std::ostream &os, void *ptr) {
+			const GSChar *value = *static_cast<const GSChar**>(ptr);
+			if (value == NULL) {
+				os << "(null)";
+			}
+			else {
+				os << value;
+			}
+		}
+
+		GSResourceType::Id resourceType_;
+		CheckerFunc checkerFunc_;
+		FormatterFunc formatterFunc_;
+		bool forString_;
+		bool forSize_;
+	};
+
+	const GSChar *name_;
+	TypeInfo typeInfo_;
+	void *storage_;
+};
+
+class GSInterceptor::ParameterList {
+public:
+	template<
+			typename P1, typename P2, typename P3, typename P4,
+			typename P5, typename P6, typename P7, typename P8,
+			typename P9, typename P10>
+	ParameterList(
+			const P1 &p1, const P2 &p2, const P3 &p3, const P4 &p4,
+			const P5 &p5, const P6 &p6, const P7 &p7, const P8 &p8,
+			const P9 &p9, const P10 &p10, ...);
+
+	size_t getSize() const;
+	const Parameter& at(size_t index) const;
+
+private:
+	enum {
+		MAX_PARAMETER_COUNT = 8
+	};
+
+	typedef Parameter BaseList[MAX_PARAMETER_COUNT];
+
+	template<typename P>
+	static void checkTooManyArguments(const P&);
+
+	void add(const Parameter &param);
+	void add(const util::FalseType&);
+
+	BaseList baseList_;
+	size_t size_;
+};
+
+class GSInterceptorManager {
+public:
+	class Scope;
+
+	typedef GSInterceptor::FunctionInfo FunctionInfo;
+	typedef GSInterceptor::Parameter Parameter;
+	typedef GSInterceptor::ParameterList ParameterList;
+	typedef GSInterceptor::Id InterceptorId;
+
+	GSInterceptorManager();
+
+	bool start(
+			const FunctionInfo &funcInfo, const ParameterList &args,
+			const Parameter &ret, InterceptorId &endId);
+	void finish(
+			const FunctionInfo &funcInfo, const ParameterList &args,
+			InterceptorId endId);
+
+	bool filterByResourceType(GSResourceType::Id type);
+
+	void activate(InterceptorId id, bool enabled);
+
+private:
+	friend class GSInterceptor;
+
+	enum {
+		MAX_INTERCEPTOR_COUNT = 3
+	};
+
+	struct Entry {
+		Entry();
+
+		InterceptorId id_;
+		GSInterceptor *interceptor_;
+		bool enabled_;
+	};
+
+	class CheckerScope {
+	public:
+		CheckerScope();
+		~CheckerScope();
+
+	private:
+		static void abortByResursiveAccess();
+
+		static void (*const volatile abortByResursiveAccessFunc_)();
+		static UTIL_THREAD_LOCAL size_t counter_;
+	};
+
+	typedef Entry EntryList[MAX_INTERCEPTOR_COUNT];
+
+	InterceptorId add(GSInterceptor &interceptor);
+	void remove(InterceptorId id);
+
+	void getActiveEntryList(
+			util::LockGuard<util::Mutex>&, GSResourceType::Id type,
+			EntryList &entryList, InterceptorId &count);
+
+	EntryList entryList_;
+	InterceptorId entryCount_;
+
+	util::Mutex mutex_;
+};
+
+class GSInterceptorManager::Scope {
+public:
+	Scope() throw();
+	~Scope();
+
+	bool set(
+			GSInterceptorManager &manager, const FunctionInfo &funcInfo,
+			const ParameterList &args, const Parameter &ret) throw();
+
+private:
+	void setCurrentException(const ParameterList &args) throw();
+
+	struct Data {
+		Data(
+				GSInterceptorManager &manager, const FunctionInfo &funcInfo,
+				const ParameterList &args);
+
+		GSInterceptorManager &manager_;
+		FunctionInfo funcInfo_;
+		ParameterList args_;
+		InterceptorId endId_;
+	};
+
+	UTIL_UNIQUE_PTR<Data> data_;
 };
 
 
@@ -2402,7 +2775,8 @@ public:
 	GSGridStore* getGridStore(
 			const GSPropertyEntry *properties, const size_t *propertyCount);
 	void setProperties(
-			const GSPropertyEntry *properties, const size_t *propertyCount);
+			const GSPropertyEntry *properties, const size_t *propertyCount,
+			bool forInitial = false);
 
 	struct Initializer {
 	public:
@@ -2417,20 +2791,80 @@ private:
 	typedef std::map<GridStoreChannel::Key, GridStoreChannel*,
 			GridStoreChannel::KeyLess> ChannelMap;
 
-	struct Data {
-		ChannelMap channelMap_;
-		GridStoreChannel::Config channelConfig_;
-		ErrorStack stack_;
-		util::Mutex mutex_;
-	};
+	class ConfigLoader;
+	struct Data;
 
 	GSGridStoreFactoryTag(const GSGridStoreFactory&);
 	GSGridStoreFactory& operator=(const GSGridStoreFactory&);
+
+	void prepareConfigFile() throw();
+
+	void setPropertiesInternal(
+			util::LockGuard<util::Mutex> &guard, bool forInitial,
+			const GSPropertyEntry *properties, const size_t *propertyCount);
+
+	void setLoggingProperties(
+			util::LockGuard<util::Mutex> &guard, const Properties &properties,
+			bool forInitial);
+
+	void setMonitoring(
+			util::LockGuard<util::Mutex>&, bool monitoring);
 
 	GSResourceHeader resourceHeader_;
 	std::auto_ptr<Data> data_;
 
 	static GSGridStoreFactory *defaultFactory_;
+};
+
+class GSGridStoreFactoryTag::ConfigLoader {
+public:
+	ConfigLoader();
+
+	bool isPrepared() const;
+
+	void applyFactoryConfig(Properties &props);
+	void applyStoreConfig(Properties &props);
+
+	void handleConfigError(std::exception&) throw();
+
+private:
+	typedef Properties::PropertyMap PropertyMap;
+
+	void prepare();
+
+	static void applyConfig(const Properties *src, Properties &dest);
+
+	void acceptFileData(std::string &buf, bool eof, uint64_t &lineNumber);
+	void acceptFileLine(const char8_t *line, size_t size);
+	void acceptProperty(const char8_t *name, const char8_t *value);
+
+	static std::string unescape(const std::string &src);
+
+	static const char8_t CONFIG_FILE_NAME[];
+
+	bool configFileEnabled_;
+	bool errorOccurred_;
+	bool prepared_;
+	UTIL_UNIQUE_PTR<ErrorStack> initialError_;
+	UTIL_UNIQUE_PTR<Properties> factoryProps_;
+	UTIL_UNIQUE_PTR<Properties> storeProps_;
+};
+
+struct GSGridStoreFactoryTag::Data {
+	Data();
+
+	void setUpInterceptors();
+
+	ChannelMap channelMap_;
+	GridStoreChannel::Config channelConfig_;
+	ErrorStack stack_;
+	GSInterceptorManager interceptorManager_;
+	bool monitoring_;
+	ConfigLoader configLoader_;
+
+	UTIL_UNIQUE_PTR<GSInterceptor> callLogger_;
+
+	util::Mutex mutex_;
 };
 
 namespace {
@@ -2516,7 +2950,8 @@ public:
 			ContainerIdInfo *idInfo = NULL);
 	static GSResult getContainerInfo(
 			GSGridStore *store, const GSChar *name, GSContainerInfo *info,
-			GSBool *exists, const ClientVersion &version) throw();
+			GSBool *exists, const ClientVersion &version,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	GSContainer* getContainer(const GSChar *name, const GSBinding &binding,
 			GSContainerType containerType);
@@ -2532,7 +2967,8 @@ public:
 			const GSBinding *binding, const GSContainerInfo *info,
 			GSBool modifiable, GSContainer **container,
 			const GSContainerType *containerType,
-			const ClientVersion &version) throw();
+			const ClientVersion &version,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	GSContainer* getContainer(
 			const GSChar *name, const GSContainerType *expectedType);
@@ -2545,7 +2981,8 @@ public:
 			GSGridStore *store, const GSChar *name,
 			const GSContainerInfo *info, GSBool modifiable,
 			GSContainer **container, const GSContainerType *containerType,
-			const ClientVersion &version) throw();
+			const ClientVersion &version,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	void dropContainer(
 			const GSChar *name, const GSContainerType *containerType);
@@ -2567,7 +3004,8 @@ public:
 	GSRow* createRow(const RowMapper::ContainerInfoRef<true> &infoRef);
 	static GSResult createRow(
 			GSGridStore *store, const GSContainerInfo *info, GSRow **row,
-			const ClientVersion &version) throw();
+			const ClientVersion &version,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	GSRowKeyPredicate* createRowKeyPredicate(GSType keyType);
 
@@ -2705,8 +3143,8 @@ private:
 			const GSBinding *binding, const GSContainerType *containerType,
 			bool general);
 	std::auto_ptr<ContainerKey> acceptRemoteContainerKey(
-			ArrayByteInStream &in, const ContainerKey &localKey,
-			const ContainerKeyConverter &keyConverter);
+			ArrayByteInStream *in, const ContainerKey &localKey,
+			const ContainerKeyConverter &keyConverter, bool &cached);
 
 	void splitPathKey(
 			const GSChar *pathKey,
@@ -2798,6 +3236,7 @@ struct GSGridStoreTag::ContainerPropertiesOption {
 	const OptionalRequestSource* get() const;
 };
 
+
 struct GSContainerTag {
 public:
 	friend struct GSResourceHeader;
@@ -2805,6 +3244,7 @@ public:
 
 	struct PartialFetchStatus;
 	struct PartialExecutionStatus;
+	struct QueryFormatter;
 	struct QueryData;
 	struct QueryParameters;
 
@@ -2816,7 +3256,7 @@ public:
 
 	GSContainerTag(GSGridStore &store, RowMapper::Reference mapper,
 			int32_t schemaVerId, int32_t partitionId, int64_t containerId,
-			std::auto_ptr<ContainerKey> normalizedContainerKey);
+			std::auto_ptr<ContainerKey> normalizedContainerKey, bool cached);
 	~GSContainerTag();
 
 	bool isClosed() const;
@@ -2830,6 +3270,7 @@ public:
 	int32_t getSchemaVersionId() const;
 	int32_t getPartitionId() const;
 	int64_t getContainerId() const;
+	const ContainerKey* getContainerKey() const;
 	const ContainerKey* getNormalizedContainerKey() const;
 	GSContainerType getType() const;
 
@@ -2925,15 +3366,17 @@ public:
 	template<typename Traits>
 	static GSResult getRowChecked(
 			GSContainer *container, const typename Traits::Object *key,
-			void *rowObj, GSBool forUpdate, GSBool *exists);
+			void *rowObj, GSBool forUpdate, GSBool *exists,
+			const GSInterceptor::FunctionInfo &funcInfo);
 	template<typename Traits>
 	static GSResult putRowChecked(
 			GSContainer *container, const typename Traits::Object *key,
-			const void *rowObj, GSBool *exists);
+			const void *rowObj, GSBool *exists,
+			const GSInterceptor::FunctionInfo &funcInfo);
 	template<typename Traits>
 	static GSResult removeRowChecked(
 			GSContainer *container, const typename Traits::Object *key,
-			GSBool *exists);
+			GSBool *exists, const GSInterceptor::FunctionInfo &funcInfo);
 
 	GSRow* createRow();
 
@@ -3156,6 +3599,26 @@ struct GSContainerTag::PartialExecutionStatus {
 	std::auto_ptr<EntryMap> entryMap_;
 };
 
+struct GSContainerTag::QueryFormatter {
+public:
+	template<Statement::Id S> struct Typed;
+
+	explicit QueryFormatter(Statement::Id statement);
+
+	Statement::Id getStatement() const;
+
+	virtual void getString(std::ostream &os, ArrayByteInStream &in) const;
+
+private:
+	Statement::Id statement_;
+};
+
+template<Statement::Id S>
+struct GSContainerTag::QueryFormatter::Typed : public QueryFormatter {
+public:
+	Typed() : QueryFormatter(S) {}
+};
+
 struct GSContainerTag::QueryData {
 	QueryData();
 
@@ -3166,9 +3629,14 @@ struct GSContainerTag::QueryData {
 };
 
 struct GSContainerTag::QueryParameters {
+	struct StringFormatter;
+
 	static const int64_t DEFAULT_SIZE_OPTION_VALUE;
 
-	explicit QueryParameters(Statement::Id statement);
+	explicit QueryParameters(const QueryFormatter &formatter);
+
+	Statement::Id getStatement() const;
+	StringFormatter toString() const;
 
 	void putFixed(XArrayByteOutStream &out) const;
 
@@ -3187,7 +3655,7 @@ struct GSContainerTag::QueryParameters {
 			bool forUpdate, int64_t transactionId, bool transactionStarted,
 			const PartialExecutionStatus &executionStatus) const;
 
-	Statement::Id statement_;
+	const QueryFormatter *formatter_;
 	QueryData queryData_;
 
 	int64_t fetchLimit_;
@@ -3200,21 +3668,36 @@ struct GSContainerTag::QueryParameters {
 	int64_t initialTransactionId_;
 };
 
+struct GSContainerTag::QueryParameters::StringFormatter {
+	explicit StringFormatter(const QueryParameters &parameters);
+
+	void format(std::ostream &os) const;
+
+	const QueryParameters &parameters_;
+};
+
+std::ostream& operator<<(
+		std::ostream &os,
+		const GSContainerTag::QueryParameters::StringFormatter &formatter);
+
 
 struct GSQueryTag {
 public:
 	friend struct GSResourceHeader;
 	friend struct GSContainerTag;
 
+	typedef GSContainer::QueryFormatter QueryFormatter;
 	typedef GSContainer::QueryParameters QueryParameters;
+	typedef QueryParameters::StringFormatter StringFormatter;
 
-	GSQueryTag(GSContainer &container, Statement::Id statement);
+	GSQueryTag(GSContainer &container, const QueryFormatter &formatter);
 	~GSQueryTag();
 
 	static void close(GSQuery **query) throw();
 
 	GSContainer* getContainer();
 	Statement::Id getStatement() const;
+	StringFormatter toString() const;
 
 	XArrayByteOutStream getParametersOutStream();
 
@@ -3286,6 +3769,8 @@ public:
 
 	void createReference() throw();
 	static void removeReference(GSRowSet *&rowSet) throw();
+
+	GSQuery::StringFormatter toQueryString() const;
 
 	int32_t getSize() const;
 	GSRowSetType getType() const;
@@ -3372,7 +3857,8 @@ public:
 	template<typename Traits>
 	static GSResult getValueTyped(
 			GSAggregationResult *aggregationResult,
-			typename Traits::Object *value, GSBool *assigned) throw();
+			typename Traits::Object *value, GSBool *assigned,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 private:
 	GSAggregationResultTag();
@@ -3413,23 +3899,30 @@ public:
 
 	static GSResult getContainerSchema(
 			GSRow *row, GSContainerInfo *schemaInfo,
-			const ClientVersion &version) throw();
+			const ClientVersion &version,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	template<typename Traits>
-	static GSResult getPrimitiveField(GSRow *row, int32_t columnId,
-			typename Traits::Object *value) throw();
+	static GSResult getPrimitiveField(
+			GSRow *row, int32_t columnId, typename Traits::Object *value,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	template<typename Traits>
-	static GSResult getArrayField(GSRow *row, int32_t columnId,
-			typename Traits::Object *value, size_t *arraySize) throw();
+	static GSResult getArrayField(
+			GSRow *row, int32_t columnId, typename Traits::Object *value,
+			size_t *arraySize,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	template<typename Traits>
-	static GSResult setPrimitiveField(GSRow *row, int32_t columnId,
-			typename Traits::Object value) throw();
+	static GSResult setPrimitiveField(
+			GSRow *row, int32_t columnId, typename Traits::Object value,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	template<typename Traits>
-	static GSResult setArrayField(GSRow *row, int32_t columnId,
-			typename Traits::Object value, size_t arraySize) throw();
+	static GSResult setArrayField(
+			GSRow *row, int32_t columnId, typename Traits::Object value,
+			size_t arraySize,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	void getField(int32_t columnId, GSValue &value, GSType &type,
 			const GSType *expectedType);
@@ -3582,21 +4075,25 @@ public:
 	static void close(GSRowKeyPredicate **predicate) throw();
 
 	template<typename Traits, RangeElementType RangeType>
-	static GSResult getRangeKey(GSRowKeyPredicate *predicate,
-			const typename Traits::Object **key) throw();
+	static GSResult getRangeKey(
+			GSRowKeyPredicate *predicate, const typename Traits::Object **key,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	template<typename Traits, RangeElementType RangeType>
-	static GSResult setRangeKey(GSRowKeyPredicate *predicate,
-			const typename Traits::Object *key) throw();
+	static GSResult setRangeKey(
+			GSRowKeyPredicate *predicate, const typename Traits::Object *key,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	template<typename Traits>
-	static GSResult getDistinctKeys(GSRowKeyPredicate *predicate,
-			const typename Traits::Object **keyList,
-			size_t *size) throw();
+	static GSResult getDistinctKeys(
+			GSRowKeyPredicate *predicate,
+			const typename Traits::Object **keyList, size_t *size,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	template<typename Traits>
-	static GSResult addDistinctKey(GSRowKeyPredicate *predicate,
-			typename Traits::Object key) throw();
+	static GSResult addDistinctKey(
+			GSRowKeyPredicate *predicate, typename Traits::Object key,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	GSType getKeyType() const;
 
@@ -3703,68 +4200,13 @@ private:
 
 template<typename T> inline bool ClientUtil::parseValue(
 		const GSChar *strValue, T &resultValue) {
-	for (;;) {
-		util::NormalIStringStream iss(strValue);
-		iss.peek();
-		if (iss.eof()) {
-			break;
-		}
-
-		iss.unsetf(std::ios::skipws);
-		if (sizeof(T) < sizeof(int32_t)) {
-			int32_t resultInt32Value;
-			iss >> resultInt32Value;
-			if (iss.bad() || resultInt32Value <
-					static_cast<int32_t>(std::numeric_limits<T>::min()) ||
-					resultInt32Value >
-					static_cast<int32_t>(std::numeric_limits<T>::max()) ) {
-				break;
-			}
-			resultValue = static_cast<T>(resultInt32Value);
-		}
-		else {
-			iss >> resultValue;
-		}
-
-		if (iss.bad()) {
-			break;
-		}
-		if (!iss.eof()) {
-			break;
-		}
-
-		util::NormalOStringStream oss;
-		oss << resultValue;
-		if (iss.str() != oss.str()) {
-			break;
-		}
-
-		return true;
-	}
-
-	resultValue = T();
-	return false;
-}
-
-template<> inline bool ClientUtil::parseValue(
-		const GSChar *strValue, bool &resultValue) {
-	if (strcmp(strValue, "true") == 0) {
-		resultValue = true;
-		return true;
-	}
-	else if (strcmp(strValue, "false") == 0) {
-		resultValue = false;
-		return true;
-	}
-
-	resultValue = bool();
-	return false;
+	return util::StrictLexicalConverter<T>()(strValue, resultValue);
 }
 
 template<typename T> inline T ClientUtil::parseValue(const GSChar *strValue) {
 	T resultValue;
 	if (!parseValue(strValue, resultValue)) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_VALUE_FORMAT, strValue);
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_VALUE_FORMAT, strValue);
 	}
 
 	return resultValue;
@@ -3801,13 +4243,13 @@ template<typename C>
 ArrayByteInStream ClientUtil::subStream(
 		const C &buf, const ArrayByteInStream &in, size_t size) {
 	if (size > in.base().remaining()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 	}
 
 	const size_t beginPos = in.base().position();
 	const size_t endPos = beginPos + size;
 	if (endPos > buf.size()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 
 	ArrayByteInStream subIn((util::ArrayInStream(buf.data(), endPos)));

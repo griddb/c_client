@@ -100,7 +100,7 @@
 
 	@ENDL
 */
-#define GS_CLIENT_VERSION_MINOR 1
+#define GS_CLIENT_VERSION_MINOR 2
 #endif
 
 // C API
@@ -244,6 +244,14 @@ extern "C" {
 #define GS_COMPATIBILITY_SUPPORT_4_1 1
 #else
 #define GS_COMPATIBILITY_SUPPORT_4_1 0
+#endif
+
+#if !defined(GS_COMPATIBILITY_SUPPORT_4_2) && \
+	(GS_CLIENT_VERSION_MAJOR > 4 || \
+	(GS_CLIENT_VERSION_MAJOR == 4 && GS_CLIENT_VERSION_MINOR >= 2))
+#define GS_COMPATIBILITY_SUPPORT_4_2 1
+#else
+#define GS_COMPATIBILITY_SUPPORT_4_2 0
 #endif
 
 #endif	// GS_INTERNAL_DEFINITION_VISIBLE
@@ -400,10 +408,34 @@ typedef struct GSGridStoreFactoryTag GSGridStoreFactory;
 		特に記載のない限り、コンテナ名を指定する操作では、ASCIIの大文字・小文字
 		表記の違いは区別されません。
 	@par
+		このインタフェースまたはこのインタフェースを通じて得られたインスタンスの
+		インタフェースに対する操作を通じてエラーが発生した場合、エラーに関する
+		次のパラメータを取得できることがあります。
+		<table>
+		<tr><th>パラメータ名</th><th>説明</th></tr>
+		<tr><td>address</td><td>接続先クラスタノードのアドレス・ポート。ホスト名
+		またはIPアドレスとポート番号とをコロン「:」で連結した文字列により
+		構成されます。このインタフェースまたはこのインタフェースを通じて得られた
+		インスタンスのインタフェースにおいて、クラスタへのアクセスを伴う操作を
+		呼び出した際にエラーを検知すると、このパラメータを含むことがあります。
+		このパラメータを含む場合、パラメータが示すクラスタノードにおいてエラーの
+		詳細が記録されていることがあります。</td></tr>
+		<tr><td>container</td><td>エラーに関係しうるコンテナの名前。任意個数の
+		コンテナを一括して扱う操作において、そのうち少なくとも一つのコンテナに
+		ついての操作を行えないことが判明した場合に、このパラメータを含むことが
+		あります。任意個数のコンテナを扱う具体的な操作については、個々の
+		インタフェースの定義を参照してください。クラスタノードへのリクエスト
+		準備段階でのリソース不足など、どのコンテナの問題か特定し切れないことが
+		あるため、どのようなエラーでもこのパラメータを含むとは限りません。
+		また、複数のコンテナについて操作できない可能性があったとしても、
+		パラメータに含まれるのは高々一つのコンテナの名前のみです。</td></tr>
+		</table>
+	@par
 		この型のポインタを第一引数とする関数のスレッド安全性は保証されません。
 	@see GSCollection
 	@see GSTimeSeries
 	@see GSContainer
+	@see gsGetErrorParameterCount
 
 	@EN
 	@ingroup Group_GSGridStore
@@ -425,11 +457,37 @@ typedef struct GSGridStoreFactoryTag GSGridStoreFactory;
 		lowercase ASCII characters are identified as the same
 		unless otherwise noted.
 	@par
+		If an error occurs by this interface or the interface of the instance
+		which is acquired through this interface, the error information may
+		contain the following parameters related to the error.
+		<table>
+		<tr><th>Parameter name</th><th>Description</th></tr>
+		<tr><td>address</td><td>Address and port of connecting cluster
+		node. It is a string connecting the host name or the IP address
+		and the port number with a colon ":". In this interface or the
+		interface of the instance which is acquired through this interface,
+		when an error is detected in invoking an operation including a
+		cluster access, this parameter may be contained. In that case, the
+		details of the error may be logged in the cluster node shown by this
+		parameter.</td></tr>
+		<tr><td>container</td><td>The name of container which may relate
+		the error. When operating an arbitrary number of containers and
+		detected that the operation cannot be performed for one of the
+		containers, this parameter may be contained. For instance of such
+		operations, see the definition of each interface. For such as
+		resource shortage in preparing requests to cluster nodes, it may
+		not be possible to determine which container is the cause, so this
+		parameter may not be contained in some error cases. And even if it is
+		not possible to operate multiple containers, this parameter contains
+		only one container name at most.</td></tr>
+		</table>
+	@par
 		Functions which have a pointer of this type in the first argument are
 		NOT thread safe.
 	@see GSCollection
 	@see GSTimeSeries
 	@see GSContainer
+	@see gsGetErrorParameterCount
 
 	@ENDL
 */
@@ -4593,6 +4651,15 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		notificationAddressおよびnotificationMemberと同時に指定する
 		ことはできない。バージョン2.9よりサポート</td>
 		</tr>
+		<tr>
+		<td>applicationName</td>
+		<td>アプリケーションの名前。アプリケーションの識別を補助するための
+		情報として、接続先のクラスタ上での各種管理情報の出力の際に
+		含められる場合がある。ただし、アプリケーションの同一性をどのように
+		定義するかについては関与しない。省略時はアプリケーション名の
+		指定がなかったものとみなされる。空文字列は指定できない。
+		バージョン4.2よりサポート</td>
+		</tr>
 		</table>
 	@par
 		クラスタ名、データベース名、ユーザ名、パスワードについては、
@@ -4757,6 +4824,15 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		This property cannot be specified with neither notificationAddress nor
 		notificationMember properties at the same time.
 		This property is supported on version 2.9 or later.</td>
+		</tr>
+		<tr>
+		<td>applicationName</td>
+		<td>Name of an application. It may be contained in various information
+		for management on the connected cluster. However, the cluster shall
+		not be involved with the identity of applications. If the property is
+		omitted, it is regarded that the name is not specified. Empty string
+		cannot be specified. This property is supported on version 4.2 or
+		later.</td>
 		</tr>
 		</table>
 	@par
@@ -6663,6 +6739,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStore(
 		一度に大量のロウを取得しようとした場合、GridDBノードが管理する
 		通信バッファのサイズの上限に到達し、失敗することがあります。
 		上限サイズについては、GridDBテクニカルリファレンスを参照してください。
+	@par
+		この操作によりエラーが発生した場合、エラー情報には@c container
+		パラメータが含まれることがあります。エラーに関するパラメータの詳細は、
+		@ref GSGridStore の定義を参照してください。
 	@param [in] store
 		処理対象の@ref GSGridStore
 	@param [in] queryList
@@ -6726,7 +6806,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStore(
 		each @ref GSContainer will not be aborted so long as the transaction
 		timeout time has not been reached.
 	@par
-		If an exception occurs in the midst of processing each @ref GSQuery, a
+		If an error occurs in the midst of processing each @ref GSQuery, a
 		new @ref GSRowSet may be set for only some of the @ref GSQuery.
 		In addition, uncommitted transactions of each @ref GSQuery corresponding
 		to the designated @ref GSContainer may be aborted.
@@ -6736,6 +6816,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStore(
 		may be reached, possibly resulting in a failure.
 		Refer to the GridDB Technical Reference for the upper limit
 		size.
+	@par
+		If an error occurs in this operation, the error information may contain
+		@c container parameter. For the details of the parameters related to
+		the error, see the definition of @ref GSGridStore.
 	@param [in] store
 		@ref GSGridStore to be processed
 	@param [in] queryList
@@ -6815,6 +6899,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsFetchAll(
 		各コンテナならびにロウに対する処理の途中でエラーが発生した場合、
 		一部のコンテナの一部のロウに対する操作結果のみが反映されたままとなることが
 		あります。
+	@par
+		この操作によりエラーが発生した場合、エラー情報には@c container
+		パラメータが含まれることがあります。エラーに関するパラメータの詳細は、
+		@ref GSGridStore の定義を参照してください。
 	@attention
 		エントリ列に含まれるロウオブジェクトへのアドレスとして@ref GSRow 以外の
 		ものが含まれており、異常を検知できなかった場合、この処理の動作は未定義です。
@@ -6904,6 +6992,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsFetchAll(
 		If an error occurs in the midst of processing a Container and its Rows,
 		only the results for some of the Rows of some of the Containers may
 		remain reflected.
+	@par
+		If an error occurs in this operation, the error information may contain
+		@c container parameter. For the details of the parameters related to
+		the error, see the definition of @ref GSGridStore.
 	@attention
 		The behavior is undefined if the address of Row object excepting
 		@ref GSRow is included in the entry columns and failed to detect
@@ -6999,6 +7091,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutMultipleContainerRows(
 		一度に大量のロウを取得しようとした場合、GridDBノードが管理する
 		通信バッファのサイズの上限に到達し、失敗することがあります。
 		上限サイズについては、GridDBテクニカルリファレンスを参照してください。
+	@par
+		この操作によりエラーが発生した場合、エラー情報には@c container
+		パラメータが含まれることがあります。エラーに関するパラメータの詳細は、
+		@ref GSGridStore の定義を参照してください。
 	@attention
 		取得するエントリ列ならびにその中に含まれるコンテナ名やロウオブジェクト列の
 		可変長のデータを格納するために、指定の@ref GSGridStore インスタンス上で
@@ -7092,6 +7188,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutMultipleContainerRows(
 		upper limit of the communication buffer size managed by the GridDB node
 		may be reached, possibly resulting in a failure.
 		Refer to the GridDB Technical Reference for the upper limit size.
+	@par
+		If an error occurs in this operation, the error information may contain
+		@c container parameter. For the details of the parameters related to
+		the error, see the definition of @ref GSGridStore.
 	@attention
 		In order to store the variable-length data such as the entry column to
 		be obtained and the Container name or the column of Row object included
@@ -8520,7 +8620,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRow(
 		手動コミットモードの場合、対象のロウがロックされます。
 	@par
 		自動コミットモードのときに、コンテナならびにロウに対する処理の途中で
-		例外が発生した場合、コンテナの一部のロウに対する操作結果のみが反映された
+		エラーが発生した場合、コンテナの一部のロウに対する操作結果のみが反映された
 		ままとなることがあります。
 	@attention
 		指定の@ref GSContainer にバインドされたロウオブジェクトの型と
@@ -8573,8 +8673,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRow(
 	@par
 		In the manual commit mode, the target Row is locked.
 	@par
-		In automatic commit mode, when an exception occurs during containers and rows' processing,
-		only the operation result for some of the containers' row will be reflected.
+		In automatic commit mode, when an error occurs during containers and
+		rows' processing, only the operation result for some of the containers'
+		row will be reflected.
 	@attention
 		The behavior is undefined if the type of Row object bound to the
 		specified @ref GSContainer and the type of specified Row object
@@ -16693,7 +16794,7 @@ GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddTime(
 	@param [in] bufSize
 		the size of output string buffer in bytes, including the termination
 		character
-	@return the minimum size of string buffer required for output in bytes,
+	@return The minimum size of string buffer required for output in bytes,
 		including the termination character.
 		However, @c 1 which is equivalent to the size of the empty string is
 		returned if an internal system call fails
@@ -16801,10 +16902,8 @@ GS_DLL_PUBLIC size_t GS_API_CALL gsGetErrorStackSize(
 	@ingroup Group_ErrorHandling
 	@brief 指定のリソースに関する直前のエラーのエラーコードを取得します。
 	@param [in] gsResource
-		リソースのアドレス。ここでのリソースとは、@ref GSGridStoreFactory インスタンス、
-		または、@ref GSGridStoreFactory を介して生成された、クローズ関数により
-		破棄できるリソースのことです。
-		@c NULL が指定された場合、有効な結果を取得できません。
+		リソースのアドレス。
+		@ref gsGetErrorStackSize の同名の引数と同様です。
 	@param [in] stackIndex
 		エラースタックのインデックス。@c 0 以上スタックサイズ未満の値を指定した場合のみ、
 		有効な結果を取得できます。
@@ -16815,10 +16914,8 @@ GS_DLL_PUBLIC size_t GS_API_CALL gsGetErrorStackSize(
 	@ingroup Group_ErrorHandling
 	@brief Returns the error code of last error related to specified resource.
 	@param [in] gsResource
-		The address to the resource. The resource means @ref GSGridStoreFactory
-		instance or resource that is generated via @ref GSGridStoreFactory and
-		can be destroyed by the close function.
-		If @c NULL is specified, it is unable to get a valid result.
+		The address to the resource. It is the same as the argument with the
+		same name of @ref gsGetErrorStackSize.
 	@param [in] stackIndex
 		The index of error stack. A valid result will be returned only if a
 		value which has more than @c 0 and less than the stack size is
@@ -16836,13 +16933,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetErrorCode(
 	@ingroup Group_ErrorHandling
 	@brief 指定のリソースに関する直前のエラーのメッセージを取得します。
 	@param [in] gsResource
-		リソースのアドレス。ここでのリソースとは、@ref GSGridStoreFactory インスタンス、
-		または、@ref GSGridStoreFactory を介して生成された、クローズ関数により
-		破棄できるリソースのことです。
-		@c NULL が指定された場合、有効な結果を取得できません。
+		リソースのアドレス。
+		@ref gsGetErrorStackSize の同名の引数と同様です。
 	@param [in] stackIndex
-		エラースタックのインデックス。@c 0 以上スタックサイズ未満の値を指定した場合のみ、
-		有効な結果を取得できます。
+		エラースタックのインデックス。
+		@ref gsGetErrorCode の同名の引数と同様です。
 	@param [out] strBuf
 		エラーメッセージを格納する文字列バッファ。
 		@c NULL の場合、有効な結果を取得できません。
@@ -16853,21 +16948,18 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetErrorCode(
 		格納する文字列の終端文字を含む文字数の方が大きい場合、終端文字を
 		除く後方の文字列を切り詰めて格納します。@c 0 の場合、文字列バッファに
 		アクセスしません。
-	@return 文字列バッファに格納したエラーメッセージ文字列の終端文字を含む文字数。
-		該当する情報を取得できなかった場合、@c 0
+	@return 終端文字を含んだ、出力に必要とする文字列バッファのバイト単位の
+		最低サイズ。該当する情報を取得できなかった場合、@c 0
 
 	@EN
 	@ingroup Group_ErrorHandling
 	@brief Returns the message of last error related to specified resource.
 	@param [in] gsResource
-		The address to the resource. The resource means @ref GSGridStoreFactory
-		instance or resource that is generated via @ref GSGridStoreFactory and
-		can be destroyed by the close function.
-		If @c NULL is specified, it is unable to get a valid result.
+		The address to the resource. It is the same as the argument with the
+		same name of @ref gsGetErrorStackSize.
 	@param [in] stackIndex
-		The index of error stack. A valid result will be returned only if a
-		value which has more than @c 0 and less than the stack size is
-		specified.
+		The index of error stack. It is the same as the argument with the same
+		name of @ref gsGetErrorCode.
 	@param [out] strBuf
 		The string buffer to store the error message.
 		If @c NULL is specified, it is unable to get a valid result.
@@ -16881,9 +16973,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetErrorCode(
 		stored in string buffer is larger than this value, the backside string
 		except the termination character will be truncated.
 		If @c 0 is specified, there is no access to the string buffer.
-	@return The number of characters of the error message including the
-		termination character stored in the string buffer.
-		@c 0 is returned if corresponding information can not be obtained.
+	@return The minimum size of string buffer required for output in bytes,
+		including the termination character. @c 0 is returned if corresponding
+		information cannot be obtained.
 
 	@ENDL
  */
@@ -16898,25 +16990,19 @@ GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorMessage(
 	@par
 		設定によっては常に空文字列しか求まらない場合があります。
 	@param [in] gsResource
-		リソースのアドレス。ここでのリソースとは、@ref GSGridStoreFactory インスタンス、
-		または、@ref GSGridStoreFactory を介して生成された、クローズ関数により
-		破棄できるリソースのことです。
-		@c NULL が指定された場合、有効な結果を取得できません。
+		リソースのアドレス。
+		@ref gsGetErrorStackSize の同名の引数と同様です。
 	@param [in] stackIndex
-		エラースタックのインデックス。@c 0 以上スタックサイズ未満の値を指定した場合のみ、
-		有効な結果を取得できます。
+		エラースタックのインデックス。
+		@ref gsGetErrorCode の同名の引数と同様です。
 	@param [out] strBuf
 		エラー位置情報を格納する文字列バッファ。
-		@c NULL の場合、有効な結果を取得できません。
-		@c NULL ではなく、別の原因で有効な結果が取得できなかった場合、
-		@c bufSize が正の値であれば空文字列を格納します。
+		@ref gsFormatErrorMessage の同名の引数と同様です。
 	@param [in] bufSize
 		エラー位置情報を格納する文字列バッファの終端文字を含む文字数。
-		格納する文字列の終端文字を含む文字数の方が大きい場合、終端文字を
-		除く後方の文字列を切り詰めて格納します。@c 0 の場合、文字列バッファに
-		アクセスしません。
-	@return 文字列バッファに格納したエラー位置情報文字列の終端文字を含む文字数。
-		該当する情報を取得できなかった場合、@c 0
+		@ref gsFormatErrorMessage の同名の引数と同様です。
+	@return 終端文字を含んだ、出力に必要とする文字列バッファのバイト単位の
+		最低サイズ。該当する情報を取得できなかった場合、@c 0
 
 	@EN
 	@ingroup Group_ErrorHandling
@@ -16925,30 +17011,22 @@ GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorMessage(
 	@par
 		It might always return empty string depending on the settings.
 	@param [in] gsResource
-		The address to the resource. The resource means @ref GSGridStoreFactory
-		instance or resource that is generated via @ref GSGridStoreFactory and
-		can be destroyed by the close function.
-		If @c NULL is specified, it is unable to get a valid result.
+		The address to the resource. It is the same as the argument with the
+		same name of @ref gsGetErrorStackSize.
 	@param [in] stackIndex
-		The index of error stack. A valid result will be returned only if a
-		value which has more than @c 0 and less than the stack size is
-		specified.
+		The index of error stack. It is the same as the argument with the same
+		name of @ref gsGetErrorCode.
 	@param [out] strBuf
-		The string buffer to store the error location information.
-		If @c NULL is specified, it is unable to get a valid result.
-		If this is not @c NULL and if it is unable to get a valid result in a
-		different cause and if a positive value is specified to @c bufSize,
-		then the empty string is stored.
+		The string buffer to store the error location information. It is the
+		same as the argument with the same name of @ref gsFormatErrorMessage.
 	@param [in] bufSize
 		The number of characters in the string buffer to store the error
 		location information including the termination character.
-		If the number of characters including the termination character to be
-		stored in string buffer is larger than this value, the backside string
-		except the termination character will be truncated.
-		If @c 0 is specified, there is no access to the string buffer.
-	@return The number of characters of the error location string including the
-		termination character stored in the string buffer.
-		@c 0 is returned if corresponding information can not be obtained.
+		It is the same as the argument with the same name of
+		@ref gsFormatErrorMessage.
+	@return The minimum size of string buffer required for output in bytes,
+		including the termination character. @c 0 is returned if corresponding
+		information cannot be obtained.
 
 	@ENDL
  */
@@ -17024,6 +17102,294 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 GS_DLL_PUBLIC GSBool GS_API_CALL gsIsTimeoutError(GSResult result);
 
 #endif	// GS_COMPATIBILITY_SUPPORT_1_5
+
+
+#if GS_COMPATIBILITY_SUPPORT_4_2
+/*!
+	@JP
+	@ingroup Group_ErrorHandling
+	@brief 指定のリソースに関する直前のエラーのエラー名を取得します。
+	@param [in] gsResource
+		リソースのアドレス。
+		@ref gsGetErrorStackSize の同名の引数と同様です。
+	@param [in] stackIndex
+		エラースタックのインデックス。
+		@ref gsGetErrorCode の同名の引数と同様です。
+	@param [out] strBuf
+		エラー名を格納する文字列バッファ。
+		@ref gsFormatErrorMessage の同名の引数と同様です。
+	@param [in] bufSize
+		エラー名を格納する文字列バッファの終端文字を含む文字数。
+		@ref gsFormatErrorMessage の同名の引数と同様です。
+	@return 終端文字を含んだ、出力に必要とする文字列バッファのバイト単位の
+		最低サイズ。該当する情報を取得できなかった場合、@c 0
+	@since 4.2
+
+	@EN
+	@ingroup Group_ErrorHandling
+	@brief Returns the error name of last error related to specified resource.
+	@param [in] gsResource
+		The address to the resource. It is the same as the argument with the
+		same name of @ref gsGetErrorStackSize.
+	@param [in] stackIndex
+		The index of error stack. It is the same as the argument with the same
+		name of @ref gsGetErrorCode.
+	@param [out] strBuf
+		The string buffer to store the error name. It is the same as the
+		argument with the same name of @ref gsFormatErrorMessage.
+	@param [in] bufSize
+		The number of characters in the string buffer to store the error
+		name including the termination character. It is the same as the
+		argument with the same name of @ref gsFormatErrorMessage.
+	@return The minimum size of string buffer required for output in bytes,
+		including the termination character. @c 0 is returned if corresponding
+		information cannot be obtained.
+	@since 4.2
+
+	@ENDL
+ */
+GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorName(
+		void *gsResource, size_t stackIndex, GSChar *strBuf, size_t bufSize);
+
+/*!
+	@JP
+	@ingroup Group_ErrorHandling
+	@brief 指定のリソースに関する直前のエラーの説明内容を取得します。
+	@par
+		説明内容は、エラーメッセージのうち、エラー番号・エラー名を除いた部分に
+		相当します。
+	@param [in] gsResource
+		リソースのアドレス。
+		@ref gsGetErrorStackSize の同名の引数と同様です。
+	@param [in] stackIndex
+		エラースタックのインデックス。
+		@ref gsGetErrorCode の同名の引数と同様です。
+	@param [out] strBuf
+		エラーの説明内容を格納する文字列バッファ。
+		@ref gsFormatErrorMessage の同名の引数と同様です。
+	@param [in] bufSize
+		エラーの説明内容を格納する文字列バッファの終端文字を含む文字数。
+		@ref gsFormatErrorMessage の同名の引数と同様です。
+	@return 終端文字を含んだ、出力に必要とする文字列バッファのバイト単位の
+		最低サイズ。該当する情報を取得できなかった場合、@c 0
+	@since 4.2
+
+	@EN
+	@ingroup Group_ErrorHandling
+	@brief Returns the description of last error related to specified resource.
+	@par
+		The description is equivalent to part of the error message which
+		contains neither the error code nor the error name.
+	@param [in] gsResource
+		The address to the resource. It is the same as the argument with the
+		same name of @ref gsGetErrorStackSize.
+	@param [in] stackIndex
+		The index of error stack. It is the same as the argument with the same
+		name of @ref gsGetErrorCode.
+	@param [out] strBuf
+		The string buffer to store the error description. It is the same as the
+		argument with the same name of @ref gsFormatErrorMessage.
+	@param [in] bufSize
+		The number of characters in the string buffer to store the error
+		description including the termination character. It is the same as the
+		argument with the same name of @ref gsFormatErrorMessage.
+	@return The minimum size of string buffer required for output in bytes,
+		including the termination character. @c 0 is returned if corresponding
+		information cannot be obtained.
+	@since 4.2
+
+	@ENDL
+ */
+GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorDescription(
+		void *gsResource, size_t stackIndex, GSChar *strBuf, size_t bufSize);
+
+/*!
+	@JP
+	@ingroup Group_ErrorHandling
+	@brief 指定のリソースに関する直前のエラーに関するパラメータの個数を
+		取得します。
+	@par
+		エラーに関する内容のうち、特定の情報についてはパラメータとして取り出す
+		ことができます。各パラメータは、名前と値を持ちます。パラメータの個数に
+		基づく各インデックス値を通じ、順不同にパラメータを列挙することが
+		できます。取得できるパラメータについては、エラーを引き起こした操作に
+		関する、個々のインタフェースまたは関連するインタフェースの定義を参照
+		してください。
+	@par
+		取得できるパラメータの内容は、@ref gsFormatErrorMessage もしくは
+		@ref gsFormatErrorDescription より求まる文字列にも原則として含まれます。
+		一方、この文字列から特定の情報だけを一定の文字列解析規則で取り出せる
+		とは限りません。特定のバージョンのある状況下では取り出せたとしても、別の
+		条件では意図しない情報が求まるなどして取り出せない可能性があります。
+		エラーに関するパラメータを個々に取得することで、インタフェースの定義で
+		明記された一部の情報については、文字列解析を行わずに取り出せます。
+	@par
+		エラーに関するパラメータだけを記録し、メッセージ文字列などその他の
+		エラー内容を記録しなかった場合、記録された内容からエラーの原因を
+		特定することが困難となる可能性があります。
+	@param [in] gsResource
+		リソースのアドレス。
+		@ref gsGetErrorStackSize の同名の引数と同様です。
+	@param [in] stackIndex
+		エラースタックのインデックス。
+		@ref gsGetErrorCode の同名の引数と同様です。
+	@return エラーに関するパラメータの個数。該当する情報を取得できなかった
+		場合、@c 0
+	@since 4.2
+
+	@EN
+	@ingroup Group_ErrorHandling
+	@brief Returns the number of parameters of last error related to specified
+		resource.
+	@par
+		Particular information about the error can be obtained as parameters.
+		Each parameter consists of a name and a value. The parameters can be
+		enumerated in an undefined order by using each index value based on
+		the number of the parameters. For the parameters which can be obtained,
+		see the definition of interfaces of which operation may occur the error
+		or the definition of related interfaces.
+	@par
+		The content of the parameters is also included in the  string returned
+		by @ref gsFormatErrorMessage or @ref gsFormatErrorDescription
+		in principle. But by a fixed parsing rule, it may not be able to extract
+		the particular information from this message. Even if the intended
+		information can be extracted from a context in a version, for other
+		conditions, unintended information may be acquired or nothing may
+		be acquired. By obtaining the parameters, a part of information
+		specified in the definition of the interfaces can be acquired without
+		parsing.
+	@par
+		When recording only the content of the obtained parameters and
+		not recording other error information such as the message
+		text, it may become difficult to identify the reason for the error.
+	@param [in] gsResource
+		The address to the resource. It is the same as the argument with the
+		same name of @ref gsGetErrorStackSize.
+	@param [in] stackIndex
+		The index of error stack. It is the same as the argument with the same
+		name of @ref gsGetErrorCode.
+	@return The number of parameters. @c 0 is returned if corresponding
+		information cannot be obtained
+	@since 4.2
+
+	@ENDL
+ */
+GS_DLL_PUBLIC size_t GS_API_CALL gsGetErrorParameterCount(
+		void *gsResource, size_t stackIndex);
+
+/*!
+	@JP
+	@ingroup Group_ErrorHandling
+	@brief 指定のリソースに関する直前のエラーに関するパラメータの名前を取得します。
+	@param [in] gsResource
+		リソースのアドレス。
+		@ref gsGetErrorStackSize の同名の引数と同様です。
+	@param [in] stackIndex
+		エラースタックのインデックス。
+		@ref gsGetErrorCode の同名の引数と同様です。
+	@param [in] parameterIndex
+		エラーに関するパラメータ集合のインデックス。@c 0 以上、かつ、パラメータの個数
+		未満の値を指定した場合のみ、有効な結果を取得できます。
+	@param [out] strBuf
+		パラメータ名を格納する文字列バッファ。
+		@ref gsFormatErrorMessage の同名の引数と同様です。
+	@param [in] bufSize
+		パラメータ名を格納する文字列バッファの終端文字を含む文字数。
+		@ref gsFormatErrorMessage の同名の引数と同様です。
+	@return 終端文字を含んだ、出力に必要とする文字列バッファのバイト単位の
+		最低サイズ。該当する情報を取得できなかった場合、@c 0
+	@see gsGetErrorParameterCount
+	@since 4.2
+
+	@EN
+	@ingroup Group_ErrorHandling
+	@brief Returns the parameter name of last error related to specified
+		resource.
+	@param [in] gsResource
+		The address to the resource. It is the same as the argument with the
+		same name of @ref gsGetErrorStackSize.
+	@param [in] stackIndex
+		The index of error stack. It is the same as the argument with the same
+		name of @ref gsGetErrorCode.
+	@param [in] parameterIndex
+		The index of set of parameters about the error. A valid result will be
+		returned only if a value which has more than @c 0 and less than the
+		number of the parameters is specified.
+	@param [out] strBuf
+		The string buffer to store the parameter name. It is the same as the
+		argument with the same name of @ref gsFormatErrorMessage.
+	@param [in] bufSize
+		The number of characters in the string buffer to store the parameter
+		name including the termination character. It is the same as the
+		argument with the same name of @ref gsFormatErrorMessage.
+	@return The minimum size of string buffer required for output in bytes,
+		including the termination character. @c 0 is returned if corresponding
+		information cannot be obtained.
+	@see gsGetErrorParameterCount
+	@since 4.2
+
+	@ENDL
+ */
+GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorParameterName(
+		void *gsResource, size_t stackIndex, size_t parameterIndex,
+		GSChar *strBuf, size_t bufSize);
+
+/*!
+	@JP
+	@ingroup Group_ErrorHandling
+	@brief 指定のリソースに関する直前のエラーに関するパラメータの値を取得します。
+	@param [in] gsResource
+		リソースのアドレス。
+		@ref gsGetErrorStackSize の同名の引数と同様です。
+	@param [in] stackIndex
+		エラースタックのインデックス。
+		@ref gsGetErrorCode の同名の引数と同様です。
+	@param [in] parameterIndex
+		エラーに関するパラメータ集合のインデックス。
+		@ref gsFormatErrorParameterName の同名の引数と同様です。
+	@param [out] strBuf
+		パラメータ値を格納する文字列バッファ。
+		@ref gsFormatErrorMessage の同名の引数と同様です。
+	@param [in] bufSize
+		パラメータ値を格納する文字列バッファの終端文字を含む文字数。
+		@ref gsFormatErrorMessage の同名の引数と同様です。
+	@return 終端文字を含んだ、出力に必要とする文字列バッファのバイト単位の
+		最低サイズ。該当する情報を取得できなかった場合、@c 0
+	@see gsGetErrorParameterCount
+	@since 4.2
+
+	@EN
+	@ingroup Group_ErrorHandling
+	@brief Returns the parameter value of last error related to specified
+		resource.
+	@param [in] gsResource
+		The address to the resource. It is the same as the argument with the
+		same name of @ref gsGetErrorStackSize.
+	@param [in] stackIndex
+		The index of error stack. It is the same as the argument with the same
+		name of @ref gsGetErrorCode.
+	@param [in] parameterIndex
+		The index of set of parameters about the error. It is the same as the
+		argument with the same name of @ref gsFormatErrorParameterName.
+	@param [out] strBuf
+		The string buffer to store the parameter value. It is the same as the
+		argument with the same name of @ref gsFormatErrorMessage.
+	@param [in] bufSize
+		The number of characters in the string buffer to store the parameter
+		value including the termination character. It is the same as the
+		argument with the same name of @ref gsFormatErrorMessage.
+	@return The minimum size of string buffer required for output in bytes,
+		including the termination character. @c 0 is returned if corresponding
+		information cannot be obtained.
+	@see gsGetErrorParameterCount
+	@since 4.2
+
+	@ENDL
+ */
+GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorParameterValue(
+		void *gsResource, size_t stackIndex, size_t parameterIndex,
+		GSChar *strBuf, size_t bufSize);
+#endif	// GS_COMPATIBILITY_SUPPORT_4_2
 
 //
 // Experimental API
