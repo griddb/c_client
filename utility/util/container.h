@@ -341,7 +341,7 @@ private:
 /*!
 	@brief Lists data in order using usual dynamic memory allocator.
 */
-template< typename T, typename Comp = std::less<T> >
+template< typename T, typename Comp = typename std::set<T>::key_compare >
 class NormalSortedList : public SortedList< T, Comp, NormalXArray<T> > {
 private:
 	typedef SortedList< T, Comp, NormalXArray<T> > BaseType;
