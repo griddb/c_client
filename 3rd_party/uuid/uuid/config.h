@@ -2,7 +2,9 @@
 /* config.h.in.  Generated from configure.in by autoheader.  */
 
 /* Define to 1 if you have the <inttypes.h> header file. */
+#ifndef _WIN32
 #define HAVE_INTTYPES_H 1
+#endif
 
 /* Define to 1 if you have the `jrand48' function. */
 #define HAVE_JRAND48 1
@@ -59,7 +61,9 @@
 #define HAVE_SYS_SYSCALL_H 1
 
 /* Define to 1 if you have the <sys/time.h> header file. */
+#ifndef _WIN32
 #define HAVE_SYS_TIME_H 1
+#endif
 
 /* Define to 1 if you have the <sys/types.h> header file. */
 #define HAVE_SYS_TYPES_H 1
@@ -68,7 +72,9 @@
 #define HAVE_SYS_UN_H 1
 
 /* Define to 1 if you have the <unistd.h> header file. */
+#ifndef _WIN32
 #define HAVE_UNISTD_H 1
+#endif
 
 /* Define to the address where bug reports for this package should be sent. */
 #define PACKAGE_BUGREPORT ""
