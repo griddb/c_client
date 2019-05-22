@@ -35,11 +35,7 @@
 #ifndef __SHA2_H__
 #define __SHA2_H__
 
-#ifdef __GNUC__
 #include <stdint.h>
-#else
-#include "util/stdint.h"
-#endif
 
 #define SHA2_USE_INTTYPES_H
 
