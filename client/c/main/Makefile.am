@@ -46,7 +46,6 @@ $(utildir)/util/container.cpp \
 $(utildir)/util/file.cpp \
 $(utildir)/util/net.cpp \
 $(utildir)/util/os.cpp \
-$(utildir)/util/system.cpp \
 $(utildir)/util/thread.cpp \
 $(utildir)/util/time.cpp \
 $(utildir)/util/type.cpp \

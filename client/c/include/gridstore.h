@@ -23,7 +23,7 @@
 
 #ifndef GS_CLIENT_VERSION_MINOR
 
-#define GS_CLIENT_VERSION_MINOR 1
+#define GS_CLIENT_VERSION_MINOR 2
 #endif
 
 
@@ -167,6 +167,14 @@ extern "C" {
 #define GS_COMPATIBILITY_SUPPORT_4_1 1
 #else
 #define GS_COMPATIBILITY_SUPPORT_4_1 0
+#endif
+
+#if !defined(GS_COMPATIBILITY_SUPPORT_4_2) && \
+	(GS_CLIENT_VERSION_MAJOR > 4 || \
+	(GS_CLIENT_VERSION_MAJOR == 4 && GS_CLIENT_VERSION_MINOR >= 2))
+#define GS_COMPATIBILITY_SUPPORT_4_2 1
+#else
+#define GS_COMPATIBILITY_SUPPORT_4_2 0
 #endif
 
 #endif	
@@ -2461,6 +2469,31 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 
 GS_DLL_PUBLIC GSBool GS_API_CALL gsIsTimeoutError(GSResult result);
 
+#endif	
+
+
+#if GS_COMPATIBILITY_SUPPORT_4_2
+
+GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorName(
+		void *gsResource, size_t stackIndex, GSChar *strBuf, size_t bufSize);
+
+
+GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorDescription(
+		void *gsResource, size_t stackIndex, GSChar *strBuf, size_t bufSize);
+
+
+GS_DLL_PUBLIC size_t GS_API_CALL gsGetErrorParameterCount(
+		void *gsResource, size_t stackIndex);
+
+
+GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorParameterName(
+		void *gsResource, size_t stackIndex, size_t parameterIndex,
+		GSChar *strBuf, size_t bufSize);
+
+
+GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorParameterValue(
+		void *gsResource, size_t stackIndex, size_t parameterIndex,
+		GSChar *strBuf, size_t bufSize);
 #endif	
 
 

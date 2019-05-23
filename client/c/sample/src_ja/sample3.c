@@ -13,40 +13,39 @@ GS_STRUCT_BINDING(Point,
 	GS_STRUCT_BINDING_ELEMENT(active, GS_TYPE_BOOL)
 	GS_STRUCT_BINDING_ELEMENT(voltage, GS_TYPE_DOUBLE));
 
-// Search and aggregation of time-series data
-int sample3(const char *addr, const char *port, const char *clusterName,
-			const char *user, const char *password) {
+// 時系列データの検索と集計
+int sample3(const char *args[5]) {
 	GSGridStore *store;
 	GSTimeSeries *ts;
 	GSQuery *query;
 	GSRowSet *rs;
 	GSResult ret = !GS_RESULT_OK;
 
-	// Lower the consistency level because of read-only operation (default: IMMEDIATE)
+	// 読み取りのみなので、一貫性レベルを緩和(デフォルトはIMMEDIATE)
 	const GSPropertyEntry props[] = {
-			{ "notificationAddress", addr },
-			{ "notificationPort", port },
-			{ "clusterName", clusterName },
-			{ "user", user },
-			{ "password", password },
+			{ "notificationAddress", args[0] },
+			{ "notificationPort", args[1] },
+			{ "clusterName", args[2] },
+			{ "user", args[3] },
+			{ "password", args[4] },
 			{ "consistency", "EVENTUAL" } };
 	const size_t propCount = sizeof(props) / sizeof(*props);
 
-	// Acquiring a GridStore instance
+	// GridStoreインスタンスの取得
 	gsGetGridStore(gsGetDefaultFactory(), props, propCount, &store);
 
-	// Obtain a TimeSeries
-	// Use the Point class as in Sample 2
+	// 時系列の取得(既存の場合は取得のみ)
+	// ※sample2と同じPoint構造体を使用
 	gsGetTimeSeries(store, "point01", GS_GET_STRUCT_BINDING(Point), &ts);
 
-	// Search for the locations whose voltage is not lower than a reference value, though not in action.
+	// 停止中にもかかわらず電圧が基準値以上の箇所を検索
 	gsQuery(ts,
 			"select * from point01"
 			" where not active and voltage > 50", &query);
 	gsFetch(query, GS_FALSE, &rs);
 
 	while (gsHasNextRow(rs)) {
-		// Examine each abnormal point
+		// 各異常ポイントについて調査
 
 		GSTimestamp hot;
 		Point hotPoint;
@@ -61,12 +60,12 @@ int sample3(const char *addr, const char *port, const char *clusterName,
 		if (!GS_SUCCEEDED(ret)) break;
 		hot = hotPoint.timestamp;
 
-		// Obtain the data around ten minutes before
+		// 10分前付近のデータを取得
 		start = gsAddTime(hot, -10, GS_TIME_UNIT_MINUTE);
 		gsGetRowByBaseTime(
 				ts, start, GS_TIME_OPERATOR_NEXT, &startPoint, NULL);
 
-		// Calculate the average of the data for 20 minutes around the point
+		// 前後10分間の平均値を計算
 		end = gsAddTime(hot, 10, GS_TIME_UNIT_MINUTE);
 		gsAggregateTimeSeries(
 				ts, start, end, "voltage", GS_AGGREGATION_AVERAGE, &avg);
@@ -82,10 +81,8 @@ int sample3(const char *addr, const char *port, const char *clusterName,
 		printf(" avg=%.1lf\n", avgValue);
 	}
 
-	// Releasing resource
+	// リソースの解放
 	gsCloseGridStore(&store, GS_TRUE);
 
 	return (GS_SUCCEEDED(ret) ? EXIT_SUCCESS : EXIT_FAILURE);
 }
-
-void main(int argc,char *argv[]){ sample3(argv[1],argv[2],argv[3],argv[4],argv[5]);}

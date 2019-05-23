@@ -21,9 +21,15 @@
 #include "gs_error_common.h"
 #include "sha2.h"
 #include <algorithm>
+#include <functional>
 
 #if !defined(GS_DLL_INSIDE) && !defined(GS_CLIENT_UNIT_TEST)
 #error
+#endif
+
+
+#ifndef GS_CLIENT_CONFIG_FILE_LOGGING_ONLY
+#define GS_CLIENT_CONFIG_FILE_LOGGING_ONLY 1
 #endif
 
 #ifndef GS_CLIENT_MD5_LIB_ENABLED
@@ -37,6 +43,8 @@
 #ifndef GS_CLIENT_DISABLE_DEFAULT_FACTORY
 #define GS_CLIENT_DISABLE_DEFAULT_FACTORY 0
 #endif
+
+
 
 #ifndef GS_CLIENT_ENABLE_PROFILER
 #define GS_CLIENT_ENABLE_PROFILER 0
@@ -118,10 +126,67 @@ static const bool CLIENT_TIME_SERIES_PROPERTIES_OLD = false;
 #define GS_CLIENT_CHECK_NOT_NULL(ptr) \
 		do { \
 			if ((ptr) == NULL) { \
-				UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, ""); \
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, ""); \
 			} \
 		} \
 		while (false)
+
+
+#define GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(resource) \
+		GSInterceptor::FunctionInfo( \
+				__FUNCTION__, GSResourceHeader::getStaticType(resource))
+
+#define GS_CLIENT_INTERCEPT_API_CALL_PARAM(p) \
+		GSInterceptor::Parameter(#p).with(p)
+
+#define GS_CLIENT_INTERCEPT_API_CALL_BASE1( \
+		ret, funcInfo, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, ...) \
+		GSInterceptorManager::Scope interceptorManagerScope; \
+		do { \
+			GSInterceptorManager *manager = \
+					GSResourceHeader::findInterceptorManager(p1); \
+			if (manager == NULL) { \
+				break; \
+			} \
+			if (interceptorManagerScope.set( \
+					*manager, \
+					(funcInfo.isEmpty() ? \
+							GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(p1) : \
+							funcInfo), \
+					GSInterceptor::ParameterList( \
+							GS_CLIENT_INTERCEPT_API_CALL_PARAM(p1), \
+							GS_CLIENT_INTERCEPT_API_CALL_PARAM(p2), \
+							GS_CLIENT_INTERCEPT_API_CALL_PARAM(p3), \
+							GS_CLIENT_INTERCEPT_API_CALL_PARAM(p4), \
+							GS_CLIENT_INTERCEPT_API_CALL_PARAM(p5), \
+							GS_CLIENT_INTERCEPT_API_CALL_PARAM(p6), \
+							GS_CLIENT_INTERCEPT_API_CALL_PARAM(p7), \
+							GS_CLIENT_INTERCEPT_API_CALL_PARAM(p8), \
+							GS_CLIENT_INTERCEPT_API_CALL_PARAM(p9), \
+							GS_CLIENT_INTERCEPT_API_CALL_PARAM(p10)), \
+					GSInterceptor::Parameter().with(ret))) { \
+				return ret; \
+			} \
+		} \
+		while (false)
+
+#define GS_CLIENT_INTERCEPT_API_CALL_BASE2(tuple) \
+		GS_CLIENT_INTERCEPT_API_CALL_BASE1 tuple
+
+#define GS_CLIENT_INTERCEPT_API_CALL_CUSTOM(ret, funcInfo, ...) \
+		GS_CLIENT_INTERCEPT_API_CALL_BASE2(( \
+				ret, funcInfo, __VA_ARGS__, \
+				util::FalseType(), util::FalseType(), util::FalseType(), \
+				util::FalseType(), util::FalseType(), util::FalseType(), \
+				util::FalseType(), util::FalseType(), util::FalseType()))
+
+#define GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, ...) \
+		GSResult ret = GS_ERROR_CC_INTERNAL_ERROR; \
+		GS_CLIENT_INTERCEPT_API_CALL_CUSTOM(ret, funcInfo, __VA_ARGS__)
+
+#define GS_CLIENT_INTERCEPT_API_CALL(...) \
+		GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC( \
+				GSInterceptor::FunctionInfo::emptyInfo(), __VA_ARGS__)
 
 
 #if GS_CLIENT_ENABLE_PROFILER
@@ -244,6 +309,50 @@ GS_DLL_PUBLIC void GS_API_CALL gsExperimentalDumpProfile() {
 #endif	
 
 
+void GSCommonExceptionRegenerator::CustomFilter::filterCause(
+		CauseType causeType, const NamedErrorCode *utilCode,
+		NamedErrorCode &causeCode, bool &codeAsLiteral,
+		const char8_t *&extraMessage) {
+	static_cast<void>(extraMessage);
+
+	if (!causeCode.isEmpty() &&
+			!(causeType == CAUSE_PLATFORM || causeType == CAUSE_UTILITY)) {
+		return;
+	}
+
+	if (utilCode == NULL) {
+		if (causeType == CAUSE_PLATFORM) {
+			causeCode = GS_COMMON_EXCEPTION_NAMED_CODE(
+					GS_ERROR_CC_PLATFORM_ERROR);
+		}
+	}
+	else {
+		switch (utilCode->getCode()) {
+		case util::UtilityException::CODE_NO_MEMORY:
+			causeCode = GS_COMMON_EXCEPTION_NAMED_CODE(
+					GS_ERROR_CC_ALLOCATION_FAILED);
+			break;
+		case util::UtilityException::CODE_MEMORY_LIMIT_EXCEEDED:
+			causeCode = GS_COMMON_EXCEPTION_NAMED_CODE(
+					GS_ERROR_CC_ALLOCATION_FAILED);
+			break;
+		case util::UtilityException::CODE_SIZE_LIMIT_EXCEEDED:
+			causeCode = GS_COMMON_EXCEPTION_NAMED_CODE(
+					GS_ERROR_CC_ILLEGAL_PARAMETER);
+			break;
+		default:
+			break;
+		}
+	}
+
+	if (causeCode.isEmpty()) {
+		causeCode = GS_COMMON_EXCEPTION_NAMED_CODE(
+				GS_ERROR_CC_INTERNAL_ERROR);
+	}
+	codeAsLiteral = true;
+}
+
+
 bool ClientUtil::toBool(GSBool value) {
 	return !!value;
 }
@@ -255,28 +364,28 @@ GSBool ClientUtil::toGSBool(bool value) {
 size_t ClientUtil::toSizeValue(int64_t value) {
 	if (value < 0 ||
 			static_cast<uint64_t>(value) > std::numeric_limits<size_t>::max()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_SIZE_VALUE_OUT_OF_RANGE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_SIZE_VALUE_OUT_OF_RANGE, "");
 	}
 	return static_cast<size_t>(value);
 }
 
 size_t ClientUtil::toSizeValue(int32_t value) {
 	if (value < 0) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_SIZE_VALUE_OUT_OF_RANGE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_SIZE_VALUE_OUT_OF_RANGE, "");
 	}
 	return static_cast<size_t>(value);
 }
 
 int32_t ClientUtil::sizeValueToInt32(size_t value) {
 	if (value > static_cast<uint32_t>(std::numeric_limits<int32_t>::max())) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_SIZE_VALUE_OUT_OF_RANGE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_SIZE_VALUE_OUT_OF_RANGE, "");
 	}
 	return static_cast<int32_t>(value);
 }
 
 int64_t ClientUtil::sizeValueToInt64(size_t value) {
 	if (value > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_SIZE_VALUE_OUT_OF_RANGE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_SIZE_VALUE_OUT_OF_RANGE, "");
 	}
 	return static_cast<int64_t>(value);
 }
@@ -325,7 +434,7 @@ std::string ClientUtil::normalizeSymbolUnchecked(const GSChar *symbol) {
 
 void ClientUtil::checkSymbol(const GSChar *symbol, const GSChar *typeName) {
 	if (symbol == NULL || *symbol == '\0') {
-		UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
 				"Empty " << typeName);
 	}
 }
@@ -345,7 +454,7 @@ void ClientUtil::checkBasicSymbol(
 			continue;
 		}
 
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SYMBOL_CHARACTER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SYMBOL_CHARACTER, "");
 	}
 }
 
@@ -372,7 +481,7 @@ GSTimeUnit ClientUtil::checkTimeUnit(GSTimeUnit timeUnit) {
 	case GS_TIME_UNIT_MILLISECOND:
 		return timeUnit;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNKNOWN_TIME_UNIT, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNKNOWN_TIME_UNIT, "");
 	}
 }
 
@@ -414,7 +523,7 @@ uint32_t ClientUtil::readVarSize(ArrayByteInStream &in) {
 		in >> val;
 		uint64_t decodedVal = decode8ByteVarSize(val);
 		if (decodedVal > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 					"Decoded size = " << decodedVal);
 		}
 		return static_cast<uint32_t>(decodedVal);
@@ -584,7 +693,7 @@ GSTimestamp TimestampUtil::add(
 		fieldType = util::DateTime::FIELD_MILLISECOND;
 		break;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNKNOWN_TIME_UNIT, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNKNOWN_TIME_UNIT, "");
 	}
 
 	dateTime.addField(amount, fieldType);
@@ -631,7 +740,7 @@ Properties::Properties(
 		}
 
 		if (properties == NULL ) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 		propertiesEnd = properties + *propertyCount;
 	}
@@ -643,19 +752,19 @@ Properties::Properties(
 
 		if (i->name == NULL) {
 			if (i->value != NULL) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY, "");
 			}
 
 			if (propertyCount == NULL) {
 				break;
 			}
 			else {
-				UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY, "");
 			}
 		}
 
 		if (i->value == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY, "");
 		}
 		propertyMap_.insert(PropertyMap::value_type(i->name, i->value));
 	}
@@ -670,6 +779,19 @@ bool Properties::getInteger(const GSChar *name, int32_t &value) const {
 	}
 
 	value = ClientUtil::parseValue<int32_t>(strValue.c_str());
+
+	return true;
+}
+
+bool Properties::getDouble(const GSChar *name, double &value) const {
+	value = 0;
+
+	std::string strValue;
+	if (!getString(name, strValue)) {
+		return false;
+	}
+
+	value = ClientUtil::parseValue<double>(strValue.c_str());
 
 	return true;
 }
@@ -721,7 +843,7 @@ bool Properties::getTimeoutMillis(
 	int32_t millisecValue;
 	bool millisecValueSpecified = getInteger(millisecName.c_str(), millisecValue);
 	if (secValueSpecified && millisecValueSpecified) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY, "");
 	}
 
 	if (secValueSpecified) {
@@ -787,7 +909,7 @@ void Properties::checkExclusiveProperties(
 
 		message += ")";
 
-		UTIL_THROW_ERROR(
+		GS_CLIENT_THROW_ERROR(
 				GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY, message);
 	}
 }
@@ -818,29 +940,119 @@ int32_t Properties::timeoutToInt32Millis(int64_t value) {
 }
 
 
-size_t ErrorStack::getSize() const throw() {
+ClientException::ClientException(
+		UTIL_EXCEPTION_CONSTRUCTOR_ARGS_LIST) throw() :
+		GSCommonException(UTIL_EXCEPTION_CONSTRUCTOR_ARGS_SET) {
+}
+
+ClientException::~ClientException() throw() {
+}
+
+void ClientException::appendParameter(
+		const char8_t *name, const char8_t *value) throw() {
 	try {
-		return entryList_.size();
+		parameterList_.push_back(Parameter(name, value));
 	}
 	catch (...) {
 	}
-	return 0;
+}
+
+size_t ClientException::getParameterCount() const throw() {
+	try {
+		return parameterList_.size();
+	}
+	catch (...) {
+		return 0;
+	}
+}
+
+const char8_t* ClientException::getParameterName(size_t index) const throw() {
+	if (index >= getParameterCount()) {
+		return "";
+	}
+
+	return parameterList_[index].first.c_str();
+}
+
+const char8_t* ClientException::getParameterValue(size_t index) const throw() {
+	if (index >= getParameterCount()) {
+		return "";
+	}
+
+	return parameterList_[index].second.c_str();
+}
+
+void ClientException::inheritParameters(
+		const std::exception *causeInHandling) throw() {
+	if (causeInHandling == NULL) {
+		return;
+	}
+
+	try {
+		throw;
+	}
+	catch (ClientException &e) {
+		inheritParameters(e);
+	}
+	catch (...) {
+	}
+}
+
+void ClientException::inheritParameters(const ClientException &cause) throw() {
+	const size_t count = cause.getParameterCount();
+	for (size_t i = 0; i < count; i++) {
+		appendParameter(cause.getParameterName(i), cause.getParameterValue(i));
+	}
+}
+
+void ClientException::formatMessageWithParameter(
+		std::ostream &os, const util::Exception &e,
+		const ClientException &params) {
+	bool exists = false;
+
+	if (e.hasMessage()) {
+		e.formatMessage(os);
+		exists = true;
+	}
+
+	const size_t count = params.getParameterCount();
+	if (count > 0) {
+		if (exists) {
+			os << " ";
+		}
+		os << "(";
+		for (size_t i = 0; i < count; i++) {
+			if (i > 0) {
+				os << ", ";
+			}
+			os << params.getParameterName(i);
+			os << "=";
+			os << params.getParameterValue(i);
+		}
+		os << ")";
+	}
+}
+
+
+volatile bool ErrorStack::detailErrorMessageEnabled_ = false;
+
+size_t ErrorStack::getSize() const throw() {
+	if (exception_.isEmpty()) {
+		return 0;
+	}
+	return exception_.getMaxDepth() + 1;
 }
 
 GSResult ErrorStack::getErrorCode(size_t index) const throw() {
-	try {
-		return entryList_.at(index).errorCode_;
-	}
-	catch (...) {
-	}
-	return 0;
+	return exception_.getErrorCode(index);
 }
 
-size_t ErrorStack::formatErrorMessage(
+size_t ErrorStack::formatErrorName(
 		size_t index, GSChar *strBuf, size_t bufSize) const throw() {
 	try {
-		const Entry &entry = entryList_.at(index);
-		return ClientUtil::copyString(entry.optionMessage_, strBuf, bufSize);
+		util::NormalOStringStream oss;
+		exception_.formatErrorCodeName(oss, index);
+		return ClientUtil::copyString(oss.str(), strBuf, bufSize);
 	}
 	catch (...) {
 		ClientUtil::copyString("", 1, strBuf, bufSize);
@@ -848,27 +1060,82 @@ size_t ErrorStack::formatErrorMessage(
 	return 0;
 }
 
-size_t ErrorStack::formatErrorLocation(
+size_t ErrorStack::formatErrorDescription(
 		size_t index, GSChar *strBuf, size_t bufSize) const throw() {
 	try {
-		const Entry &entry = entryList_.at(index);
+		util::NormalOStringStream oss;
+		exception_.formatMessage(oss, index);
+		return ClientUtil::copyString(oss.str(), strBuf, bufSize);
+	}
+	catch (...) {
+		ClientUtil::copyString("", 1, strBuf, bufSize);
+	}
+	return 0;
+}
+
+size_t ErrorStack::formatErrorMessage(
+		size_t index, GSChar *strBuf, size_t bufSize) const throw() {
+	try {
+		util::NormalOStringStream oss;
+		formatErrorMessage(oss, exception_, index, true);
+		return ClientUtil::copyString(oss.str(), strBuf, bufSize);
+	}
+	catch (...) {
+		ClientUtil::copyString("", 1, strBuf, bufSize);
+	}
+	return 0;
+}
+
+void ErrorStack::formatErrorMessage(
+		std::ostream &os, const util::Exception &e, size_t index,
+		bool withCode) {
+	const bool codeEnabled = (withCode && e.hasErrorCode(index));
+	if (codeEnabled) {
+		if (e.hasErrorCodeName(index)) {
+			os << "[" <<
+					e.getErrorCode(index) << ":" <<
+					e.getNamedErrorCode(index).getName() << "]";
+		}
+		else {
+			os << "[Code:" << e.getErrorCode(index) << "]";
+		}
+	}
+	if (codeEnabled && e.hasMessage(index)) {
+		os << " ";
+	}
+	if (e.hasMessage(index)) {
+		e.formatMessage(os, index);
+	}
+}
+
+size_t ErrorStack::formatErrorLocation(
+		size_t index, GSChar *strBuf, size_t bufSize,
+		bool detail) const throw() {
+	try {
+		if (!detailErrorMessageEnabled_ && !detail) {
+			ClientUtil::copyString("", 1, strBuf, bufSize);
+			return 0;
+		}
+
 		util::NormalOStringStream oss;
 		bool exists = false;
-		if (!entry.type_.empty()) {
-			oss << entry.type_;
+		if (exception_.hasTypeName(index)) {
+			exception_.formatTypeName(oss, index);
 			exists = true;
 		}
-		if (!entry.fileName_.empty()) {
-			oss << (exists ? " " : "") << entry.fileName_;
+		if (exception_.hasFileName(index)) {
+			oss << (exists ? " " : "");
+			exception_.formatFileName(oss, index);
 			exists = true;
 		}
-		if (!entry.functionName_.empty()) {
-			oss << (exists ? " " : "") << entry.functionName_;
+		if (exception_.hasFunctionName(index)) {
+			oss << (exists ? " " : "");
+			exception_.formatFunctionName(oss, index);
 			exists = true;
 		}
-		if (entry.lineNumber_ != 0) {
-			oss << (exists ? " " : "") << "line=" << entry.lineNumber_;
-			exists = true;
+		if (exception_.hasLineNumber(index)) {
+			oss << (exists ? " " : "");
+			oss << "line=" << exception_.getLineNumber(index);
 		}
 		return ClientUtil::copyString(oss.str(), strBuf, bufSize);
 	}
@@ -878,242 +1145,106 @@ size_t ErrorStack::formatErrorLocation(
 	return 0;
 }
 
-void ErrorStack::clear() throw() {
-	try {
-		if (!entryList_.empty()) {
-			entryList_.clear();
+size_t ErrorStack::getErrorParameterCount(size_t stackIndex) const throw() {
+	if (stackIndex > 0) {
+		return 0;
+	}
+	return exception_.getParameterCount();
+}
+
+size_t ErrorStack::formatErrorParameterName(
+		size_t stackIndex, size_t parameterIndex,
+		GSChar *strBuf, size_t bufSize) const throw() {
+	do {
+		if (stackIndex > 0) {
+			break;
 		}
+		if (parameterIndex >= exception_.getParameterCount()) {
+			break;
+		}
+		return ClientUtil::copyString(
+				exception_.getParameterName(parameterIndex), strBuf, bufSize);
 	}
-	catch (...) {
+	while (false);
+	ClientUtil::copyString("", 1, strBuf, bufSize);
+	return 0;
+}
+
+size_t ErrorStack::formatErrorParameterValue(
+		size_t stackIndex, size_t parameterIndex,
+		GSChar *strBuf, size_t bufSize) const throw() {
+	do {
+		if (stackIndex > 0) {
+			break;
+		}
+		if (parameterIndex >= exception_.getParameterCount()) {
+			break;
+		}
+		return ClientUtil::copyString(
+				exception_.getParameterValue(parameterIndex), strBuf, bufSize);
 	}
+	while (false);
+	ClientUtil::copyString("", 1, strBuf, bufSize);
+	return 0;
+}
+
+void ErrorStack::clear() throw() {
+	exception_ = BaseException();
 }
 
 GSResult ErrorStack::setFromCurrentException() throw() {
+	std::exception e;
+	const BaseException base = GS_CLIENT_EXCEPTION_CONVERT(0, e, "");
+
+	size_t startIndex = 0;
 	try {
-		try {
-			throw;
-		}
-		catch (RemoteException &e) {
-			const ErrorStack *remoteStack = e.getRemoteErrorStack();
-			if (remoteStack != NULL) {
-				try {
-					entryList_ = remoteStack->entryList_;
-
-					GSResult resultCode = e.getErrorCode(0);
-					if (resultCode == 0) {
-						resultCode = entryList_.front().errorCode_;
-					}
-					if (resultCode == 0) {
-						resultCode = GS_ERROR_CC_INTERNAL_ERROR;
-					}
-
-					return resultCode;
-				}
-				catch (...) {
-					return setFromException(e);
-				}
-			}
-			else {
-				return setFromException(e);
-			}
-		}
-		catch (util::Exception &e) {
-			return setFromException(e);
-		}
-		catch (...) {
-			std::exception dummyException;
-			util::Exception exception(
-					0, NULL, NULL, NULL, 0, &dummyException, NULL);
-			return setFromException(exception, 1);
-		}
+		throw;
 	}
-	catch (std::bad_alloc&) {
-		clear();
-		return GS_ERROR_CC_ALLOCATION_FAILED;
-	}
-	catch (...) {
-		clear();
-	}
-
-	return GS_ERROR_CC_INTERNAL_ERROR;
-}
-
-std::auto_ptr<ErrorStack> ErrorStack::tryRead(
-		ArrayByteInStream &in, bool detailErrorMessageEnabled) throw() {
-	try {
-		std::auto_ptr<ErrorStack> stack(new ErrorStack);
-
-		int32_t count;
-		in >> count;
-
-		for (int32_t i = 0; i < count; i++) {
-			stack->entryList_.push_back(Entry());
-			Entry &entry = *(--stack->entryList_.end());
-
-			in >> entry.errorCode_;
-			in >> entry.optionMessage_;
-			in >> entry.type_;
-			in >> entry.fileName_;
-			in >> entry.functionName_;
-			in >> entry.lineNumber_;
-
-			if (!detailErrorMessageEnabled) {
-				entry.type_.clear();
-				entry.fileName_.clear();
-				entry.functionName_.clear();
-				entry.lineNumber_ = 0;
-			}
-		}
-		return stack;
+	catch (GSCommonException&) {
+		startIndex++;
 	}
 	catch (...) {
 	}
-	return std::auto_ptr<ErrorStack>(NULL);
+	exception_.assign(base, startIndex);
+	exception_.inheritParameters(base);
+
+	return getErrorCode(0);
 }
 
-const ErrorStack::Entry* ErrorStack::entryAt(size_t index) const throw() {
+ErrorStack ErrorStack::tryRead(
+		ArrayByteInStream &in,
+		const util::Exception::NamedErrorCode &defaultCode) throw() {
+	ErrorStack stack;
+	u8string strBuf;
 	try {
-		return &entryList_.at(index);
+		GSExceptionCoder().decode(in, stack.exception_, strBuf, defaultCode);
 	}
 	catch (...) {
 	}
-
-	return NULL;
+	return stack;
 }
 
-GSResult ErrorStack::setFromException(util::Exception &e, size_t startDepth) {
-	GSResult resultCode;
-	try {
-		clear();
-
-		const size_t count = e.getMaxDepth() + 1;
-		util::NormalOStringStream oss;
-
-		for (size_t i = startDepth; i < count; i++) {
-			entryList_.push_back(Entry());
-			Entry &entry = *(--entryList_.end());
-
-			entry.errorCode_ = e.getErrorCode(i);
-
-			e.formatMessage(oss, i);
-			entry.optionMessage_ = oss.str();
-			oss.str(std::string());
-
-			e.formatTypeName(oss, i);
-			entry.type_ = oss.str();
-			oss.str(std::string());
-
-			e.formatFileName(oss, i);
-			entry.fileName_ = oss.str();
-			oss.str(std::string());
-
-			e.formatFunctionName(oss, i);
-			entry.functionName_ = oss.str();
-			oss.str(std::string());
-
-			entry.lineNumber_ = e.getLineNumber(i);
-		}
-		resultCode = e.getErrorCode(0);
-	}
-	catch (...) {
-		clear();
-		resultCode = 0;
-	}
-
-	return (resultCode == 0 ? GS_ERROR_CC_INTERNAL_ERROR : resultCode);
+ClientException& ErrorStack::getException() throw() {
+	return exception_;
 }
 
-
-RemoteException::RemoteException() throw() {
+void ErrorStack::setDetailErrorMessageEnabled(bool enabled) {
+	detailErrorMessageEnabled_ = enabled;
 }
+
 
 RemoteException::RemoteException(
-		UTIL_EXCEPTION_CONSTRUCTOR_ARGS_LIST,
-		std::auto_ptr<ErrorStack> remoteErrorStack) throw() :
-		Exception(UTIL_EXCEPTION_CONSTRUCTOR_ARGS_SET),
-		remoteErrorStack_(remoteErrorStack) {
+		UTIL_EXCEPTION_CONSTRUCTOR_ARGS_LIST) throw() :
+		ClientException(UTIL_EXCEPTION_CONSTRUCTOR_ARGS_SET) {
 }
 
 RemoteException::~RemoteException() throw() {
 }
 
-RemoteException::RemoteException(
-		const RemoteException &another) throw() :
-		util::Exception(another) {
-	trySetRemoteErrorStack(another.getRemoteErrorStack());
-}
-
-RemoteException& RemoteException::operator=(
-		const RemoteException &another) throw() {
-	util::Exception::operator=(another);
-	trySetRemoteErrorStack(another.getRemoteErrorStack());
-	return *this;
-}
-
-const ErrorStack* RemoteException::getRemoteErrorStack() const throw() {
-	return remoteErrorStack_.get();
-}
-
-std::auto_ptr<ErrorStack> RemoteException::extractRemoteErrorStack(
-		const RemoteException &ex) throw() {
-	try {
-		const ErrorStack *errorStack = ex.getRemoteErrorStack();
-		if (errorStack != NULL) {
-			return std::auto_ptr<ErrorStack>(new ErrorStack(*errorStack));
-		}
-	}
-	catch (...) {
-	}
-
-	return std::auto_ptr<ErrorStack>();
-}
-
-std::auto_ptr<ErrorStack> RemoteException::extractRemoteErrorStack(
-		const std::exception &ex) throw() {
-	static_cast<void>(ex);
-	try {
-		throw;
-	}
-	catch (RemoteException &remoteException) {
-		return extractRemoteErrorStack(remoteException);
-	}
-	catch (...) {
-	}
-
-	return std::auto_ptr<ErrorStack>();
-}
-
-void RemoteException::trySetRemoteErrorStack(
-		const ErrorStack *stack) throw() {
-	try {
-		if (stack == NULL) {
-			remoteErrorStack_.reset();
-			return;
-		}
-
-		remoteErrorStack_.reset(new ErrorStack());
-		*remoteErrorStack_ = *stack;
-	}
-	catch (...) {
-		try {
-			remoteErrorStack_.reset();
-		}
-		catch (...) {
-		}
-	}
-}
-
 
 StatementException::StatementException(
-		const StatementException &another) throw() :
-		RemoteException(another) {
-}
-
-StatementException::StatementException(
-		UTIL_EXCEPTION_CONSTRUCTOR_ARGS_LIST,
-		std::auto_ptr<ErrorStack> remoteErrorStack) throw() :
-		RemoteException(
-				UTIL_EXCEPTION_CONSTRUCTOR_ARGS_SET, remoteErrorStack) {
+		UTIL_EXCEPTION_CONSTRUCTOR_ARGS_LIST) throw() :
+		RemoteException(UTIL_EXCEPTION_CONSTRUCTOR_ARGS_SET) {
 }
 
 StatementException::~StatementException() throw() {
@@ -1121,10 +1252,8 @@ StatementException::~StatementException() throw() {
 
 
 ConnectionException::ConnectionException(
-		UTIL_EXCEPTION_CONSTRUCTOR_ARGS_LIST,
-		std::auto_ptr<ErrorStack> remoteErrorStack) throw() :
-		RemoteException(
-				UTIL_EXCEPTION_CONSTRUCTOR_ARGS_SET, remoteErrorStack) {
+		UTIL_EXCEPTION_CONSTRUCTOR_ARGS_LIST) throw() :
+		RemoteException(UTIL_EXCEPTION_CONSTRUCTOR_ARGS_SET) {
 }
 
 ConnectionException::~ConnectionException() throw() {
@@ -1132,10 +1261,8 @@ ConnectionException::~ConnectionException() throw() {
 
 
 WrongNodeException::WrongNodeException(
-		UTIL_EXCEPTION_CONSTRUCTOR_ARGS_LIST,
-		std::auto_ptr<ErrorStack> remoteErrorStack) throw() :
-		ConnectionException(
-				UTIL_EXCEPTION_CONSTRUCTOR_ARGS_SET, remoteErrorStack) {
+		UTIL_EXCEPTION_CONSTRUCTOR_ARGS_LIST) throw() :
+		ConnectionException(UTIL_EXCEPTION_CONSTRUCTOR_ARGS_SET) {
 }
 
 WrongNodeException::~WrongNodeException() throw() {
@@ -1149,35 +1276,11 @@ ErrorReasonFormatter::ErrorReasonFormatter(
 std::ostream& ErrorReasonFormatter::format(std::ostream &stream) const {
 	util::LocaleUtils::CLocaleScope localeScope(stream);
 
-	size_t depth = 0;
-	try {
-		try {
-			throw;
-		}
-		catch (util::Exception&) {
-			throw;
-		}
-		catch (std::exception &e) {
-			depth++;
-			UTIL_RETHROW(0, e, "");
-		}
-		catch (...) {
-			stream << "(unknown exception type)";
-		}
-	}
-	catch (util::Exception &e) {
-		if (e.hasErrorCode(depth)) {
-			stream << "[Code:" << e.getErrorCode(depth) << "]";
-		}
-		if (e.hasErrorCode(depth) && e.hasMessage(depth)) {
-			stream << " ";
-		}
-		if (e.hasMessage(depth)) {
-			e.formatMessage(stream, depth);
-		}
-	}
-	catch (...) {
-	}
+	std::exception cause;
+	const ClientException e = GS_CLIENT_EXCEPTION_CONVERT(0, cause, "");
+
+	const size_t depth = 0;
+	ErrorStack::formatErrorMessage(stream, e, depth, false);
 
 	return stream;
 }
@@ -1314,7 +1417,7 @@ void RowMapper::setupAccessInfo() {
 
 RowMapper::Cache& RowMapper::getDefaultCache() {
 	if (cache_ == NULL) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ALLOCATION_FAILED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ALLOCATION_FAILED, "");
 	}
 	return *cache_;
 }
@@ -1334,15 +1437,15 @@ void RowMapper::checkSchemaMatched(const RowMapper &mapper) const {
 
 	if (rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT ||
 			mapper.rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	if (binding_.entryCount != mapper.binding_.entryCount) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 	}
 
 	if (hasKey() ^ mapper.hasKey()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 	}
 
 	for (size_t i = 0; i < binding_.entryCount; i++) {
@@ -1350,17 +1453,17 @@ void RowMapper::checkSchemaMatched(const RowMapper &mapper) const {
 		const GSBindingEntry &entry = mapper.binding_.entries[i];
 
 		if (thisEntry.elementType != entry.elementType) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 		}
 
 		if (isArrayColumn(thisEntry) ^ isArrayColumn(entry)) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 		}
 
 		if (strcmp(thisEntry.columnName, entry.columnName) != 0 &&
 				ClientUtil::normalizeSymbolUnchecked(thisEntry.columnName) !=
 				ClientUtil::normalizeSymbolUnchecked(entry.columnName)) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 		}
 	}
 }
@@ -1542,14 +1645,14 @@ GSContainerType RowMapper::getContainerType() const {
 		return GS_CONTAINER_TIME_SERIES;
 		break;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 }
 
 void RowMapper::getContainerSchema(
 		ContainerInfoRef<> &containerInfoRef, VarDataPool &varDataPool) const {
 	if (rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 	}
 
 	GSContainerInfo containerInfo = GS_CONTAINER_INFO_INITIALIZER;
@@ -1647,7 +1750,7 @@ void RowMapper::exportSchema(
 		XArrayByteOutStream &out, const Config &config) const {
 	if (rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT) {
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 
 	exportColumnCount(out, binding_.entryCount);
@@ -1676,7 +1779,7 @@ int32_t RowMapper::importKeyListBegin(
 		in >> columnId;
 		if ((columnId != 0 && columnId != -1) ||
 				columnId >= static_cast<int32_t>(columnCount)) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 					"Protocol error by illegal index of row key column");
 		}
 		return columnId;
@@ -1692,7 +1795,7 @@ void RowMapper::importKeyListEnd(
 		int16_t count;
 		in >> count;
 		if (!(count == 0 || count == 1)) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 					"Protocol error by illegal row key count");
 		}
 
@@ -1702,7 +1805,7 @@ void RowMapper::importKeyListEnd(
 			in >> columnId;
 			if (columnId != 0 ||
 					columnId >= static_cast<int32_t>(columnCount)) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 						"Protocol error by illegal index of row key column");
 			}
 			if (i == 0) {
@@ -1732,7 +1835,7 @@ void RowMapper::exportKeyListEnd(
 		for (int16_t i = 0; i < count; i++) {
 			const int16_t columnId = static_cast<int16_t>(keyColumnId);
 			if (columnId != 0) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 			}
 			out << columnId;
 		}
@@ -1804,7 +1907,7 @@ int32_t RowMapper::resolveColumnId(const GSChar *name) const {
 		it = columnIdMap_.find(
 				ClientUtil::normalizeSymbol(name, "column name"));
 		if (it == columnIdMap_.end()) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNKNOWN_COLUMN_NAME, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNKNOWN_COLUMN_NAME, "");
 		}
 	}
 
@@ -1833,7 +1936,7 @@ void RowMapper::encodeKeyGeneral(
 		break;
 	default:
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
 	}
 }
 
@@ -1846,7 +1949,7 @@ void RowMapper::encodeKeyByObj(
 	assert(!isArrayColumn(entry));
 
 	if (keyType != NULL && *keyType != entry.elementType) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
 	}
 
 	switch (entry.elementType) {
@@ -1854,7 +1957,7 @@ void RowMapper::encodeKeyByObj(
 		{
 			const GSChar *keyStr = *static_cast<const GSChar* const*>(keyObj);
 			if (keyStr == NULL) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 			}
 			if (mode == MODE_ROWWISE_SEPARATED_V2) {
 				ClientUtil::writeVarDataString(out, keyStr);
@@ -1875,7 +1978,7 @@ void RowMapper::encodeKeyByObj(
 		break;
 	default:
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
 	}
 }
 
@@ -1913,14 +2016,14 @@ void RowMapper::encodeKeyByString(
 	case GS_TYPE_TIMESTAMP: {
 		GSTimestamp timestamp;
 		if (!TimestampUtil::parse(keyString, timestamp)) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_VALUE_FORMAT, keyString);
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_VALUE_FORMAT, keyString);
 		}
 		out << timestamp;
 		break;
 	}
 	default:
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
 	}
 }
 
@@ -1935,10 +2038,10 @@ void RowMapper::encode(OutputCursor &cursor,
 		const GSType *keyType, const void *keyObj,
 		const void *rowObj) const {
 	if (rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
 	}
 	if (keyObj != NULL && !hasKey()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED, "");
 	}
 
 	const RowMapper &codingMapper = resolveCodingMapper(rowObj);
@@ -1954,7 +2057,7 @@ void RowMapper::encodeWithKeyString(
 		XArrayByteOutStream &out, MappingMode mode,
 		const GSChar *keyString, const void *rowObj) const {
 	if (rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT || !hasKey()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
 	}
 
 	const RowMapper &codingMapper = resolveCodingMapper(rowObj);
@@ -1983,7 +2086,7 @@ void RowMapper::decode(InputCursor &cursor, void *rowObj) const {
 	if (rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT ||
 			cursor.base_.mode_ == MODE_AGGREGATED) {
 		if (general_) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 		}
 		cursor.beginRow(*this, NULL);
 		decodeAggregation(cursor, rowObj);
@@ -2008,17 +2111,10 @@ void RowMapper::decode(InputCursor &cursor, void *rowObj) const {
 				for (; pendingPtrArraySize > 0; pendingPtrArraySize--) {
 					void *elemPtr = static_cast<void**>(
 							pendingVarData)[pendingPtrArraySize];
-					try {
-						deallocate(cursor.varDataPool_, rowObj, elemPtr);
-					}
-					catch (...) {
-					}
+					deallocate(cursor.varDataPool_, rowObj, elemPtr);
+
 				}
-				try {
-					deallocate(cursor.varDataPool_, rowObj, pendingVarData);
-				}
-				catch (...) {
-				}
+				deallocate(cursor.varDataPool_, rowObj, pendingVarData);
 			}
 
 			if (general_) {
@@ -2057,14 +2153,14 @@ void* RowMapper::extractKey(void *rowObj, KeyStorage &keyStorage) const {
 		break;
 	default:
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
 	}
 	return &keyStorage;
 }
 
 size_t RowMapper::getGeneralRowSize() const {
 	if (!general_) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
 	assert(binding_.entryCount > 0);
@@ -2080,7 +2176,7 @@ size_t RowMapper::getGeneralRowSize() const {
 
 void RowMapper::encodeGeometry(
 		XArrayByteOutStream &out, const GSChar *text, MappingMode mode) {
-	UTIL_THROW_ERROR(
+	GS_CLIENT_THROW_ERROR(
 			GS_ERROR_CC_UNSUPPORTED_OPERATION,
 			"GEOMETRY is not a supported type");
 }
@@ -2202,7 +2298,7 @@ GSType RowMapper::toFullType(GSType type, bool arrayUsed) {
 			arrayType = GS_TYPE_TIMESTAMP_ARRAY;
 			break;
 		default:
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 		}
 		return toNullable(arrayType, isTypeNullable(type));
 	}
@@ -2303,7 +2399,7 @@ size_t RowMapper::getFieldObjectMainPartSize(
 		case ANY_NULL_TYPE:
 			return (sizeof(int8_t) + sizeof(GSValue));
 		default:
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 		}
 	}
 }
@@ -2341,7 +2437,7 @@ void RowMapper::invokeTypedOperation(
 			op(caller, entry, TypeTraits<GS_TYPE_TIMESTAMP, true>());
 			break;
 		default:
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 		}
 	}
 	else {
@@ -2383,7 +2479,7 @@ void RowMapper::invokeTypedOperation(
 			op(caller, entry, TypeTraits<RowMapper::ANY_NULL_TYPE, false>());
 			break;
 		default:
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 		}
 	}
 }
@@ -2434,7 +2530,7 @@ GSValue RowMapper::copyValue(const GSValue &src, const Traits&, Alloc *alloc,
 
 	if (arraySize > 0) {
 		if (Traits::as(src) == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 		GSChar **destArray = static_cast<GSChar**>(
 				alloc->allocate(sizeof(GSChar*) * arraySize));
@@ -2444,7 +2540,7 @@ GSValue RowMapper::copyValue(const GSValue &src, const Traits&, Alloc *alloc,
 			for (size_t i = 0; i < arraySize; i++) {
 				const GSChar *srcStr = Traits::as(src)[i];
 				if (srcStr == NULL) {
-					UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 				}
 
 				const size_t strSize = strlen(srcStr) + 1;
@@ -2454,17 +2550,9 @@ GSValue RowMapper::copyValue(const GSValue &src, const Traits&, Alloc *alloc,
 		}
 		catch (...) {
 			for (size_t j = 0; j < i; j++) {
-				try {
-					alloc->deallocate(destArray[i]);
-				}
-				catch (...) {
-				}
+				alloc->deallocate(destArray[i]);
 			}
-			try {
-				alloc->deallocate(destArray);
-			}
-			catch (...) {
-			}
+			alloc->deallocate(destArray);
 			throw;
 		}
 		Traits::as(dest) = destArray;
@@ -2486,7 +2574,7 @@ GSValue RowMapper::copyValue(const GSValue &src, const Traits&, Alloc *alloc,
 
 	if (size > 0) {
 		if (src.asBlob.data == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 
 		void *data = alloc->allocate(size);
@@ -2513,7 +2601,7 @@ RowMapper::RowTypeCategory RowMapper::containerTypeToCategory(
 	case GS_CONTAINER_TIME_SERIES:
 		return RowMapper::CATEGORY_TIME_SERIES;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 	}
 }
 
@@ -2573,13 +2661,13 @@ GSTypeOption RowMapper::filterTypeOptions(
 	GSTypeOption srcOptions = entry.options;
 
 	if ((srcOptions & ~TypeOptionMask::MASK_BINDING_SUPPORTED) != 0) {
-		UTIL_THROW_ERROR(
+		GS_CLIENT_THROW_ERROR(
 				GS_ERROR_CC_UNKNOWN_ELEMENT_TYPE_OPTION, "");
 	}
 
 	if (isTypeNullable(entry.elementType)) {
 		if (!anyTypeAllowed) {
-			UTIL_THROW_ERROR(
+			GS_CLIENT_THROW_ERROR(
 					GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 		}
 		if (!isAny(entry.elementType)) {
@@ -2611,7 +2699,7 @@ GSTypeOption RowMapper::filterNullable(
 			(columnName == NULL ? "" : columnName);
 
 	if ((options & mask) == mask || (nullableDefault & mask) == mask) {
-		UTIL_THROW_ERROR(
+		GS_CLIENT_THROW_ERROR(
 				GS_ERROR_CC_ILLEGAL_SCHEMA,
 				"Both of nullable and not null option specified ("
 				"column=" << filteredColumnName << ")");
@@ -2619,14 +2707,14 @@ GSTypeOption RowMapper::filterNullable(
 
 	if (isOptionNullable(options)) {
 		if (!nullableAllowed) {
-			UTIL_THROW_ERROR(
+			GS_CLIENT_THROW_ERROR(
 					GS_ERROR_CC_ILLEGAL_SCHEMA,
 					"Nullable column is not currently available ("
 					"column=" << filteredColumnName << ")");
 		}
 
 		if ((options & GS_TYPE_OPTION_KEY) != 0) {
-			UTIL_THROW_ERROR(
+			GS_CLIENT_THROW_ERROR(
 					GS_ERROR_CC_ILLEGAL_SCHEMA,
 					"Row key cannot be null ("
 					"column=" << filteredColumnName << ")");
@@ -2664,14 +2752,14 @@ GSTypeOption RowMapper::filterInitialValueNull(
 			(columnName == NULL ? "" : columnName);
 
 	if ((options & mask) == mask) {
-		UTIL_THROW_ERROR(
+		GS_CLIENT_THROW_ERROR(
 				GS_ERROR_CC_ILLEGAL_SCHEMA,
 				"Both of default value null and not null option specified ("
 				"column=" << filteredColumnName << ")");
 	}
 
 	if (!nullable && (options & GS_TYPE_OPTION_DEFAULT_VALUE_NULL) != 0) {
-		UTIL_THROW_ERROR(
+		GS_CLIENT_THROW_ERROR(
 				GS_ERROR_CC_ILLEGAL_SCHEMA,
 				"Default value null is not allowed ("
 				"column=" << filteredColumnName << ")");
@@ -2719,12 +2807,12 @@ GSBinding RowMapper::checkAndCopyBinding(
 	size_t entryCount = 0;
 	if (rowTypeCategory == CATEGORY_AGGREGATION_RESULT) {
 		if (src != NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
 		}
 	}
 	else if (src == NULL || src->entryCount <= 0 || src->entries == NULL) {
 		if (src == NULL || src->entryCount != 0 || !config.anyTypeAllowed_) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_BINDING_ENTRY_NOT_FOUND, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_BINDING_ENTRY_NOT_FOUND, "");
 		}
 	}
 	else {
@@ -2734,7 +2822,7 @@ GSBinding RowMapper::checkAndCopyBinding(
 	if (rowTypeCategory == CATEGORY_TIME_SERIES && entryCount > 0 &&
 			(src->entries[0].elementType != GS_TYPE_TIMESTAMP ||
 					isArrayColumn(src->entries[0]))) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
 	}
 
 	GSBinding dest;
@@ -2777,16 +2865,16 @@ GSBinding RowMapper::checkAndCopyBinding(
 			case GS_TYPE_GEOMETRY:
 			case GS_TYPE_BLOB:
 				if (isArrayColumn(entry)) {
-					UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 				}
 				break;
 			case ANY_NULL_TYPE:
 				if (isArrayColumn(entry) || !config.anyTypeAllowed_) {
-					UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 				}
 				break;
 			default:
-				UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 			}
 
 			const ColumnIdEntry idEntry = {
@@ -2795,13 +2883,13 @@ GSBinding RowMapper::checkAndCopyBinding(
 
 			if ((entry.options & GS_TYPE_OPTION_KEY) != 0) {
 				if (i != 0 && RESTRICT_KEY_ORDER_FIRST) {
-					UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 				}
 				if (keyColumnId >= 0) {
-					UTIL_THROW_ERROR(GS_ERROR_CC_MULTIPLE_KEYS_FOUND, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MULTIPLE_KEYS_FOUND, "");
 				}
 				if (!availableAsKey) {
-					UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
 				}
 				keyColumnId = idEntry.id_;
 			}
@@ -2811,7 +2899,7 @@ GSBinding RowMapper::checkAndCopyBinding(
 						ClientUtil::normalizeSymbol(columnName, "column name");
 				if (!columnIdMap.insert(ColumnIdMap::value_type(
 						nameStr, idEntry)).second) {
-					UTIL_THROW_ERROR(GS_ERROR_CC_COLUMN_NAME_CONFLICTED, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_COLUMN_NAME_CONFLICTED, "");
 				}
 			}
 		}
@@ -2846,14 +2934,14 @@ GSBinding RowMapper::createReorderedBinding(
 	columnIdMap.clear();
 
 	if (baseMapper.rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
 	}
 
 	const GSBinding &srcBinding = baseMapper.binding_;
 
 	const size_t entryCount = importColumnCount(in);
 	if (entryCount != srcBinding.entryCount) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 	}
 
 	util::NormalXArray<int32_t> newColumnIdList;
@@ -2881,14 +2969,14 @@ GSBinding RowMapper::createReorderedBinding(
 			ColumnIdMap::const_iterator it =
 					baseMapper.columnIdMap_.find(normalizedName);
 			if (it == baseMapper.columnIdMap_.end()) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 			}
 			const int32_t orgColumnId = it->second.id_;
 			if (newColumnIdList[orgColumnId] != -1) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 			}
 			if (!columnOrderIgnorable && orgColumnId != idEntry.id_) {
-				UTIL_THROW_ERROR(
+				GS_CLIENT_THROW_ERROR(
 						GS_ERROR_CC_ILLEGAL_SCHEMA, "Inconsistent order");
 			}
 
@@ -2898,15 +2986,15 @@ GSBinding RowMapper::createReorderedBinding(
 
 			if (srcBinding.entries[orgColumnId].elementType !=
 					entry.elementType) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 			}
 			if (isArrayColumn(srcBinding.entries[orgColumnId]) ^
 					isArrayColumn(entry)) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 			}
 			if (isNullable(srcBinding.entries[orgColumnId]) ^
 					isNullable(entry)) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 			}
 		}
 
@@ -2914,7 +3002,7 @@ GSBinding RowMapper::createReorderedBinding(
 
 		if (baseMapper.rowTypeCategory_ == CATEGORY_TIME_SERIES &&
 				newColumnIdList[0] != 0) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 		}
 
 		for (size_t i = 0; i < srcBinding.entryCount; i++) {
@@ -2938,7 +3026,7 @@ GSBinding RowMapper::createReorderedBinding(
 		if ((keyColumnId >= 0 && baseMapper.keyColumnId_ < 0) ||
 				(baseMapper.keyColumnId_ >= 0 &&
 				keyColumnId != newColumnIdList[baseMapper.keyColumnId_])) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 		}
 	}
 	catch (...) {
@@ -3010,11 +3098,11 @@ const RowMapper& RowMapper::resolveCodingMapper(const void *rowObj) const {
 	}
 
 	if (binding_.entryCount != mapper.binding_.entryCount) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 	}
 
 	if (hasKey() ^ mapper.hasKey()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 	}
 
 	for (size_t i = 0; i < binding_.entryCount; i++) {
@@ -3022,11 +3110,11 @@ const RowMapper& RowMapper::resolveCodingMapper(const void *rowObj) const {
 		const GSBindingEntry &anotherEntry = mapper.binding_.entries[i];
 
 		if (entry.elementType != anotherEntry.elementType) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 		}
 
 		if (isArrayColumn(entry) ^ isArrayColumn(anotherEntry)) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 		}
 	}
 
@@ -3035,7 +3123,7 @@ const RowMapper& RowMapper::resolveCodingMapper(const void *rowObj) const {
 
 const GSBindingEntry& RowMapper::resolveKeyEntry() const {
 	if (keyColumnId_ < 0) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_KEY_NOT_FOUND, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_FOUND, "");
 	}
 
 	return binding_.entries[keyColumnId_];
@@ -3043,7 +3131,7 @@ const GSBindingEntry& RowMapper::resolveKeyEntry() const {
 
 const GSBindingEntry& RowMapper::getEntry(int32_t columnId) const {
 	if (columnId < 0 || static_cast<size_t>(columnId) >= binding_.entryCount) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 
 	return binding_.entries[columnId];
@@ -3135,7 +3223,7 @@ size_t RowMapper::getFixedFieldPartSize(int32_t columnId, MappingMode mode) cons
 		case ANY_NULL_TYPE:
 			return (sizeof(int8_t) + sizeof(int64_t));
 		default:
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 		}
 	}
 }
@@ -3143,7 +3231,7 @@ size_t RowMapper::getFixedFieldPartSize(int32_t columnId, MappingMode mode) cons
 void RowMapper::decodeAggregation(
 		InputCursor &cursor, void *rowObj) const {
 	if (cursor.base_.mode_ != MODE_AGGREGATED || cursor.base_.rowIdIncluded_) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
 	}
 
 	ArrayByteInStream &in = cursor.in_;
@@ -3180,7 +3268,7 @@ void RowMapper::decodeAggregation(
 		size = sizeof(GSTimestamp);
 		break;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 	}
 
 	union {
@@ -3230,13 +3318,13 @@ void RowMapper::decodeAggregation(
 			break;
 		default:
 			assert(false);
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 		}
 	}
 	else {
 		if (!ACCEPT_AGGREGATION_RESULT_COLUMN_ID || columnId < 0 ||
 				columnId >= static_cast<int32_t>(binding_.entryCount)) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
 		}
 
 		GSBindingEntry &entry = binding_.entries[columnId];
@@ -3251,7 +3339,7 @@ void RowMapper::decodeAggregation(
 			case GS_TYPE_DOUBLE:
 				break;
 			default:
-				UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
 			}
 
 			void *fieldObj = getField(entry, rowObj);
@@ -3295,7 +3383,7 @@ void RowMapper::decodeAggregation(
 						static_cast<GSTimestamp>(*longValue));
 				break;
 			default:
-				UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
 			}
 		}
 	}
@@ -3305,7 +3393,7 @@ void RowMapper::putArraySizeInfo(
 		XArrayByteOutStream &out, MappingMode mode,
 		size_t elementSize, size_t elementCount) {
 	if (MODE_ROWWISE_SEPARATED_V2 == mode) {
-		ClientUtil::writeVarSize(out, 
+		ClientUtil::writeVarSize(out,
 				elementSize * elementCount +
 				ClientUtil::getEncodedVarSize(elementCount));
 		ClientUtil::writeVarSize(out, elementCount);
@@ -3331,7 +3419,7 @@ void RowMapper::encodeField(OutputCursor &cursor, int32_t columnId,
 
 	if (isArrayColumn(entry)) {
 		if (columnId == keyColumnId_ && keyObj != NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 		}
 
 		cursor.beginVarData();
@@ -3341,7 +3429,7 @@ void RowMapper::encodeField(OutputCursor &cursor, int32_t columnId,
 		const void *const arrayValue =
 				*static_cast<const void* const*>(getField(entry, rowObj));
 		if (arrayValue == NULL && elementCount > 0) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_ROW_FIELD, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_ROW_FIELD, "");
 		}
 		switch (toNonNullable(entry.elementType)) {
 		case GS_TYPE_STRING:
@@ -3351,7 +3439,7 @@ void RowMapper::encodeField(OutputCursor &cursor, int32_t columnId,
 					const GSChar* const elem =
 							static_cast<const GSChar* const*>(arrayValue)[i];
 					if (arrayValue == NULL) {
-						UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_ROW_FIELD, "");
+						GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_ROW_FIELD, "");
 					}
 					size_t length = strlen(elem);
 					totalSize += ClientUtil::getEncodedVarSize(length) + length;
@@ -3371,7 +3459,7 @@ void RowMapper::encodeField(OutputCursor &cursor, int32_t columnId,
 					const GSChar* const elem =
 							static_cast<const GSChar* const*>(arrayValue)[i];
 					if (arrayValue == NULL) {
-						UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_ROW_FIELD, "");
+						GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_ROW_FIELD, "");
 					}
 					out << elem;
 				}
@@ -3412,7 +3500,7 @@ void RowMapper::encodeField(OutputCursor &cursor, int32_t columnId,
 		case GS_TYPE_GEOMETRY:
 		case GS_TYPE_BLOB:
 		default:
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 		}
 		if (MODE_ROWWISE_SEPARATED_V2 != mode) {
 			const size_t endPos = out.base().position();
@@ -3426,7 +3514,7 @@ void RowMapper::encodeField(OutputCursor &cursor, int32_t columnId,
 		const void *fieldValue;
 		if (keyObj != NULL && columnId == keyColumnId_) {
 			if (keyType != NULL && *keyType != entry.elementType) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
 			}
 			fieldValue = keyObj;
 		}
@@ -3444,7 +3532,7 @@ void RowMapper::encodeField(OutputCursor &cursor, int32_t columnId,
 							GS_TYPE_STRING, util::TrueType>(NULL);
 				}
 				else {
-					UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_ROW_FIELD, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_ROW_FIELD, "");
 				}
 			}
 			cursor.beginVarData();
@@ -3489,7 +3577,7 @@ void RowMapper::encodeField(OutputCursor &cursor, int32_t columnId,
 							GS_TYPE_GEOMETRY, util::TrueType>(NULL);
 				}
 				else {
-					UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_ROW_FIELD, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_ROW_FIELD, "");
 				}
 			}
 			cursor.beginVarData();
@@ -3507,7 +3595,7 @@ void RowMapper::encodeField(OutputCursor &cursor, int32_t columnId,
 			}
 			if (blob.size > 0) {
 				if (blob.data == NULL) {
-					UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_ROW_FIELD, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_ROW_FIELD, "");
 				}
 				out.writeAll(blob.data, blob.size);
 			}
@@ -3538,7 +3626,7 @@ void RowMapper::encodeField(OutputCursor &cursor, int32_t columnId,
 			break;
 		}
 		default:
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 		}
 	}
 }
@@ -3562,7 +3650,7 @@ void RowMapper::decodeField(
 	if (isArrayColumn(entry)) {
 		if (pool == NULL) {
 			assert(false);
-			UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 		}
 
 		clearFieldGeneral(entry, rowObj);
@@ -3642,7 +3730,7 @@ void RowMapper::decodeField(
 			case GS_TYPE_BLOB:
 			default:
 				assert(false);
-				UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 			}
 		}
 		else {
@@ -3663,7 +3751,7 @@ void RowMapper::decodeField(
 		case GS_TYPE_STRING: {
 			if (pool == NULL) {
 				assert(false);
-				UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 			}
 			clearField<GS_TYPE_STRING, false>(entry, rowObj);
 			cursor.beginVarData();
@@ -3704,7 +3792,7 @@ void RowMapper::decodeField(
 		case GS_TYPE_GEOMETRY: {
 			if (pool == NULL) {
 				assert(false);
-				UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 			}
 
 			clearField<GS_TYPE_GEOMETRY, false>(entry, rowObj);
@@ -3719,7 +3807,7 @@ void RowMapper::decodeField(
 				dataSize = ClientUtil::toSizeValue(dataSizeInt32);
 			}
 
-			UTIL_THROW_ERROR(
+			GS_CLIENT_THROW_ERROR(
 					GS_ERROR_CC_UNSUPPORTED_OPERATION,
 					"GEOMETRY is not a supported type");
 
@@ -3729,7 +3817,7 @@ void RowMapper::decodeField(
 		case GS_TYPE_BLOB: {
 			if (pool == NULL) {
 				assert(false);
-				UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 			}
 
 			clearField<GS_TYPE_BLOB, false>(entry, rowObj);
@@ -3776,7 +3864,7 @@ void RowMapper::decodeField(
 				const size_t fixedGap =
 						lastPos + sizeof(int64_t) - in.base().position();
 				if (fixedGap > sizeof(int64_t)) {
-					UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 				}
 				for (size_t r = fixedGap; r > 0; r--) {
 					int8_t nullByte;
@@ -3789,7 +3877,7 @@ void RowMapper::decodeField(
 		}
 		default:
 			assert(false);
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 		}
 	}
 }
@@ -3860,7 +3948,7 @@ struct RowMapper::StringOrArrayCopier<Traits, Alloc, Mask, true> {
 		const GSChar *srcStr =
 				maskNullString<Traits::ELEMENT_TYPE, Mask>(Traits::as(src));
 		if (srcStr == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 		const size_t size = strlen(srcStr) + 1;
 
@@ -3883,7 +3971,7 @@ struct RowMapper::StringOrArrayCopier<Traits, Alloc, Mask, false> {
 		if (size > 0) {
 			const void *srcArray = Traits::as(src);
 			if (srcArray == NULL) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 			}
 
 			const size_t dataSize = sizeof(typename
@@ -3919,6 +4007,11 @@ RowMapper::Initializer::~Initializer() {
 		cache_ = NULL;
 	}
 }
+
+
+
+
+
 
 RowMapper::BaseCursor::BaseCursor(
 		const RowMapper &mapper, MappingMode mode, int32_t rowCount,
@@ -3981,7 +4074,7 @@ size_t RowMapper::BaseCursor::getVarDataTop(
 	case MODE_COLUMNWISE_SEPARATED:
 		if (rowIdIncluded) {
 			assert(false);
-			UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 		}
 		return topPos + mapper.getFixedRowPartSize(false, mode) *
 				ClientUtil::sizeValueToInt32(rowCount);
@@ -4375,7 +4468,7 @@ const RowMapper* RowMapper::Cache::duplicate(const RowMapper &mapper) {
 		}
 	}
 
-	UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 }
 
 void RowMapper::Cache::release(const RowMapper **mapper) {
@@ -4396,13 +4489,13 @@ void RowMapper::Cache::release(const RowMapper **mapper) {
 
 	if (targetIt == entryMap_.end()) {
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 
 	RowMapper *targetMapper = targetIt->second;
 	if (targetMapper->refCount_ == 0) {
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 
 	if (--targetMapper->refCount_ == 0) {
@@ -4870,7 +4963,7 @@ ContainerKey ContainerKeyConverter::compose(
 				components.affinityStr_.get() != NULL ||
 				components.systemNum_ != -1 ||
 				components.systemStr_.get() != NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_VALUE_FORMAT, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_VALUE_FORMAT, "");
 		}
 		return parse(components.base_.c_str(), caseSensitive);
 	}
@@ -4928,7 +5021,7 @@ ContainerKey ContainerKeyConverter::parse(
 	}
 	else {
 		if (!ContainerKeyUtils::parse(str, key.bytes_, internalMode_)) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_VALUE_FORMAT, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_VALUE_FORMAT, "");
 		}
 	}
 
@@ -4970,7 +5063,10 @@ const int32_t NodeConnection::EE_MAGIC_NUMBER = 65021048;
 const int32_t NodeConnection::DEFAULT_PROTOCOL_VERSION = 15;
 
 const int32_t NodeConnection::STATEMENT_TYPE_NUMBER_V2_OFFSET = 100;
-volatile bool NodeConnection::detailErrorMessageEnabled_ = false;
+
+const char8_t NodeConnection::ERROR_PARAM_ADDRESS[] = "address";
+const char8_t NodeConnection::ERROR_PARAM_PARTITION[] = "partition";
+
 volatile int32_t NodeConnection::protocolVersion_ = DEFAULT_PROTOCOL_VERSION;
 bool NodeConnection::tcpNoDelayEnabled_ = true;
 
@@ -4993,7 +5089,7 @@ NodeConnection::NodeConnection(
 		transactionTimeoutSecs_(-1) {
 	if (address_.getFamily() != util::SocketAddress::FAMILY_INET &&
 			address_.getFamily() != util::SocketAddress::FAMILY_INET6) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR,
 				"Invalid address (address=" << address_ << ")");
 	}
 
@@ -5015,8 +5111,8 @@ NodeConnection::NodeConnection(
 			}
 			if (!selector.dispatch(connectTimeoutMillis)) {
 				GS_CLIENT_THROW_CONNECTION(
-					GS_ERROR_CC_CONNECTION_TIMEOUT,
-					"Failed to connect (address=" << address_ << ")");
+						GS_ERROR_CC_CONNECTION_TIMEOUT,
+						"Failed to connect (address=" << address_ << ")");
 			}
 		}
 
@@ -5031,12 +5127,14 @@ NodeConnection::NodeConnection(
 		try {
 			if (!socket_.connect(address_)) {
 				GS_CLIENT_THROW_CONNECTION(
-						GS_ERROR_CC_BAD_CONNECTION, "address=" << address_);
+						GS_ERROR_CC_BAD_CONNECTION,
+						"Failed to connect (address=" << address_ << ")");
 			}
 		}
 		catch (std::exception &e) {
 			GS_CLIENT_RETHROW_CONNECTION(
-					GS_ERROR_CC_BAD_CONNECTION, e, "address=" << address_);
+					e, "Failed to connect (address=" << address_ <<
+					", reason=" << ErrorReasonFormatter(e) << ")");
 		}
 	}
 }
@@ -5051,10 +5149,6 @@ NodeConnection::~NodeConnection() {
 	}
 	catch (...) {
 	}
-}
-
-void NodeConnection::setDetailErrorMessageEnabled(bool enabled) {
-	detailErrorMessageEnabled_ = enabled;
 }
 
 int32_t NodeConnection::getProtocolVersion() {
@@ -5083,7 +5177,7 @@ bool NodeConnection::isSupportedProtocolVersion(int32_t protocolVersion) {
 
 void NodeConnection::setProtocolVersion(int32_t protocolVersion) {
 	if (!isSupportedProtocolVersion(protocolVersion)) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 				"Wrong protocol version");
 	}
 	protocolVersion_ = protocolVersion;
@@ -5185,7 +5279,7 @@ ArrayByteInStream NodeConnection::executeStatementDirect(
 	watch.start();
 #endif
 	if (partitionId < 0) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR,
 				"Internal error by illegal partition ID ("
 				"partitionId=" << partitionId <<
 				", address=" << address_ << ")");
@@ -5222,8 +5316,7 @@ ArrayByteInStream NodeConnection::executeStatementDirect(
 	}
 	catch (std::exception &e) {
 		GS_CLIENT_RETHROW_CONNECTION(
-				GS_ERROR_CC_BAD_CONNECTION, e,
-				"Failed to send message (address=" << address_ <<
+				e, "Failed to send message (address=" << address_ <<
 				", reason=" << ErrorReasonFormatter(e) << ")");
 	}
 	reqOut.base().position(reqLength);
@@ -5340,43 +5433,62 @@ ArrayByteInStream NodeConnection::executeStatementDirect(
 		return respBodyIn;
 	}
 
-	std::auto_ptr<ErrorStack> errorStack(
-			ErrorStack::tryRead(respBodyIn, detailErrorMessageEnabled_));
-	int32_t errorCode = 0;
-	if (errorStack.get() != NULL && errorStack->getSize() > 0) {
-		for (size_t i = 0; i < errorStack->getSize(); i++) {
-			const ErrorStack::Entry *entry = errorStack->entryAt(i);
-			if (entry->errorCode_ != 0 &&
-					entry->type_.find("PlatformException") == std::string::npos) {
-				errorCode = entry->errorCode_;
-			}
-		}
+	util::Exception::NamedErrorCode defaultCode;
+	switch (statementResult) {
+	case StatementResult::STATEMENT_ERROR:
+		defaultCode = GS_COMMON_EXCEPTION_NAMED_CODE(
+				GS_ERROR_CC_BAD_STATEMENT);
+		break;
+	case StatementResult::DENY:
+		defaultCode = GS_COMMON_EXCEPTION_NAMED_CODE(
+				GS_ERROR_CC_WRONG_NODE);
+		break;
+	default:
+		defaultCode = GS_COMMON_EXCEPTION_NAMED_CODE(
+				GS_ERROR_CC_BAD_CONNECTION);
+		break;
+	}
+
+	ErrorStack errorStack(ErrorStack::tryRead(respBodyIn, defaultCode));
+	ClientException &baseException = errorStack.getException();
+
+	{
+		util::NormalOStringStream oss;
+		oss << address_;
+		baseException.appendParameter(ERROR_PARAM_ADDRESS, oss.str().c_str());
+	}
+	{
+		util::NormalOStringStream oss;
+		oss << partitionId;
+		baseException.appendParameter(
+				ERROR_PARAM_PARTITION, oss.str().c_str());
 	}
 
 	try {
-		switch (statementResult) {
-		case StatementResult::STATEMENT_ERROR:
-			errorCode =
-					(errorCode == 0 ? GS_ERROR_CC_BAD_STATEMENT : errorCode);
-			GS_CLIENT_THROW_STATEMENT(
-					errorCode, "address=" << address_, errorStack);
-		case StatementResult::DENY:
-			errorCode =
-					(errorCode == 0 ? GS_ERROR_CC_WRONG_NODE : errorCode);
-			GS_CLIENT_THROW_WRONG_NODE_WITH_STACK(
-					errorCode, "address=" << address_, errorStack);
-		default:
-			errorCode =
-					(errorCode == 0 ? GS_ERROR_CC_BAD_CONNECTION : errorCode);
-			GS_CLIENT_THROW_CONNECTION_WITH_STACK(
-					errorCode, "address=" << address_, errorStack);
+		util::NormalOStringStream oss;
+		ClientException::formatMessageWithParameter(
+				oss, baseException, baseException);
+
+		try {
+			throw baseException;
+		}
+		catch (...) {
+			std::exception e;
+			switch (statementResult) {
+			case StatementResult::STATEMENT_ERROR:
+				GS_CLIENT_RETHROW_STATEMENT(e, oss.str());
+			case StatementResult::DENY:
+				GS_CLIENT_RETHROW_WRONG_NODE(e, "");
+			default:
+				GS_CLIENT_RETHROW_CONNECTION(e, "");
+			}
 		}
 	}
 	catch (std::exception &e) {
 		if (heartbeat != NULL && respStatementTypeNumber ==
 				statementToNumber(Statement::CONNECT)) {
 			GS_CLIENT_RETHROW_CONNECTION(
-					GS_ERROR_CC_BAD_CONNECTION, e,
+					e,
 					"Connection problem occurred by "
 					"invalid heartbeat response ("
 					"address=" << address_ <<
@@ -5460,6 +5572,8 @@ bool NodeConnection::loginInternal(
 		if (isClientIdOnLoginEnabled()) {
 			request.clientId_ = loginInfo.clientId_;
 		}
+		request.applicationName_ = loginInfo.applicationName_;
+		request.storeMemoryAgingSwapRate_ = loginInfo.storeMemoryAgingSwapRate_;
 		request.format(reqOut);
 	}
 
@@ -5596,7 +5710,7 @@ void NodeConnection::readFully(void *buf, size_t length) {
 
 			if (timeoutOccurred) {
 				GS_CLIENT_RETHROW_CONNECTION(
-						GS_ERROR_CC_CONNECTION_TIMEOUT, e2,
+						e2,
 						"Connection timed out on receiving ("
 						"receivedSize=" << (length - r) <<
 						", totalSize=" << length <<
@@ -5605,7 +5719,7 @@ void NodeConnection::readFully(void *buf, size_t length) {
 			}
 		}
 		GS_CLIENT_RETHROW_CONNECTION(
-				GS_ERROR_CC_BAD_CONNECTION, e,
+				e,
 				"Connection problem occurred on receiving ("
 				"receivedSize=" << (length - r) <<
 				", totalSize=" << length <<
@@ -5678,7 +5792,7 @@ util::NormalXArray<uint8_t>* NodeConnection::processHeartbeat(
 		catch (ConnectionException &e) {
 			if (responseUnacceptable_) {
 				GS_CLIENT_RETHROW_CONNECTION(
-						GS_ERROR_CC_BAD_CONNECTION, e,
+						e,
 						"Connection problem occurred after heartbeat (" <<
 						"elapsedMillis=" << elapsedMillis <<
 						", address=" << address_ <<
@@ -5812,7 +5926,7 @@ bool NodeConnection::Config::set(const Properties &properties) {
 
 	if (connectTimeoutMillis < 0 || statementTimeoutMillis < 0 ||
 			heartbeatTimeoutMillis < 0) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY, "");
 	}
 
 	if (connectTimeoutMillis != connectTimeoutMillis_ ||
@@ -5838,14 +5952,17 @@ void NodeConnection::Config::setAlternativeVersion(int32_t alternativeVersion) {
 NodeConnection::LoginInfo::LoginInfo(
 		const GSChar *user, const GSChar *password, bool ownerMode,
 		const GSChar *clusterName, const GSChar *dbName,
-		int64_t transactionTimeoutMillis) :
+		int64_t transactionTimeoutMillis, const GSChar *applicationName,
+		double storeMemoryAgingSwapRate) :
 		user_(user),
 		passwordDigest_(Auth::Challenge::makeDigest(alloc_, user, password)),
 		database_(dbName),
 		ownerMode_(ownerMode),
 		clusterName_(clusterName),
 		transactionTimeoutSecs_(
-				Properties::timeoutToInt32Seconds(transactionTimeoutMillis)) {
+				Properties::timeoutToInt32Seconds(transactionTimeoutMillis)),
+		applicationName_(applicationName),
+		storeMemoryAgingSwapRate_(storeMemoryAgingSwapRate) {
 }
 
 void NodeConnection::LoginInfo::setPassword(const GSChar *password) {
@@ -5864,7 +5981,8 @@ NodeConnection::OptionalRequest::OptionalRequest() :
 		statementTimeout_(-1),
 		fetchLimit_(-1),
 		fetchSize_(-1),
-		fetchBytesSize_(0) {
+		fetchBytesSize_(0),
+		storeMemoryAgingSwapRate_(-1) {
 }
 
 NodeConnection::OptionalRequest::OptionalRequest(
@@ -5880,7 +5998,8 @@ NodeConnection::OptionalRequest::OptionalRequest(
 		statementTimeout_(statementTimeout),
 		fetchLimit_(fetchLimit),
 		fetchSize_(fetchSize),
-		fetchBytesSize_(0) {
+		fetchBytesSize_(0),
+		storeMemoryAgingSwapRate_(-1) {
 }
 
 void NodeConnection::OptionalRequest::putExt(
@@ -5960,6 +6079,16 @@ void NodeConnection::OptionalRequest::format(
 	if (fetchBytesSize_ > 0) {
 		formatter.putType(FETCH_BYTES_SIZE);
 		reqOut << fetchBytesSize_;
+	}
+
+	if (!applicationName_.empty()) {
+		formatter.putType(APPLICATION_NAME);
+		reqOut << applicationName_;
+	}
+
+	if (storeMemoryAgingSwapRate_ >= 0) {
+		formatter.putType(STORE_MEMORY_AGING_SWAP_RATE);
+		reqOut << storeMemoryAgingSwapRate_;
 	}
 
 	if (extRequestMap_.get() != NULL) {
@@ -6232,6 +6361,7 @@ NodeResolver::NodeResolver(NodeConnectionPool &pool, bool passive,
 		connectionConfig_(connectionConfig),
 		notificationReceiveTimeoutMillis_(NOTIFICATION_RECEIVE_TIMEOUT),
 		providerTimeoutMillis_(-1),
+		masterCacheCounter_(1),
 		connectionTrialCounter_(0),
 		connectionFailedPreviously_(false),
 		preferableConnectionPoolSize_(pool.getMaxSize()),
@@ -6305,7 +6435,7 @@ util::SocketAddress NodeResolver::getAddressProperties(
 			ipv6Enabled = false;
 		}
 		else {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 					"Illegal IP type");
 		}
 		ipv6EnabledPtr = &ipv6Enabled;
@@ -6324,14 +6454,14 @@ util::SocketAddress NodeResolver::getAddressProperties(
 			portAssigned = true;
 		}
 		else if (!address.isEmpty()) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 					"Port must be specified");
 		}
 	}
 
 	if (portAssigned && (port < 0 || port > static_cast<int32_t>(
 			std::numeric_limits<uint16_t>::max()))) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 				"Port out of range (" << port <<
 				", propertyName=" << portKey << ")");
 	}
@@ -6418,7 +6548,7 @@ void NodeResolver::parseNotificationMember(
 
 	const GSChar *end = value + strlen(value);
 	if (value == end) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
 				"Notification member is empty");
 	}
 
@@ -6429,7 +6559,7 @@ void NodeResolver::parseNotificationMember(
 		}
 
 		if (it == delim) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 					"One or more elements in notification member "
 					"are empty (" <<
 					"element=" << std::string(it, delim) <<
@@ -6440,7 +6570,7 @@ void NodeResolver::parseNotificationMember(
 		const GSChar *v6AddrEnd = findLastChar(it, delim, ']');
 		if (addrSep == NULL ||
 				(v6AddrEnd != NULL && addrSep < v6AddrEnd)) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 					"Port not found in notification member ("
 					"element=" << std::string(it, delim) <<
 					", list=" << value << ")");
@@ -6452,7 +6582,8 @@ void NodeResolver::parseNotificationMember(
 					std::string(&addrSep[1], delim));
 		}
 		catch (util::Exception &e) {
-			UTIL_RETHROW(GS_ERROR_CC_ILLEGAL_PARAMETER, e,
+			GS_CLIENT_RETHROW_ERROR(
+					e,
 					"Failed to parse port in notification member ("
 					"element=" << std::string(it, delim) <<
 					", list=" << value << ")");
@@ -6460,7 +6591,7 @@ void NodeResolver::parseNotificationMember(
 
 		if (port < 0 || port > static_cast<int32_t>(
 				std::numeric_limits<uint16_t>::max())) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 					"Illegal port in notification member ("
 					"element=" << std::string(it, delim) <<
 					", list=" << value << ")");
@@ -6472,7 +6603,8 @@ void NodeResolver::parseNotificationMember(
 					std::string(it, addrSep).c_str(), ipv6Expected, NULL);
 		}
 		catch (util::Exception &e) {
-			UTIL_RETHROW(GS_ERROR_CC_ILLEGAL_PARAMETER, e,
+			GS_CLIENT_RETHROW_ERROR(
+					e,
 					"Failed to resolve host in notification member ("
 					"element=" << std::string(it, delim) <<
 					", list=" << value << ")");
@@ -6491,7 +6623,7 @@ void NodeResolver::parseNotificationMember(
 util::SocketAddress NodeResolver::resolveAddress(
 		const GSChar *host, const bool *ipv6Expected, const GSChar *key) {
 	if (strlen(host) == 0) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
 				"Empty host name or address specified" <<
 				(key == NULL ? "" : " (propertyName=") <<
 				(key == NULL ? "" : key) <<
@@ -6504,7 +6636,8 @@ util::SocketAddress NodeResolver::resolveAddress(
 		return util::SocketAddress(host, port, family);
 	}
 	catch (util::Exception &e) {
-		UTIL_RETHROW(GS_ERROR_CC_ILLEGAL_PARAMETER, e,
+		GS_CLIENT_RETHROW_ERROR(
+				e,
 				"Address not resolved (value=" << host <<
 				(key == NULL ? "" : ", propertyName=") <<
 				(key == NULL ? "" : key) << ")");
@@ -6528,6 +6661,8 @@ int32_t NodeResolver::getPartitionCount(ClusterInfo &clusterInfo) {
 		util::LockGuard<util::Mutex> guard(mutex_);
 		prepareConnectionAndClusterInfo(clusterInfo, startTrialCount);
 		assert(clusterInfo.getPartitionCount() != NULL);
+
+		applyMasterCacheCounter(clusterInfo);
 	}
 
 	return *clusterInfo.getPartitionCount();
@@ -6541,6 +6676,8 @@ ContainerHashMode::Id NodeResolver::getContainerHashMode(
 		util::LockGuard<util::Mutex> guard(mutex_);
 		prepareConnectionAndClusterInfo(clusterInfo, startTrialCount);
 		assert(clusterInfo.getHashMode() != NULL);
+
+		applyMasterCacheCounter(clusterInfo);
 	}
 
 	return *clusterInfo.getHashMode();
@@ -6553,6 +6690,8 @@ int64_t NodeResolver::getDatabaseId(ClusterInfo &clusterInfo) {
 		util::LockGuard<util::Mutex> guard(mutex_);
 		prepareConnectionAndClusterInfo(clusterInfo, startTrialCount);
 		assert(clusterInfo.getDatabaseId() != NULL);
+
+		applyMasterCacheCounter(clusterInfo);
 	}
 
 	return *clusterInfo.getDatabaseId();
@@ -6575,6 +6714,7 @@ util::SocketAddress NodeResolver::getMasterAddress(ClusterInfo &clusterInfo) {
 		assert(!masterAddress_.isEmpty());
 	}
 
+	applyMasterCacheCounter(clusterInfo);
 	return masterAddress_;
 }
 
@@ -6625,9 +6765,10 @@ util::SocketAddress NodeResolver::getNodeAddress(
 	}
 
 	if ((*addressList)[index].isEmpty()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "Empty address");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "Empty address");
 	}
 
+	applyMasterCacheCounter(clusterInfo);
 	return (*addressList)[index];
 }
 
@@ -6644,11 +6785,13 @@ void NodeResolver::getNodeAddressList(
 	if (baseAddressList != NULL) {
 		addressList = *baseAddressList;
 	}
+
+	applyMasterCacheCounter(clusterInfo);
 }
 
 void NodeResolver::invalidateMaster(ClusterInfo &clusterInfo) {
 	util::LockGuard<util::Mutex> guard(mutex_);
-	invalidateMasterInternal(clusterInfo);
+	invalidateMasterInternal(clusterInfo, false);
 }
 
 void NodeResolver::makeServiceAddressResolver(
@@ -6662,7 +6805,7 @@ void NodeResolver::makeServiceAddressResolver(
 
 	if (sarConfig.providerURL_ != NULL &&
 			strlen(sarConfig.providerURL_) == 0) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
 				"Notification provider is empty");
 	}
 
@@ -6716,7 +6859,7 @@ void NodeResolver::prepareConnectionAndClusterInfo(
 		const bool invalidated = clusterInfo.invalidate();
 		if (invalidated || !statementError) {
 			connectionFailedPreviously_ = true;
-			invalidateMasterInternal(clusterInfo);
+			invalidateMasterInternal(clusterInfo, true);
 		}
 		throw;
 	}
@@ -6749,7 +6892,7 @@ void NodeResolver::updateNotificationMember() try {
 
 				const uint32_t elapsedMillis = watch.elapsedMillis();
 				if (elapsedMillis > timeoutMillis) {
-					UTIL_THROW_ERROR(GS_ERROR_CC_BAD_CONNECTION,
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_BAD_CONNECTION,
 							"Timeout exceeded while updating "
 							"notification member ("
 							"providerURL=" << url <<
@@ -6768,8 +6911,7 @@ catch (util::Exception &e) {
 	if (serviceAddressResolver_.isAvailable()) {
 		return;
 	}
-	GS_CLIENT_RETHROW_CONNECTION(
-			GS_ERROR_CC_BAD_CONNECTION, e, "");
+	GS_CLIENT_RETHROW_CONNECTION(e, "");
 }
 
 bool NodeResolver::updateConnectionAndClusterInfo(ClusterInfo &clusterInfo) {
@@ -6782,7 +6924,7 @@ bool NodeResolver::updateConnectionAndClusterInfo(ClusterInfo &clusterInfo) {
 			if (count <= 0) {
 				const GSChar *url = serviceAddressResolver_.
 						getConfig().providerURL_;
-				UTIL_THROW_ERROR(GS_ERROR_SA_ADDRESS_NOT_ASSIGNED,
+				GS_CLIENT_THROW_ERROR(GS_ERROR_SA_ADDRESS_NOT_ASSIGNED,
 						"No address found in provider (url=" <<
 						(url == NULL ? "" : url) << ")");
 			}
@@ -6811,7 +6953,7 @@ bool NodeResolver::updateConnectionAndClusterInfo(ClusterInfo &clusterInfo) {
 		const bool masterResolvable =
 				GridStoreChannel::isMasterResolvableByConnection();
 		if (masterUnresolved && !masterResolvable) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 		}
 
 		const NodeConnection::LoginInfo &loginInfo = clusterInfo.loginInfo_;
@@ -6854,7 +6996,7 @@ bool NodeResolver::updateConnectionAndClusterInfo(ClusterInfo &clusterInfo) {
 			respIn >> backupCount;
 			if (ownerCount != 0 || backupCount != 0 ||
 					respIn.base().remaining() == 0) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 						"Protocol error by invalid master location");
 			}
 
@@ -6909,14 +7051,16 @@ void NodeResolver::updateMasterInfo(ClusterInfo &clusterInfo) try {
 		receivedSize = socket.receive(resp_.data(), resp_.size());
 	}
 	catch (std::exception &e) {
-		GS_CLIENT_RETHROW_CONNECTION(GS_ERROR_CC_BAD_CONNECTION, e, "");
+		GS_CLIENT_RETHROW_CONNECTION_CODED(GS_ERROR_CC_BAD_CONNECTION, e, "");
 	}
 	if (receivedSize != static_cast<int64_t>(resp_.size())) {
-		if (receivedSize == 0) {
-			GS_CLIENT_THROW_CONNECTION(GS_ERROR_CC_CONNECTION_TIMEOUT, "");
+		if (receivedSize <= 0) {
+			GS_CLIENT_THROW_CONNECTION(GS_ERROR_CC_CONNECTION_TIMEOUT,
+					"Timeout for receiving multicast packet");
 		}
 		else {
-			GS_CLIENT_THROW_CONNECTION(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+			GS_CLIENT_THROW_CONNECTION(GS_ERROR_CC_MESSAGE_CORRUPTED,
+					"Protocol error by invalid packet length");
 		}
 	}
 
@@ -6927,7 +7071,8 @@ void NodeResolver::updateMasterInfo(ClusterInfo &clusterInfo) try {
 	int32_t statementType;
 	respIn >> statementType;
 	if (statementType != protocolConfig_->getNotificationStatementType()) {
-		GS_CLIENT_THROW_CONNECTION(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+		GS_CLIENT_THROW_CONNECTION(GS_ERROR_CC_MESSAGE_CORRUPTED,
+				"Protocol error by illegal statement type");
 	}
 
 	util::SocketAddress masterAddress;
@@ -6949,7 +7094,8 @@ void NodeResolver::updateMasterInfo(ClusterInfo &clusterInfo) try {
 	int32_t partitionCount;
 	respIn >> partitionCount;
 	if (partitionCount <= 0) {
-		GS_CLIENT_THROW_CONNECTION(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+		GS_CLIENT_THROW_CONNECTION(GS_ERROR_CC_MESSAGE_CORRUPTED,
+				"Protocol error by negative partition count");
 	}
 
 	const ContainerHashMode::Id hashMode = decodeContainerHashMode(respIn);
@@ -6966,8 +7112,14 @@ catch (...) {
 	throw;
 }
 
-void NodeResolver::invalidateMasterInternal(ClusterInfo &clusterInfo) {
+void NodeResolver::invalidateMasterInternal(
+		ClusterInfo &clusterInfo, bool inside) {
+
 	clusterInfo.invalidate();
+	if (!clusterInfo.acceptMasterInvalidation(masterCacheCounter_) &&
+			!inside) {
+		return;
+	}
 
 	if (!notificationAddress_.isEmpty() ||
 			serviceAddressResolver_.getConfig().providerURL_ != NULL ||
@@ -6982,6 +7134,9 @@ void NodeResolver::invalidateMasterInternal(ClusterInfo &clusterInfo) {
 	}
 
 	updateConnectionPoolSize();
+
+	while (++masterCacheCounter_ == 0) {
+	}
 }
 
 void NodeResolver::releaseMasterCache(bool forceClose) {
@@ -6998,6 +7153,10 @@ void NodeResolver::releaseMasterCache(bool forceClose) {
 			pool_.add(connection);
 		}
 	}
+}
+
+void NodeResolver::applyMasterCacheCounter(ClusterInfo &clusterInfo) {
+	clusterInfo.lastMasterCacheCounter_ = masterCacheCounter_;
 }
 
 void NodeResolver::acceptClusterInfo(
@@ -7048,7 +7207,7 @@ template<typename T> void NodeResolver::acceptClusterInfoEntry(
 
 	if (static_cast<void*>(&entry) == &clusterInfo.partitionCount_) {
 		if (byConnection) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARTITION_COUNT, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARTITION_COUNT, "");
 		}
 		else {
 			GS_CLIENT_THROW_CONNECTION(
@@ -7057,7 +7216,7 @@ template<typename T> void NodeResolver::acceptClusterInfoEntry(
 	}
 	else {
 		if (byConnection) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG, "");
 		}
 		else {
 			GS_CLIENT_THROW_CONNECTION(GS_ERROR_CC_ILLEGAL_CONFIG, "");
@@ -7240,7 +7399,7 @@ int32_t NodeResolver::DefaultProtocolConfig::getNormalStatementType(
 		return NodeConnection::statementToNumber(statement);
 	}
 	else {
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 }
 
@@ -7302,7 +7461,8 @@ bool NodeResolver::ClusterInfoEntry<T>::invalidate() {
 
 NodeResolver::ClusterInfo::ClusterInfo(
 		const NodeConnection::LoginInfo &loginInfo) :
-		loginInfo_(loginInfo) {
+		loginInfo_(loginInfo),
+		lastMasterCacheCounter_(0) {
 	loginInfo_.ownerMode_ = false;
 }
 
@@ -7312,6 +7472,15 @@ bool NodeResolver::ClusterInfo::invalidate() {
 	invalidated |= hashMode_.invalidate();
 	invalidated |= databaseId_.invalidate();
 	return invalidated;
+}
+
+bool NodeResolver::ClusterInfo::acceptMasterInvalidation(
+		uint64_t masterCacheCounter) {
+	if (lastMasterCacheCounter_ != masterCacheCounter) {
+		return false;
+	}
+	lastMasterCacheCounter_ = 0;
+	return true;
 }
 
 const int32_t* NodeResolver::ClusterInfo::getPartitionCount() const {
@@ -7364,7 +7533,8 @@ GridStoreChannel::GridStoreChannel(
 				key_.sarConfig_, key_.memberList_,
 				NodeResolver::AddressConfig()),
 		reqHeadLength_(NodeConnection::getRequestHeadLength(
-				ClientUtil::isIPV6Address(key_.address_))) {
+				ClientUtil::isIPV6Address(key_.address_))),
+		interceptorManager_(source.interceptorManager_) {
 	nodeResolver_.setNotificationReceiveTimeoutMillis(
 			config.notificationReceiveTimeoutMillis_);
 	nodeResolver_.setProviderTimeoutMillis(key_.providerTimeoutMillis_);
@@ -7372,6 +7542,10 @@ GridStoreChannel::GridStoreChannel(
 
 NodeConnectionPool& GridStoreChannel::getConnectionPool() {
 	return pool_;
+}
+
+GSInterceptorManager* GridStoreChannel::getInterceptorManager() throw() {
+	return interceptorManager_;
 }
 
 void GridStoreChannel::apply(const Config &config) {
@@ -7395,6 +7569,14 @@ int64_t GridStoreChannel::getFailoverTimeoutMillis(const Context &context) {
 
 void GridStoreChannel::setStatementRetryMode(int32_t statementRetryMode) {
 	statementRetryMode_ = statementRetryMode;
+}
+
+void GridStoreChannel::setMonitoring(bool monitoring) {
+	monitoring_ = monitoring;
+}
+
+bool GridStoreChannel::isMonitoring() {
+	return monitoring_;
 }
 
 void GridStoreChannel::initializeRequestBuffer(
@@ -7453,7 +7635,7 @@ void GridStoreChannel::checkActiveConnection(
 			context.activeConnections_.find(address);
 	if (it == context.activeConnections_.end() || connectionId.isEmpty() ||
 			!connectionId.matches(it->second.first)) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_RECOVERABLE_CONNECTION_PROBLEM, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_RECOVERABLE_CONNECTION_PROBLEM, "");
 	}
 }
 
@@ -7461,7 +7643,7 @@ ArrayByteInStream GridStoreChannel::executeStatement(
 		Context &context, Statement::Id statement, int64_t statementId,
 		util::NormalXArray<uint8_t> &req, util::NormalXArray<uint8_t> &resp) {
 	if (context.closed_) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_RESOURCE_CLOSED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_RESOURCE_CLOSED, "");
 	}
 
 	const size_t reqLength = req.size();
@@ -7521,7 +7703,7 @@ ArrayByteInStream GridStoreChannel::executeStatement(
 			req.resize(reqLength);
 
 			if (isConnectionDependentStatement(statement)) {
-				UTIL_RETHROW(
+				GS_CLIENT_RETHROW_ERROR_CODED(
 						GS_ERROR_CC_RECOVERABLE_CONNECTION_PROBLEM, e, "");
 			}
 
@@ -7575,12 +7757,10 @@ ArrayByteInStream GridStoreChannel::executeStatement(
 				}
 
 				if (wrongNode) {
-					GS_CLIENT_RETHROW_WRONG_NODE(
-							e.getErrorCode(), e, errorMessage);
+					GS_CLIENT_RETHROW_WRONG_NODE(e, errorMessage);
 				}
 				else {
-					GS_CLIENT_RETHROW_CONNECTION(
-							e.getErrorCode(), e, errorMessage);
+					GS_CLIENT_RETHROW_CONNECTION(e, errorMessage);
 				}
 			}
 
@@ -7600,7 +7780,7 @@ ArrayByteInStream GridStoreChannel::executeStatement(
 			throw;
 		}
 		catch (std::exception &e) {
-			UTIL_RETHROW(0, e, "");
+			GS_CLIENT_RETHROW_ERROR(e, "");
 		}
 	}
 }
@@ -7611,7 +7791,7 @@ void GridStoreChannel::invalidateMaster(Context &context) {
 
 void GridStoreChannel::checkContextAvailable(const Context &context) {
 	if (context.closed_) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_RESOURCE_CLOSED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_RESOURCE_CLOSED, "");
 	}
 }
 
@@ -7698,11 +7878,11 @@ int32_t GridStoreChannel::calculatePartitionId(
 		return static_cast<int32_t>(
 					hash % static_cast<uint32_t>(partitionCount));
 #else
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 #endif
 	}
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 }
 
@@ -7750,7 +7930,7 @@ void GridStoreChannel::updateConnection(
 			!context.loginInfo_.ownerMode_,
 			context.getPreferableHost(context.partitionId_));
 	if (address.isEmpty()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "Empty address");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "Empty address");
 	}
 
 	Context::ConnectionMap::iterator it =
@@ -7812,7 +7992,7 @@ bool GridStoreChannel::Config::set(Properties properties) {
 	if (failoverTimeoutMillis < 0 ||
 			failoverRetryIntervalMillis < 0 ||
 			notificationReceiveTimeoutMillis < 0) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY,
 				"Negative timeout parameter");
 	}
 
@@ -7830,7 +8010,7 @@ bool GridStoreChannel::Config::set(Properties properties) {
 	int32_t maxConnectionPoolSize;
 	if (properties.getInteger("maxConnectionPoolSize", maxConnectionPoolSize)) {
 		if (maxConnectionPoolSize < 0) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY,
 					"Negative connection pool size");
 		}
 		maxConnectionPoolSize_ = maxConnectionPoolSize;
@@ -7965,7 +8145,7 @@ void GridStoreChannel::LocalConfig::set(const Properties &properties) {
 		containerCacheSize = 0;
 	}
 	else if (containerCacheSize < 0) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 				"Negative container cache size (size=" <<
 				containerCacheSize << ")");
 	}
@@ -7984,7 +8164,8 @@ void GridStoreChannel::LocalConfig::set(const Properties &properties) {
 
 GridStoreChannel::Source::Source() :
 		partitionCount_(0),
-		loginInfo_("", "", false, "", "", -1) {
+		loginInfo_("", "", false, "", "", -1, "", -1),
+		interceptorManager_(NULL) {
 }
 
 GridStoreChannel::Source::~Source() {
@@ -8037,6 +8218,11 @@ void GridStoreChannel::Source::set(const Properties &properties) {
 		ClientUtil::checkSymbol(database.c_str(), "database name");
 	}
 
+	std::string applicationName;
+	if (properties.getString("applicationName", applicationName)) {
+		ClientUtil::checkSymbol(applicationName.c_str(), "application name");
+	}
+
 	int32_t partitionCount;
 	if (!properties.getInteger("partitionCount", partitionCount)) {
 		partitionCount = 0;
@@ -8052,7 +8238,7 @@ void GridStoreChannel::Source::set(const Properties &properties) {
 		backupPreferred = true;
 	}
 	else {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	LocalConfig localConfig;
@@ -8079,7 +8265,26 @@ void GridStoreChannel::Source::set(const Properties &properties) {
 			!backupPreferred,
 			key_.clusterName_.c_str(),
 			database.c_str(),
-			localConfig.transactionTimeoutMillis_);
+			localConfig.transactionTimeoutMillis_,
+			applicationName.c_str(),
+			resolveStoreMemoryAgingSwapRate(properties));
+}
+
+double GridStoreChannel::Source::resolveStoreMemoryAgingSwapRate(
+		const Properties &properties) {
+	const char8_t *name = "storeMemoryAgingSwapRate";
+	double value;
+	if (!properties.getDouble(name, value)) {
+		return -1;
+	}
+
+	if (!(0 <= value && value <= 1)) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY,
+				"Property value out of range (name=" << name <<
+				", value=" << value << ")");
+	}
+
+	return value;
 }
 
 
@@ -8495,7 +8700,7 @@ void GridStoreChannel::ResolverExecutor::execute(
 				resolver.getPartitionCount(clusterInfo));
 		break;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 }
 
@@ -8514,14 +8719,20 @@ GridStoreChannel::ResolverExecutorScope::~ResolverExecutorScope() {
 
 
 const uint32_t GSResourceHeader::RESOURCE_TYPE_MASK = 0x1ec7e2eb;
+const uint32_t GSResourceHeader::FLAG_INTERCEPTABLE =
+		static_cast<uint32_t>(1) << (sizeof(uint32_t) * CHAR_BIT - 1);
 
 #ifdef GS_CLIENT_UNIT_TEST
 int64_t
 GSResourceHeader::resourceCountList_[GSResourceType::TYPE_ID_MAX] = { 0 };
 #endif
 
-GSResourceHeader::GSResourceHeader(GSResourceType::Id type) :
-		maskedType_(maskType(type)) {
+GSResourceHeader::GSResourceHeader(
+		GSResourceType::Id type, void *parentResource,
+		GSInterceptorManager *interceptorManager) :
+		maskedType_(
+				maskType(type, resolveInterceptable(
+						type, parentResource, interceptorManager))) {
 #ifdef GS_CLIENT_UNIT_TEST
 	++resourceCountList_[getType()];
 #endif
@@ -8550,44 +8761,113 @@ bool GSResourceHeader::checkType(
 	return (getType(resource, actualType) && actualType == type);
 }
 
+template<typename T>
+GSResourceType::Id GSResourceHeader::getStaticType(T *resource) throw() {
+	static_cast<void>(resource);
+	return GSResourceType::Resolver<T>::TYPE;
+}
+
+template<typename T>
+GSResourceType::Id GSResourceHeader::getStaticType(T **resource) throw() {
+	static_cast<void>(resource);
+	return GSResourceType::Resolver<T>::TYPE;
+}
+
 ErrorStack* GSResourceHeader::findErrorStack(
 		void *resource, util::Mutex *&mutex) throw() {
 	mutex = NULL;
+
+	GSGridStore *store;
+	GSGridStoreFactory *factory;
+	findStoreOrFactory(resource, store, factory);
+
+	if (store != NULL) {
+		return &store->stack_;
+	}
+	else if (factory != NULL) {
+		mutex = &factory->data_->mutex_;
+		return &factory->data_->stack_;
+	}
+	else {
+		return NULL;
+	}
+}
+
+GSInterceptorManager* GSResourceHeader::findInterceptorManager(
+		void *resource) throw() {
 	if (resource == NULL) {
 		return NULL;
+	}
+
+	if (!static_cast<GSResourceHeader*>(resource)->isInterceptable()) {
+		return NULL;
+	}
+
+	GSGridStore *store;
+	GSGridStoreFactory *factory;
+	findStoreOrFactory(resource, store, factory);
+
+	if (store != NULL) {
+		return store->channel_.getInterceptorManager();
+	}
+	else if (factory != NULL) {
+		return &factory->data_->interceptorManager_;
+	}
+	else {
+		return NULL;
+	}
+}
+
+void GSResourceHeader::findStoreOrFactory(
+		void *resource, GSGridStore *&store,
+		GSGridStoreFactory *&factory) throw() {
+	store = NULL;
+	factory = NULL;
+
+	if (resource == NULL) {
+		return;
 	}
 
 	const GSResourceType::Id type =
 			static_cast<GSResourceHeader*>(resource)->getType();
 	switch (type) {
 	case GSResourceType::GRID_STORE_FACTORY: {
-		GSGridStoreFactory &factory =
-				*static_cast<GSGridStoreFactory*>(resource);
-		if (factory.data_.get() == NULL) {
-			return NULL;
+		GSGridStoreFactory *rawFactory =
+				static_cast<GSGridStoreFactory*>(resource);
+		if (rawFactory->data_.get() == NULL) {
+			return;
 		}
-		mutex = &factory.data_->mutex_;
-		return &factory.data_->stack_;
+		factory = rawFactory;
+		break;
 	}
 	case GSResourceType::GRID_STORE:
-		return &static_cast<GSGridStore*>(resource)->stack_;
+		store = static_cast<GSGridStore*>(resource);
+		break;
 	case GSResourceType::CONTAINER:
-		return &static_cast<GSContainer*>(resource)->store_->stack_;
+		store = static_cast<GSContainer*>(resource)->store_;
+		break;
 	case GSResourceType::QUERY:
-		return &static_cast<GSQuery*>(resource)->container_->store_->stack_;
+		store = static_cast<GSQuery*>(resource)->container_->store_;
+		break;
 	case GSResourceType::ROW_SET:
-		return &static_cast<GSRowSet*>(resource)->container_->store_->stack_;
+		store = static_cast<GSRowSet*>(resource)->container_->store_;
+		break;
 	case GSResourceType::AGGREGATION_RESULT:
-		return &static_cast<GSAggregationResult*>(
-			resource)->container_->store_->stack_;
+		store = static_cast<GSAggregationResult*>(
+				resource)->container_->store_;
+		break;
 	case GSResourceType::ROW:
-		return findErrorStack(&static_cast<GSRow*>(resource)->parentResource_,
-				mutex);
+		findStoreOrFactory(
+				static_cast<GSRow*>(resource)->parentResource_,
+				store, factory);
+		break;
 	case GSResourceType::ROW_KEY_PREDICATE:
-		return findErrorStack(
-				&static_cast<GSRowKeyPredicate*>(resource)->store_, mutex);
+		findStoreOrFactory(
+				static_cast<GSRowKeyPredicate*>(resource)->store_,
+				store, factory);
+		break;
 	default:
-		return NULL;
+		break;
 	}
 }
 
@@ -8638,23 +8918,496 @@ int64_t GSResourceHeader::getResourceCount(GSResourceType::Id type) {
 }
 #endif
 
+bool GSResourceHeader::resolveInterceptable(
+		GSResourceType::Id type, void *parentResource,
+		GSInterceptorManager *interceptorManager) {
+	if (type == GSResourceType::GRID_STORE_FACTORY) {
+		return true;
+	}
+
+	GSInterceptorManager *manager = interceptorManager;
+
+	if (manager == NULL) {
+		manager = findInterceptorManager(parentResource);
+	}
+
+	if (manager == NULL) {
+		return false;
+	}
+
+	return !manager->filterByResourceType(type);
+}
+
 GSResourceType::Id GSResourceHeader::getType() const throw() {
 	return unmaskType(maskedType_);
 }
 
-uint32_t GSResourceHeader::maskType(GSResourceType::Id type) throw() {
-	return (type ^ RESOURCE_TYPE_MASK);
+bool GSResourceHeader::isInterceptable() const throw() {
+	return ((maskedType_ & FLAG_INTERCEPTABLE) != 0);
+}
+
+uint32_t GSResourceHeader::maskType(
+		GSResourceType::Id type, bool interceptable) throw() {
+	return ((type ^ RESOURCE_TYPE_MASK) & ~FLAG_INTERCEPTABLE) |
+			(interceptable ? FLAG_INTERCEPTABLE : 0u);
 }
 
 GSResourceType::Id GSResourceHeader::unmaskType(uint32_t maskedType) throw() {
-	return static_cast<GSResourceType::Id>(maskedType ^ RESOURCE_TYPE_MASK);
+	return static_cast<GSResourceType::Id>(
+			(maskedType ^ RESOURCE_TYPE_MASK) & ~FLAG_INTERCEPTABLE);
 }
+
+
+GSInterceptor::GSInterceptor(GSInterceptorManager &manager) :
+		manager_(manager),
+		id_(std::numeric_limits<Id>::max()) {
+	id_ = manager_.add(*this);
+}
+
+GSInterceptor::~GSInterceptor() try {
+	manager_.remove(id_);
+}
+catch (...) {
+	assert(false);
+}
+
+GSInterceptor::Id GSInterceptor::getId() const {
+	return id_;
+}
+
+bool GSInterceptor::isActivated(GSResourceType::Id type) {
+	static_cast<void>(type);
+	return true;
+}
+
+bool GSInterceptor::start(
+		const FunctionInfo &funcInfo, const ParameterList &args,
+		const Parameter &ret) {
+	static_cast<void>(funcInfo);
+	static_cast<void>(args);
+	static_cast<void>(ret);
+	return false;
+}
+
+void GSInterceptor::finish(
+		const FunctionInfo &funcInfo, const ParameterList &args) {
+	static_cast<void>(funcInfo);
+	static_cast<void>(args);
+}
+
+
+GSInterceptor::FunctionInfo::FunctionInfo(
+		const GSChar *rawName, GSResourceType::Id resourceType) :
+		rawName_(rawName),
+		resourceType_(resourceType) {
+}
+
+const GSChar* GSInterceptor::FunctionInfo::getRawName() const {
+	return rawName_;
+}
+
+GSResourceType::Id GSInterceptor::FunctionInfo::getResourceType() const {
+	return resourceType_;
+}
+
+bool GSInterceptor::FunctionInfo::matchName(const GSChar *name) const {
+	if (strstr(rawName_, name) != rawName_) {
+		return false;
+	}
+
+	const GSChar *followingPart = rawName_ + strlen(name);
+	return (followingPart == findMinorSuffix(rawName_));
+}
+
+void GSInterceptor::FunctionInfo::formatName(std::ostream &stream) const {
+	const GSChar *nameEnd = findMinorSuffix(rawName_);
+	stream.write(rawName_, static_cast<std::streamsize>(nameEnd - rawName_));
+}
+
+bool GSInterceptor::FunctionInfo::isEmpty() const {
+	const FunctionInfo &info = emptyInfo();
+	return rawName_ == info.rawName_ && resourceType_ == info.resourceType_;
+}
+
+GSInterceptor::FunctionInfo GSInterceptor::FunctionInfo::emptyInfo() {
+	return FunctionInfo(NULL, GSResourceType::TYPE_ID_MAX);
+}
+
+const GSChar* GSInterceptor::FunctionInfo::findMinorSuffix(
+		const GSChar *rawName) {
+	bool found = false;
+	bool numebering = false;
+
+	const GSChar *const begin = rawName;
+	const GSChar *const end = begin + strlen(begin);
+	const GSChar *it = end;
+	while (it != begin) {
+		--it;
+		if (*it == '_' || ('0' <= *it && *it <= '9')) {
+			numebering = true;
+		}
+		else {
+			found = (numebering && *it == 'V');
+			break;
+		}
+	}
+	return (found ? it : end);
+}
+
+std::ostream& operator<<(
+		std::ostream &stream, const GSInterceptor::FunctionInfo &funcInfo) {
+	funcInfo.formatName(stream);
+	return stream;
+}
+
+
+GSInterceptor::Parameter::Parameter(const GSChar *name) :
+		name_(name),
+		storage_(NULL) {
+}
+
+const GSChar* GSInterceptor::Parameter::getName() const {
+	return name_;
+}
+
+bool GSInterceptor::Parameter::isResource() const {
+	return getResourceType() != GSResourceType::TYPE_ID_MAX;
+}
+
+GSResourceType::Id GSInterceptor::Parameter::getResourceType() const {
+	return typeInfo_.resourceType_;
+}
+
+void* GSInterceptor::Parameter::findResource() const {
+	if (!isResource()) {
+		return NULL;
+	}
+
+	return *static_cast<void**>(storage_);
+}
+
+bool GSInterceptor::Parameter::isString() const {
+	return typeInfo_.forString_;
+}
+
+void GSInterceptor::Parameter::setNoString() {
+	typeInfo_.forString_ = false;
+}
+
+bool GSInterceptor::Parameter::isSize() const {
+	return typeInfo_.forSize_;
+}
+
+size_t& GSInterceptor::Parameter::getSize() const {
+	return get<size_t>();
+}
+
+size_t*& GSInterceptor::Parameter::getSizePtr() const {
+	return get<size_t*>();
+}
+
+void GSInterceptor::Parameter::formatValue(std::ostream &os) const {
+	TypeInfo::FormatterFunc func = typeInfo_.formatterFunc_;
+
+	if (typeInfo_.forString_) {
+		func = &TypeInfo::stringFormatterFunc;
+	}
+
+	if (func == NULL) {
+		assert(false);
+		return;
+	}
+
+	(*func)(os, storage_);
+}
+
+
+GSInterceptor::Parameter::TypeInfo::TypeInfo() :
+		resourceType_(GSResourceType::TYPE_ID_MAX),
+		checkerFunc_(NULL),
+		formatterFunc_(NULL),
+		forString_(false),
+		forSize_(false) {
+}
+
+void GSInterceptor::Parameter::TypeInfo::check(const TypeInfo &another) const {
+	if (resourceType_ != another.resourceType_ ||
+			checkerFunc_ != another.checkerFunc_) {
+		assert(false);
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+}
+
+
+template<
+		typename P1, typename P2, typename P3, typename P4,
+		typename P5, typename P6, typename P7, typename P8,
+		typename P9, typename P10>
+GSInterceptor::ParameterList::ParameterList(
+		const P1 &p1, const P2 &p2, const P3 &p3, const P4 &p4,
+		const P5 &p5, const P6 &p6, const P7 &p7, const P8 &p8,
+		const P9 &p9, const P10 &p10, ...) :
+		size_(0) {
+	add(p1);
+	add(p2);
+	add(p3);
+	add(p4);
+	add(p5);
+	add(p6);
+	add(p7);
+	add(p8);
+	add(p9);
+	checkTooManyArguments(p10);
+}
+
+size_t GSInterceptor::ParameterList::getSize() const {
+	return size_;
+}
+
+const GSInterceptor::Parameter&
+GSInterceptor::ParameterList::at(size_t index) const {
+	if (index >= size_) {
+		assert(false);
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+	return baseList_[index];
+}
+
+template<typename P>
+void GSInterceptor::ParameterList::checkTooManyArguments(const P&) {
+	UTIL_STATIC_ASSERT((util::IsSame<P, util::FalseType>::VALUE));
+}
+
+void GSInterceptor::ParameterList::add(const Parameter &param) {
+	if (size_ >= MAX_PARAMETER_COUNT) {
+		assert(false);
+		return;
+	}
+
+	baseList_[size_] = param;
+
+	if (param.isSize()) {
+		Parameter &prevParam = baseList_[size_ - 1];
+		if (prevParam.isString()) {
+			prevParam.setNoString();
+		}
+	}
+
+	++size_;
+}
+
+void GSInterceptor::ParameterList::add(const util::FalseType&) {
+}
+
+
+GSInterceptorManager::GSInterceptorManager() :
+		entryCount_(0),
+		mutex_(util::UTIL_MUTEX_RECURSIVE) {
+}
+
+bool GSInterceptorManager::start(
+		const FunctionInfo &funcInfo, const ParameterList &args,
+		const Parameter &ret, InterceptorId &endId) {
+	CheckerScope checkerScope;
+	util::LockGuard<util::Mutex> guard(mutex_);
+
+	EntryList entryList;
+	InterceptorId count;
+	getActiveEntryList(guard, funcInfo.getResourceType(), entryList, count);
+	for (InterceptorId i = 0; i < count; i++) {
+		Entry &entry = entryList[i];
+		if (entry.interceptor_->start(funcInfo, args, ret)) {
+			endId = i + 1;
+			return true;
+		}
+	}
+
+	endId = count;
+	return false;
+}
+
+void GSInterceptorManager::finish(
+		const FunctionInfo &funcInfo, const ParameterList &args,
+		InterceptorId endId) {
+	CheckerScope checkerScope;
+	util::LockGuard<util::Mutex> guard(mutex_);
+
+	EntryList entryList;
+	InterceptorId count;
+	getActiveEntryList(guard, funcInfo.getResourceType(), entryList, count);
+
+	for (InterceptorId i = 0; i < count; i++) {
+		Entry &entry = entryList[i];
+		if (entry.id_ >= endId) {
+			break;
+		}
+		entry.interceptor_->finish(funcInfo, args);
+	}
+}
+
+bool GSInterceptorManager::filterByResourceType(GSResourceType::Id type) {
+	util::LockGuard<util::Mutex> guard(mutex_);
+
+	EntryList entryList;
+	InterceptorId count;
+	getActiveEntryList(guard, type, entryList, count);
+
+	return (count <= 0);
+}
+
+void GSInterceptorManager::activate(InterceptorId id, bool enabled) {
+	util::LockGuard<util::Mutex> guard(mutex_);
+	if (id >= entryCount_) {
+		assert(false);
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+
+	Entry &entry = entryList_[id];
+	if (entry.interceptor_ == NULL) {
+		assert(false);
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+
+	entry.enabled_ = enabled;
+}
+
+GSInterceptorManager::InterceptorId
+GSInterceptorManager::add(GSInterceptor &interceptor) {
+	util::LockGuard<util::Mutex> guard(mutex_);
+	for (InterceptorId i = 0; i < MAX_INTERCEPTOR_COUNT; i++) {
+		Entry &entry = entryList_[i];
+		if (entry.interceptor_ == NULL) {
+			entry = Entry();
+			entry.id_ = i;
+			entry.interceptor_ = &interceptor;
+			entryCount_ = static_cast<InterceptorId>(
+					std::max<uint64_t>(entryCount_, i + 1));
+			return entry.id_;
+		}
+	}
+
+	assert(false);
+	GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+}
+
+void GSInterceptorManager::remove(InterceptorId id) {
+	if (id >= MAX_INTERCEPTOR_COUNT) {
+		assert(false);
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+
+	util::LockGuard<util::Mutex> guard(mutex_);
+	entryList_[id] = Entry();
+}
+
+void GSInterceptorManager::getActiveEntryList(
+		util::LockGuard<util::Mutex>&, GSResourceType::Id type,
+		EntryList &entryList, InterceptorId &count) {
+	count = 0;
+	for (InterceptorId i = 0; i < entryCount_; i++) {
+		Entry &entry = entryList_[i];
+		if (entry.enabled_ && entry.interceptor_ != NULL &&
+				(type == GSResourceType::TYPE_ID_MAX ||
+				entry.interceptor_->isActivated(type))) {
+			entryList[count] = entry;
+			count++;
+		}
+	}
+}
+
+
+GSInterceptorManager::Scope::Scope() throw() {
+}
+
+GSInterceptorManager::Scope::~Scope() {
+	if (data_.get() != NULL) {
+		try {
+			data_->manager_.finish(
+					data_->funcInfo_, data_->args_, data_->endId_);
+		}
+		catch (...) {
+			setCurrentException(data_->args_);
+		}
+	}
+}
+
+bool GSInterceptorManager::Scope::set(
+		GSInterceptorManager &manager, const FunctionInfo &funcInfo,
+		const ParameterList &args, const Parameter &ret) throw() {
+	if (data_.get() != NULL) {
+		assert(false);
+		return true;
+	}
+
+	try {
+		data_.reset(new Data(manager, funcInfo, args));
+		return data_->manager_.start(
+				data_->funcInfo_, data_->args_, ret, data_->endId_);
+	}
+	catch (...) {
+		setCurrentException(data_->args_);
+		return true;
+	}
+}
+
+void GSInterceptorManager::Scope::setCurrentException(
+		const ParameterList &args) throw() try {
+	if (args.getSize() <= 0) {
+		return;
+	}
+
+	void *resource = args.at(0).findResource();
+	GSResourceHeader::setCurrentException(resource);
+}
+catch (...) {
+	assert(false);
+}
+
+
+GSInterceptorManager::Scope::Data::Data(
+		GSInterceptorManager &manager, const FunctionInfo &funcInfo,
+		const ParameterList &args) :
+		manager_(manager),
+		funcInfo_(funcInfo),
+		args_(args),
+		endId_(0) {
+}
+
+
+GSInterceptorManager::Entry::Entry() :
+		id_(std::numeric_limits<InterceptorId>::max()),
+		interceptor_(NULL),
+		enabled_(false) {
+}
+
+
+GSInterceptorManager::CheckerScope::CheckerScope() {
+	if (counter_ != 0) {
+		(*abortByResursiveAccessFunc_)();
+	}
+	++counter_;
+}
+
+GSInterceptorManager::CheckerScope::~CheckerScope() {
+	--counter_;
+}
+
+void GSInterceptorManager::CheckerScope::abortByResursiveAccess() {
+	assert(false);
+	abort();
+}
+
+void (*const volatile
+		GSInterceptorManager::CheckerScope::abortByResursiveAccessFunc_)() =
+		&abortByResursiveAccess;
+
+UTIL_THREAD_LOCAL size_t GSInterceptorManager::CheckerScope::counter_ = 0;
 
 
 GSGridStoreFactory *GSGridStoreFactoryTag::defaultFactory_ = NULL;
 
 GSGridStoreFactoryTag::GSGridStoreFactoryTag() throw() :
-		resourceHeader_(GSResourceType::GRID_STORE_FACTORY) {
+		resourceHeader_(GSResourceType::GRID_STORE_FACTORY, NULL, NULL) {
 	try {
 #if !GS_CLIENT_DISABLE_DEFAULT_FACTORY
 		data_.reset(new Data);
@@ -8683,6 +9436,7 @@ bool GSGridStoreFactoryTag::isAlive() throw() {
 }
 
 GSGridStoreFactory& GSGridStoreFactoryTag::getDefaultFactory() throw() {
+	defaultFactory_->prepareConfigFile();
 	return *defaultFactory_;
 }
 
@@ -8716,8 +9470,12 @@ GSGridStore* GSGridStoreFactoryTag::getGridStore(
 	}
 	util::LockGuard<util::Mutex> guard(data_->mutex_);
 
+	Properties propertiesObj(properties, propertyCount);
+	data_->configLoader_.applyStoreConfig(propertiesObj);
+
 	GridStoreChannel::Source source;
-	source.set(Properties(properties, propertyCount));
+	source.set(propertiesObj);
+	source.interceptorManager_ = &data_->interceptorManager_;
 	ChannelMap::iterator it = data_->channelMap_.find(source.getKey());
 
 	GridStoreChannel *channel;
@@ -8725,6 +9483,7 @@ GSGridStore* GSGridStoreFactoryTag::getGridStore(
 		std::auto_ptr<GridStoreChannel> channelPtr(
 				new GridStoreChannel(data_->channelConfig_, source));
 		channel = channelPtr.get();
+		channel->setMonitoring(data_->monitoring_);
 
 		data_->channelMap_.insert(std::make_pair(source.getKey(), channel));
 		channelPtr.release();
@@ -8738,18 +9497,50 @@ GSGridStore* GSGridStoreFactoryTag::getGridStore(
 }
 
 void GSGridStoreFactoryTag::setProperties(
-		const GSPropertyEntry *properties, const size_t *propertyCount) {
+		const GSPropertyEntry *properties, const size_t *propertyCount,
+		bool forInitial) {
+	if (data_.get() == NULL) {
+		return;
+	}
+
+	util::LockGuard<util::Mutex> guard(data_->mutex_);
+	setPropertiesInternal(guard, forInitial, properties, propertyCount);
+}
+
+void GSGridStoreFactoryTag::prepareConfigFile() throw() try {
 	if (data_.get() == NULL) {
 		return;
 	}
 	util::LockGuard<util::Mutex> guard(data_->mutex_);
+	if (data_->configLoader_.isPrepared()) {
+		return;
+	}
 
-	const Properties propertiesObj(properties, propertyCount);
+	const size_t count = 0;
+	try {
+		setPropertiesInternal(guard, true, NULL, &count);
+	}
+	catch (...) {
+		std::exception e;
+		data_->configLoader_.handleConfigError(e);
+	}
+}
+catch (...) {
+}
+
+void GSGridStoreFactoryTag::setPropertiesInternal(
+		util::LockGuard<util::Mutex> &guard, bool forInitial,
+		const GSPropertyEntry *properties, const size_t *propertyCount) {
+
+	Properties propertiesObj(properties, propertyCount);
+	data_->configLoader_.applyFactoryConfig(propertiesObj);
+
+	setLoggingProperties(guard, propertiesObj, forInitial);
 
 	bool detailErrorMessageEnabled;
 	if (propertiesObj.getBool(
 			"detailErrorMessageEnabled", detailErrorMessageEnabled)) {
-		NodeConnection::setDetailErrorMessageEnabled(detailErrorMessageEnabled);
+		ErrorStack::setDetailErrorMessageEnabled(detailErrorMessageEnabled);
 	}
 
 	int32_t transactionProtocolVersion;
@@ -8773,6 +9564,23 @@ void GSGridStoreFactoryTag::setProperties(
 	}
 }
 
+void GSGridStoreFactoryTag::setLoggingProperties(
+		util::LockGuard<util::Mutex> &guard, const Properties &properties,
+		bool forInitial) {
+	static_cast<void>(guard);
+	static_cast<void>(properties);
+	static_cast<void>(forInitial);
+}
+
+void GSGridStoreFactoryTag::setMonitoring(
+		util::LockGuard<util::Mutex>&, bool monitoring) {
+	data_->monitoring_ = monitoring;
+	for (ChannelMap::iterator it = data_->channelMap_.begin();
+			it != data_->channelMap_.end(); ++it) {
+		it->second->setMonitoring(monitoring);
+	}
+}
+
 
 size_t GSGridStoreFactoryTag::Initializer::counter_ = 0;
 
@@ -8793,6 +9601,275 @@ GSGridStoreFactoryTag::Initializer::~Initializer() {
 }
 
 
+const char8_t GSGridStoreFactoryTag::ConfigLoader::CONFIG_FILE_NAME[] =
+		"gs_client.properties";
+
+GSGridStoreFactoryTag::ConfigLoader::ConfigLoader() :
+		configFileEnabled_(false),
+		errorOccurred_(false),
+		prepared_(false) {
+}
+
+bool GSGridStoreFactoryTag::ConfigLoader::isPrepared() const {
+	return prepared_;
+}
+
+void GSGridStoreFactoryTag::ConfigLoader::applyFactoryConfig(
+		Properties &props) {
+	prepare();
+	applyConfig(factoryProps_.get(), props);
+}
+
+void GSGridStoreFactoryTag::ConfigLoader::applyStoreConfig(Properties &props) {
+	prepare();
+	applyConfig(storeProps_.get(), props);
+}
+
+void GSGridStoreFactoryTag::ConfigLoader::handleConfigError(
+		std::exception&) throw() {
+	if (errorOccurred_) {
+		return;
+	}
+
+	errorOccurred_ = true;
+	try {
+		throw;
+	}
+	catch (...) {
+		try {
+			initialError_.reset(new ErrorStack());
+			initialError_->setFromCurrentException();
+		}
+		catch (...) {
+		}
+	}
+}
+
+void GSGridStoreFactoryTag::ConfigLoader::prepare() {
+	if (errorOccurred_) {
+		if (initialError_.get() != NULL && initialError_->getSize() > 0) {
+			try {
+				throw initialError_->getException();
+			}
+			catch (...) {
+				std::exception e;
+				GS_CLIENT_RETHROW_ERROR(e, "");
+			}
+		}
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG, "");
+	}
+
+	if (prepared_) {
+		return;
+	}
+
+	prepared_ = true;
+}
+
+void GSGridStoreFactoryTag::ConfigLoader::applyConfig(
+		const Properties *src, Properties &dest) {
+	if (src == NULL) {
+		return;
+	}
+
+	for (PropertyMap::const_iterator it = src->propertyMap_.begin();
+			it != src->propertyMap_.end(); ++it) {
+		dest.propertyMap_.insert(*it);
+	}
+}
+
+void GSGridStoreFactoryTag::ConfigLoader::acceptFileData(
+		std::string &buf, bool eof, uint64_t &lineNumber) {
+	const char8_t *const delimList[] = { "\r\n", "\r", "\n", NULL };
+	while (!buf.empty()) {
+		bool found = false;
+		for (const char8_t *const *delimIt = delimList;; ++delimIt) {
+			std::string::size_type pos;
+			const char8_t *delim;
+			if (*delimIt == NULL) {
+				pos = (eof ? buf.size() : std::string::npos);
+				delim = "";
+			}
+			else {
+				pos = buf.find(*delimIt);
+				delim = *delimIt;
+			}
+
+			if (pos != std::string::npos) {
+				acceptFileLine(buf.data(), pos);
+				buf.erase(buf.begin(), buf.begin() + pos + strlen(delim));
+				lineNumber++;
+				found = true;
+				break;
+			}
+			else if (*delimIt == NULL) {
+				break;
+			}
+		}
+		if (!found) {
+			break;
+		}
+	}
+}
+
+void GSGridStoreFactoryTag::ConfigLoader::acceptFileLine(
+		const char8_t *line, size_t size) {
+	const char8_t *keyBegin = NULL;
+	const char8_t *sepBegin = NULL;
+	const char8_t *sepEnd = NULL;
+	const char8_t *sepMid = NULL;
+	bool ignorable = false;
+	bool escaping = false;
+
+	const char8_t *const end = line + size;
+	for (const char8_t *it = line; it != end; ++it) {
+		if (*it == '\\') {
+			escaping = !escaping;
+			continue;
+		}
+
+		const uint32_t ch = static_cast<uint32_t>(*it);
+		if (escaping) {
+			escaping = false;
+			if (strchr("rn tf!#=:\t\f\\", *it) != NULL) {
+				continue;
+			}
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG,
+					"Illegal escape sequence (char=0x" << std::hex << ch << ")");
+		}
+
+		const bool space = (strchr(" \t\f", *it) != NULL);
+		if (!space && (ch <= 0x1f || ch >= 0x7f)) {
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG,
+					"Illegal character found (char=0x" << std::hex << ch << ")");
+		}
+
+		if (it == line && (strchr("!#", *it) != NULL)) {
+			ignorable = true;
+		}
+
+		if (ignorable || sepEnd != NULL) {
+			continue;
+		}
+
+		const bool sep = (strchr("=:", *it) != NULL);
+		if (keyBegin == NULL) {
+			if (space) {
+				continue;
+			}
+			keyBegin = it;
+		}
+
+		if (sepBegin == NULL) {
+			if (!space && !sep) {
+				continue;
+			}
+			sepBegin = it;
+		}
+
+		if (sepMid == NULL) {
+			if (sep) {
+				sepMid = it;
+				continue;
+			}
+		}
+
+		if (sep || !space) {
+			sepEnd = it;
+		}
+	}
+
+	if (ignorable || keyBegin == NULL) {
+		return;
+	}
+
+	if (escaping) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG,
+				"Illegal escape sequence with line separator");
+	}
+
+	if (sepBegin == NULL) {
+		sepBegin = end;
+	}
+	if (sepEnd == NULL) {
+		sepEnd = end;
+	}
+
+	const std::string name(keyBegin, sepBegin);
+	const std::string value(sepEnd, end);
+	acceptProperty(unescape(name).c_str(), unescape(value).c_str());
+}
+
+void GSGridStoreFactoryTag::ConfigLoader::acceptProperty(
+		const char8_t *name, const char8_t *value) {
+	typedef std::pair<const char8_t*, UTIL_UNIQUE_PTR<Properties>*> Entry;
+	const Entry endEntry = Entry();
+	const Entry entryList[] = {
+		Entry("factory.", &factoryProps_),
+		Entry("store.", &storeProps_),
+		endEntry
+	};
+
+	for (const Entry *it = entryList; *it != endEntry; ++it) {
+		const char8_t *prefix = it->first;
+		UTIL_UNIQUE_PTR<Properties> &props = *it->second;
+		if (strstr(name, prefix) == name) {
+			const std::string subName(name + strlen(prefix));
+#if GS_CLIENT_CONFIG_FILE_LOGGING_ONLY
+			if (&props != &factoryProps_ || subName.find("trace.") != 0) {
+				return;
+			}
+#endif
+
+			if (props.get() == NULL) {
+				props.reset(new Properties(NULL, NULL));
+			}
+			props->propertyMap_[subName] = value;
+			return;
+		}
+	}
+
+	GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG,
+			"Illegal property name (name=" << name << ")");
+}
+
+std::string GSGridStoreFactoryTag::ConfigLoader::unescape(
+		const std::string &src) {
+	const char8_t escChars[] = "rntf";
+	const char8_t outChars[] = "\r\n\t\f";
+	UTIL_STATIC_ASSERT(sizeof(escChars) == sizeof(outChars));
+
+	bool escaping = false;
+	std::string dest;
+	for (std::string::const_iterator it = src.begin(); it != src.end(); ++it) {
+		if (escaping) {
+			const char8_t *ret = strchr(escChars, *it);
+			if (ret != NULL) {
+				dest.push_back(outChars[ret - escChars]);
+				continue;
+			}
+			escaping = false;
+		}
+		else if (*it == '\\') {
+			escaping = true;
+			continue;
+		}
+		dest.push_back(*it);
+	}
+
+	return dest;
+}
+
+
+GSGridStoreFactoryTag::Data::Data() :
+		monitoring_(false) {
+	setUpInterceptors();
+}
+
+void GSGridStoreFactoryTag::Data::setUpInterceptors() {
+}
+
+
 const GSChar *const GSGridStoreTag::CONTEXT_CONTROLLER_NAME =
 		"##internal.contextController";
 bool GSGridStoreTag::pathKeyOperationEnabled_ = false;
@@ -8805,7 +9882,9 @@ RowMapper::Config GSGridStoreTag::COMPATIBLE_MAPPER_CONFIG_13(
 
 GSGridStoreTag::GSGridStoreTag(
 		GridStoreChannel &channel, GridStoreChannel::Context context) :
-		resourceHeader_(GSResourceType::GRID_STORE),
+		resourceHeader_(
+				GSResourceType::GRID_STORE, NULL,
+				channel.getInterceptorManager()),
 		referenceCount_(1),
 		channel_(channel),
 		context_(context),
@@ -8926,7 +10005,7 @@ void GSGridStoreTag::createReference(void *resource) {
 	GSResourceType::Id type;
 	if (!GSResourceHeader::getType(resource, type)) {
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 
 	switch (type) {
@@ -8942,7 +10021,7 @@ void GSGridStoreTag::createReference(void *resource) {
 	case GSResourceType::AGGREGATION_RESULT:
 	default:
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 
 	const ContainerKey *containerKey = NULL;
@@ -9109,7 +10188,8 @@ bool GSGridStoreTag::getContainerInfo(
 	int32_t resultPropertyCount;
 	respIn >> resultPropertyCount;
 	if (static_cast<size_t>(resultPropertyCount) != propertyCount) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+				"Protocol error by illegal property count");
 	}
 
 	GSContainerInfo info = GS_CONTAINER_INFO_INITIALIZER;
@@ -9126,7 +10206,8 @@ bool GSGridStoreTag::getContainerInfo(
 		respIn >> propertySize;
 		if (propertySize < 0 ||
 				static_cast<size_t>(propertySize) > respIn.base().remaining()) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+					"Protocol error by illegal property size");
 		}
 
 		const size_t curEnd =
@@ -9158,11 +10239,13 @@ bool GSGridStoreTag::getContainerInfo(
 			importIndexDetailProperty(respIn, *varDataPool, indexInfoList);
 			break;
 		default:
-			UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+					"Protocol error by illegal property type");
 		}
 
 		if (respIn.base().position() != curEnd) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+					"Protocol error by illegal property format");
 		}
 	}
 
@@ -9189,11 +10272,13 @@ bool GSGridStoreTag::getContainerInfo(
 
 GSResult GSGridStoreTag::getContainerInfo(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
-		GSBool *exists, const ClientVersion &version) throw() {
+		GSBool *exists, const ClientVersion &version,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
 	RowMapper::ContainerInfoRef<>::clear(info, version);
 
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(exists, GS_FALSE);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, store, name, info, exists);
 
 	GSBool existsStorage;
 	if (exists == NULL) {
@@ -9265,8 +10350,9 @@ GSContainer* GSGridStoreTag::getContainer(
 	int64_t containerId;
 	respIn >> containerId;
 
+	bool cached;
 	std::auto_ptr<ContainerKey> remoteKey =
-			acceptRemoteContainerKey(respIn, key, keyConverter);
+			acceptRemoteContainerKey(&respIn, key, keyConverter, cached);
 
 	RowMapper::Reference mapper(
 			mapperCache, mapperCache.resolve(
@@ -9277,7 +10363,8 @@ GSContainer* GSGridStoreTag::getContainer(
 	}
 
 	return new GSContainer(
-			*this, mapper, schemaVerId, partitionId, containerId, remoteKey);
+			*this, mapper, schemaVerId, partitionId, containerId, remoteKey,
+			cached);
 }
 
 GSCollection* GSGridStoreTag::getCollection(
@@ -9342,7 +10429,7 @@ GSContainer* GSGridStoreTag::putContainer(
 			(containerInfoRef.getColumnCount() > 0 ||
 			containerInfo->rowKeyAssigned ||
 			containerInfo->columnOrderIgnorable)) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA,
 				"Schema can not be specified on ContainerInfo");
 	}
 	exportContainerProperties(
@@ -9361,8 +10448,9 @@ GSContainer* GSGridStoreTag::putContainer(
 	int64_t containerId;
 	respIn >> containerId;
 
+	bool cached;
 	std::auto_ptr<ContainerKey> remoteKey =
-			acceptRemoteContainerKey(respIn, key, keyConverter);
+			acceptRemoteContainerKey(&respIn, key, keyConverter, cached);
 
 	RowMapper::Reference mapper(
 			mapperCache, mapperCache.resolve(
@@ -9373,7 +10461,8 @@ GSContainer* GSGridStoreTag::putContainer(
 	}
 
 	return new GSContainer(
-			*this, mapper, schemaVerId, partitionId, containerId, remoteKey);
+			*this, mapper, schemaVerId, partitionId, containerId, remoteKey,
+			cached);
 }
 
 GSResult GSGridStoreTag::putContainer(
@@ -9381,9 +10470,12 @@ GSResult GSGridStoreTag::putContainer(
 		const GSBinding *binding, const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container,
 		const GSContainerType *containerType,
-		const ClientVersion &version) throw() {
+		const ClientVersion &version,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(container, NULL);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(
+			funcInfo, store, name, binding, info, modifiable, container, containerType);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -9439,9 +10531,13 @@ GSContainer* GSGridStoreTag::getContainer(
 	}
 
 	if (expectedType != NULL && *expectedType != info.type) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA,
 				"Container type unmatched");
 	}
+
+	bool cached;
+	std::auto_ptr<ContainerKey> remoteKey =
+			acceptRemoteContainerKey(NULL, key, keyConverter, cached);
 
 	const int32_t partitionId =
 			channel_.resolvePartitionId(context_, key, keyConverter);
@@ -9449,18 +10545,14 @@ GSContainer* GSGridStoreTag::getContainer(
 	RowMapper::Reference mapper(mapperCache, mapperCache.resolve(
 			infoRef.toConst(), getRowMapperConfig()));
 
-	std::auto_ptr<ContainerKey> normalizedKeyPtr(
-			new ContainerKey(key.toCaseSensitive(false)));
-
 	if (cache != NULL) {
 		cache->cacheSchema(
-				*normalizedKeyPtr, *mapper, idInfo.containerId_,
-				idInfo.versionId_);
+				*remoteKey, *mapper, idInfo.containerId_, idInfo.versionId_);
 	}
 
 	return new GSContainer(
 			*this, mapper, idInfo.versionId_,
-			partitionId, idInfo.containerId_, normalizedKeyPtr);
+			partitionId, idInfo.containerId_, remoteKey, cached);
 }
 
 GSContainer* GSGridStoreTag::putContainer(
@@ -9525,8 +10617,9 @@ GSContainer* GSGridStoreTag::putContainer(
 	int64_t containerId;
 	respIn >> containerId;
 
+	bool cached;
 	std::auto_ptr<ContainerKey> remoteKey =
-			acceptRemoteContainerKey(respIn, key, keyConverter);
+			acceptRemoteContainerKey(&respIn, key, keyConverter, cached);
 
 	RowMapper::Reference mapper(
 			mapperCache, mapperCache.resolve(
@@ -9537,17 +10630,21 @@ GSContainer* GSGridStoreTag::putContainer(
 		cache->cacheSchema(*remoteKey, *mapper, containerId, schemaVerId);
 	}
 
-	return new GSCollection(
-			*this, mapper, schemaVerId, partitionId, containerId, remoteKey);
+	return new GSContainer(
+			*this, mapper, schemaVerId, partitionId, containerId, remoteKey,
+			cached);
 }
 
 GSResult GSGridStoreTag::putContainer(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info, GSBool modifiable,
 		GSContainer **container, const GSContainerType *containerType,
-		const ClientVersion &version) throw() {
+		const ClientVersion &version,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(container, NULL);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(
+			funcInfo, store, name, info, modifiable, container, containerType);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -9640,7 +10737,7 @@ bool GSGridStoreTag::removeRow(const GSChar *pathKey) {
 void GSGridStoreTag::fetchAll(GSQuery *const *queryList, size_t queryCount) {
 	if (queryList == NULL) {
 		if (queryCount > 0) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 	}
 
@@ -9651,7 +10748,7 @@ void GSGridStoreTag::fetchAll(GSQuery *const *queryList, size_t queryCount) {
 		GSQuery *query = queryList[i];
 
 		if (query == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 		MultiQueryStatement::check(*query, *this);
 
@@ -9682,7 +10779,7 @@ void GSGridStoreTag::multiPut(
 		const GSContainerRowEntry *entryList, size_t entryCount) {
 	if (entryList == NULL) {
 		if (entryCount > 0) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 	}
 
@@ -9694,7 +10791,7 @@ void GSGridStoreTag::multiPut(
 	for (size_t i = 0; i < entryCount; i++) {
 		const GSContainerRowEntry &entry = entryList[i];
 		if (entry.containerName == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 
 		const ContainerKey &key =
@@ -9729,7 +10826,7 @@ void GSGridStoreTag::multiGet(
 		const GSContainerRowEntry *&entryList, size_t &entryCount) {
 	if (predicateList == NULL) {
 		if (predicateCount > 0) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 	}
 
@@ -9745,7 +10842,7 @@ void GSGridStoreTag::multiGet(
 	for (size_t i = 0; i < predicateCount; i++) {
 		const GSRowKeyPredicateEntry &entry = predicateList[i];
 		if (entry.containerName == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 
 		const ContainerKey &key =
@@ -9837,7 +10934,7 @@ void GSGridStoreTag::multiGet(
 		int32_t bodyCount;
 		respIn >> bodyCount;
 		if (static_cast<size_t>(bodyCount) > respIn.base().remaining()) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 		}
 
 		for (int32_t i = 0; i < bodyCount; i++) {
@@ -9847,7 +10944,7 @@ void GSGridStoreTag::multiGet(
 			respIn >> mapperIndex;
 			if (mapperIndex < 0 ||
 					mapperIndex >= ClientUtil::sizeValueToInt32(mapperList.size())) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 			}
 
 			const RowMapper *mapper = mapperList[mapperIndex];
@@ -9860,7 +10957,7 @@ void GSGridStoreTag::multiGet(
 			if (subRowCount < 0 ||
 					static_cast<size_t>(subRowCount) >
 					respIn.base().remaining()) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 			}
 
 			RowList &rowList = resultMap[containerKey];
@@ -9939,9 +11036,11 @@ GSRow* GSGridStoreTag::createRow(
 
 GSResult GSGridStoreTag::createRow(
 		GSGridStore *store, const GSContainerInfo *info, GSRow **row,
-		const ClientVersion &version) throw() {
+		const ClientVersion &version,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(row, NULL);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, store, info, row);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -9976,7 +11075,7 @@ void GSGridStoreTag::importIndexInfo(
 	in >> infoSizeValue;
 	const size_t infoSize = ClientUtil::toSizeValue(infoSizeValue);
 	if (infoSize > in.base().remaining()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 				"Protocol error by illegal index info size");
 	}
 
@@ -10011,7 +11110,7 @@ void GSGridStoreTag::importIndexInfo(
 	indexInfo.type = typeFlag;
 
 	if (endPos > in.base().position()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 				"Protocol error by illegal index info format");
 	}
 	in.base().position(endPos);
@@ -10054,23 +11153,23 @@ int32_t GSGridStoreTag::getIndexTypeOrdinal(
 		return util::ILog2<GS_INDEX_FLAG_SPATIAL>::VALUE;
 	case GS_INDEX_FLAG_DEFAULT:
 		if (!emptyOrDefaultAllowed) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 					"Default index type specified");
 		}
 		return GS_INDEX_FLAG_DEFAULT;
 	case 0:
 		if (!emptyOrDefaultAllowed) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 					"No index type specified");
 		}
 		return GS_INDEX_FLAG_DEFAULT;
 	default:
 		if (util::population(static_cast<uint32_t>(typeFlag)) > 1) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 					"Multiple index types specified (flags=" << typeFlag << ")");
 		}
 		else {
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNKNOWN_INDEX_FLAG,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNKNOWN_INDEX_FLAG,
 					"Unknown index type specified (flag=" << typeFlag << ")");
 		}
 	}
@@ -10150,32 +11249,42 @@ GSContainer* GSGridStoreTag::findContainerByCache(
 	RowMapper::Reference mapper(
 			mapperCache, mapperCache.duplicate(*schema->getMapper()));
 
+	const bool cached = true;
 	std::auto_ptr<ContainerKey> normalizedKeyPtr(
 			new ContainerKey(normalizedKey));
-	return new GSContainer(*this, mapper, schema->getVersionId(),
-			partitionId, schema->getContainerId(), normalizedKeyPtr);
+
+	return new GSContainer(
+			*this, mapper, schema->getVersionId(),
+			partitionId, schema->getContainerId(), normalizedKeyPtr, cached);
 }
 
 std::auto_ptr<ContainerKey> GSGridStoreTag::acceptRemoteContainerKey(
-		ArrayByteInStream &in, const ContainerKey &localKey,
-		const ContainerKeyConverter &keyConverter) {
-	const ContainerKey &remoteKey = keyConverter.get(in, false);
+		ArrayByteInStream *in, const ContainerKey &localKey,
+		const ContainerKeyConverter &keyConverter, bool &cached) {
+	cached = false;
+	const ContainerKey &remoteKey =
+			(in == NULL ? localKey : keyConverter.get(*in, false));
 
-	std::auto_ptr<ContainerKey> normalizedLocalKey(
-			new ContainerKey(localKey.toCaseSensitive(false)));
-	if (!(remoteKey == localKey) &&
-			!(remoteKey.toCaseSensitive(false) == *normalizedLocalKey)) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA,
+	std::auto_ptr<ContainerKey> normalizedRemoteKey(
+			new ContainerKey(remoteKey.toCaseSensitive(false)));
+	if (in != NULL && !(remoteKey == localKey) &&
+			!(*normalizedRemoteKey == localKey.toCaseSensitive(false))) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA,
 				"Inconsistent container name ("
 				"localName=" << localKey <<
 				", remoteName=" << remoteKey << ")");
 	}
 
 	if (!pathKeyOperationEnabled_ && context_.getContainerCache() == NULL) {
-		return std::auto_ptr<ContainerKey>(NULL);
+		if (!channel_.isMonitoring()) {
+			return std::auto_ptr<ContainerKey>(NULL);
+		}
+	}
+	else {
+		cached = true;
 	}
 
-	return normalizedLocalKey;
+	return normalizedRemoteKey;
 }
 
 void GSGridStoreTag::splitPathKey(
@@ -10195,7 +11304,7 @@ void GSGridStoreTag::splitPathKey(
 	const std::string buf = pathKey;
 	const size_t separatorPos = buf.find('/');
 	if (separatorPos == std::string::npos) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	containerName.assign(buf.begin(), buf.begin() + separatorPos);
@@ -10230,7 +11339,7 @@ GSGridStore::ContainerPropertiesOption
 GSGridStoreTag::containerPropertiesToOption(const RowMapper &mapper) {
 	ContainerPropertiesOption option;
 	if (mapper.isDefaultValueSpecified()) {
-		UTIL_THROW_ERROR(
+		GS_CLIENT_THROW_ERROR(
 				GS_ERROR_CC_UNSUPPORTED_OPERATION,
 				"Default value can not specified for container "
 				"definition in the current version");
@@ -10261,7 +11370,7 @@ void GSGridStoreTag::exportContainerProperties(
 
 	if (type != GS_CONTAINER_TIME_SERIES) {
 		if (tsProps != NULL) {
-			UTIL_THROW_ERROR(
+			GS_CLIENT_THROW_ERROR(
 					GS_ERROR_CC_ILLEGAL_SCHEMA,
 					"TimeSeriesProperties used except for TimeSeries");
 		}
@@ -10297,7 +11406,7 @@ void GSGridStoreTag::exportContainerProperties(
 					tsProps->expirationDivisionCount;
 
 			if (expirationDivisionCount == 0) {
-				UTIL_THROW_ERROR(
+				GS_CLIENT_THROW_ERROR(
 						GS_ERROR_CC_ILLEGAL_PARAMETER, "Illegal division count");
 			}
 			out << expirationDivisionCount;
@@ -10411,13 +11520,13 @@ void GSGridStoreTag::importContainerProperties(
 		in >> entryCount;
 
 		if (entryCount > 0 && compressionMethod != GS_COMPRESSION_HI) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 					"Unexpected compression entry found");
 		}
 
 		if (entryCount < 0 ||
 				static_cast<size_t>(entryCount) > in.base().remaining()) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 		}
 
 		GSColumnCompression *compressionList;
@@ -10439,7 +11548,8 @@ void GSGridStoreTag::importContainerProperties(
 			in >> columnId;
 			if (columnId < 0 ||
 					static_cast<size_t>(columnId) >= columnInfoList.size()) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+						"Protocol error by illegal column ID");
 			}
 			compression.columnName = columnInfoList[columnId].name;
 
@@ -10461,7 +11571,8 @@ void GSGridStoreTag::importContainerProperties(
 	}
 	catch (util::Exception &e) {
 		if (e.getErrorCode() == GS_ERROR_CC_ILLEGAL_PARAMETER) {
-			UTIL_RETHROW(GS_ERROR_CC_MESSAGE_CORRUPTED, e, "");
+			GS_CLIENT_RETHROW_ERROR_CODED(
+					GS_ERROR_CC_MESSAGE_CORRUPTED, e, "");
 		}
 
 		throw;
@@ -10476,13 +11587,13 @@ GSCompressionMethod GSGridStoreTag::checkCompressionMethod(
 	case GS_COMPRESSION_HI:
 		return compressionMethod;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 }
 
 double GSGridStoreTag::checkCompressionRate(double rate) {
 	if (!(0 <= rate && rate <= 1)) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	return rate;
@@ -10491,14 +11602,14 @@ double GSGridStoreTag::checkCompressionRate(double rate) {
 const GSContainer& GSGridStoreTag::resolveContainer(
 		const ContainerKey &containerKey) {
 	if (!pathKeyOperationEnabled_) {
-		UTIL_THROW_ERROR(
+		GS_CLIENT_THROW_ERROR(
 				GS_ERROR_CC_UNSUPPORTED_OPERATION, "Operation restricted");
 	}
 
 	ContainerMap::const_iterator it =
 			containerMap_.find(containerKey.toCaseSensitive(false));
 	if (it == containerMap_.end()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_CONTAINER_NOT_OPENED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_CONTAINER_NOT_OPENED, "");
 	}
 
 	return *it->second;
@@ -10508,13 +11619,15 @@ std::auto_ptr<GSContainer> GSGridStoreTag::duplicateContainer(
 		const GSContainer &src) {
 	RowMapper::Cache &cache = RowMapper::getDefaultCache();
 	RowMapper::Reference mapper(cache, cache.duplicate(src.getMapper()));
+
+	const bool cached = true;
 	std::auto_ptr<ContainerKey> containerKey(
 			new ContainerKey(*src.normalizedContainerKey_));
 
 	std::auto_ptr<GSContainer> dest(new GSContainer(
 			*this, mapper, src.getSchemaVersionId(),
 			src.getPartitionId(), src.getContainerId(),
-			containerKey));
+			containerKey, cached));
 
 	return dest;
 }
@@ -10534,7 +11647,7 @@ Statement::Id GSGridStoreTag::getContainerStatement(
 			return Statement::DROP_TIME_SERIES;
 		default:
 			assert(false);
-			UTIL_THROW_ERROR(0, "");
+			GS_CLIENT_THROW_ERROR(0, "");
 		}
 	}
 	else {
@@ -10594,7 +11707,7 @@ void GSGridStoreTag::importSchemaProperty(
 
 	const size_t columnCount = RowMapper::importColumnCount(in);
 	if (columnCount == 0 && !config.anyTypeAllowed_) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 	}
 
 	int32_t keyColumnId =
@@ -10615,7 +11728,7 @@ void GSGridStoreTag::importIndexProperty(
 	int32_t entryCount;
 	in >> entryCount;
 	if (entryCount < 0) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 	}
 
 	for (int32_t i = 0; i < entryCount; i++) {
@@ -10623,7 +11736,8 @@ void GSGridStoreTag::importIndexProperty(
 		in >> columnId;
 		if (columnId < 0 ||
 				static_cast<size_t>(columnId) >= columnInfoList.size()) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+					"Protocol error by illegal column ID");
 		}
 
 		GSIndexTypeFlags &flags = columnInfoList[columnId].indexTypeFlags;
@@ -10641,7 +11755,8 @@ void GSGridStoreTag::importIndexProperty(
 			flags |= GS_INDEX_FLAG_SPATIAL;
 			break;
 		default:
-			UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+					"Protocol error by illegal index type");
 		}
 	}
 }
@@ -10657,7 +11772,7 @@ void GSGridStoreTag::importEventNotificationProperty(
 	in >> entryCount;
 	if (entryCount < 0 ||
 			static_cast<size_t>(entryCount) > in.base().remaining()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 	}
 
 	if (entryCount <= 0) {
@@ -10682,7 +11797,7 @@ void GSGridStoreTag::importTriggerProperty(
 	in >> entryCountValue;
 	if (entryCountValue < 0 ||
 			static_cast<size_t>(entryCountValue) > in.base().remaining()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 	}
 	const size_t entryCount = static_cast<size_t>(entryCountValue);
 
@@ -10704,7 +11819,7 @@ void GSGridStoreTag::importTriggerProperty(
 		int32_t columnCount;
 		in >> columnCount;
 		if (columnCount < 0) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 		} else if (columnCount == 0) {
 			infoList[i].columnSet = NULL;
 		} else {
@@ -10716,7 +11831,8 @@ void GSGridStoreTag::importTriggerProperty(
 				in >> columnId;
 				if (columnId < 0 ||
 						columnId >= static_cast<int32_t>(columnInfoList.size())) {
-					UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+							"Protocol error by illegal column ID");
 				}
 				tmp[j] = columnInfoList[columnId].name;
 			}
@@ -10770,7 +11886,7 @@ void GSGridStoreTag::applyIndexInfoList(
 		const GSChar *columnName = NULL;
 		if (column >= 0) {
 			if (static_cast<size_t>(column) >= columnInfoList.size()) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 						"Protocol error by illegal index column");
 			}
 			const GSColumnInfo &columnInfo = columnInfoList[column];
@@ -10778,7 +11894,7 @@ void GSGridStoreTag::applyIndexInfoList(
 
 			if (indexFlagsSpecified &&
 					((columnInfo.indexTypeFlags & it->type) == 0)) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 						"Protocol error by inconsistent index type");
 			}
 		}
@@ -10797,14 +11913,14 @@ const GSChar* GSGridStoreTag::resolveContainerName(
 
 	if (name == NULL) {
 		if (another == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
 					"Container name not specified");
 		}
 		return another;
 	}
 	else if (another != NULL &&
 			strcmp(name, another) != 0) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 				"Inconsistent container name");
 	}
 
@@ -10817,13 +11933,13 @@ const GSContainerType* GSGridStoreTag::resolveContainerType(
 
 	if (type == NULL) {
 		if (another == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
 					"Container type not specified");
 		}
 		return another;
 	}
 	else if (another != NULL && *another != *type) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA,
 				"Inconsistent container type");
 	}
 
@@ -10857,7 +11973,8 @@ void GSGridStoreTag::executeStatement(
 						}
 						else if (sessionTrial >=
 								GSContainer::MAX_SESSION_REPAIR_COUNT) {
-							UTIL_RETHROW(e.getErrorCode(), e,
+							GS_CLIENT_RETHROW_ERROR(
+									e,
 									"Failed to create session ("
 									"totalTrialCount=" << trialCount <<
 									", sessionTrialCount=" << sessionTrial <<
@@ -10889,7 +12006,8 @@ void GSGridStoreTag::executeStatement(
 				}
 
 				if (trialCount >= GSContainer::MAX_SESSION_REPAIR_COUNT) {
-					UTIL_RETHROW(e.getErrorCode(), e,
+					GS_CLIENT_RETHROW_ERROR(
+							e,
 							"Failed to repair session (trialCount=" << trialCount << ")");
 				}
 			}
@@ -10955,9 +12073,11 @@ GSCollection* GSGridStoreTag::getContextControllerCollection(
 
 	const ContainerKeyConverter &keyConverter = context_.getKeyConverter();
 
+	const bool cached = false;
 	std::auto_ptr<ContainerKey> key(new ContainerKey(
 			keyConverter.parse(CONTEXT_CONTROLLER_NAME, false)));
-	return new GSCollection(*this, mapper, -1, -1, -1, key);
+
+	return new GSCollection(*this, mapper, -1, -1, -1, key, cached);
 }
 
 
@@ -11062,7 +12182,7 @@ GSGridStoreTag::MultiQueryStatement::MultiQueryStatement(
 void GSGridStoreTag::MultiQueryStatement::check(
 		GSQuery &query, GSGridStore &store) {
 	if (query.getContainer()->store_ != &store) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 }
 
@@ -11126,7 +12246,8 @@ void GSGridStoreTag::MultiQueryStatement::acceptCreateSessionResponse(
 	int32_t sessionCount;
 	resp >> sessionCount;
 	if (optionalQueryList_.size() != static_cast<size_t>(sessionCount)) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+				"Protocol error by inconsistent session count");
 	}
 
 	if (!GSContainer::isSessionIdGeneratorEnabled()) {
@@ -11138,13 +12259,15 @@ void GSGridStoreTag::MultiQueryStatement::acceptCreateSessionResponse(
 			int64_t containerId;
 			resp >> containerId;
 			if (containerId != container.containerId_) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+						"Protocol error by inconsistent container ID");
 			}
 
 			int64_t sessionId;
 			resp >> sessionId;
 			if (sessionId == 0) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+						"Protocol error by empty session ID");
 			}
 
 			container.setSessionIdDirect(sessionId, true);
@@ -11196,7 +12319,8 @@ void GSGridStoreTag::MultiQueryStatement::acceptMainResponse(
 	int32_t count;
 	resp >> count;
 	if (queryList_.size() != static_cast<size_t>(count)) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+				"Protocol error by inconsistent query count");
 	}
 
 	for (QueryList::iterator it = queryList_.begin();
@@ -11206,7 +12330,7 @@ void GSGridStoreTag::MultiQueryStatement::acceptMainResponse(
 		int64_t size;
 		resp >> size;
 		if (size < 0 || static_cast<size_t>(size) > resp.base().remaining()) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 		}
 
 		const size_t subEndPos =
@@ -11272,7 +12396,7 @@ void GSGridStoreTag::MultiPutStatement::add(
 	}
 
 	if (rowEntry.rowList == NULL) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 	}
 
 	const ContainerKey normalizedKey =
@@ -11282,7 +12406,7 @@ void GSGridStoreTag::MultiPutStatement::add(
 	for (size_t i = 0; i < rowEntry.rowCount; i++) {
 		void *row = rowEntry.rowList[i];
 		if (row == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 
 		if (mapper == NULL) {
@@ -11375,7 +12499,8 @@ void GSGridStoreTag::MultiPutStatement::acceptCreateSessionResponse(
 	int32_t sessionCount;
 	resp >> sessionCount;
 	if (containerKeyList_.size() != static_cast<size_t>(sessionCount)) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+				"Protocol error by inconsistent session count");
 	}
 
 	for (ContainerKeyList::iterator it = containerKeyList_.begin();
@@ -11389,7 +12514,8 @@ void GSGridStoreTag::MultiPutStatement::acceptCreateSessionResponse(
 		if (!GSContainer::isSessionIdGeneratorEnabled()) {
 			resp >> entry.sessionId_;
 			if (entry.sessionId_ == 0) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+						"Protocol error by empty session ID");
 			}
 		}
 	}
@@ -11423,7 +12549,7 @@ bool GSGridStoreTag::MultiPutStatement::makeMainRequest(
 			containerType = GS_CONTAINER_TIME_SERIES;
 			break;
 		default:
-			UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 		}
 
 		req << static_cast<int8_t>(containerType);
@@ -11534,7 +12660,7 @@ GSGridStoreTag::MultiPutStatement::SubEntry::SubEntry() :
 void GSGridStoreTag::MultiGetRequest::add(
 		const GSRowKeyPredicateEntry &predicateEntry) {
 	if (predicateEntry.predicate == NULL) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 	}
 
 	PredicateList::iterator it = std::find(
@@ -11608,7 +12734,7 @@ bool GSGridStoreTag::MultiGetRequest::makeRequest(
 				predicateList_.begin(), predicateList_.end(), entry.predicate);
 		if (predIt == predicateList_.end()) {
 			assert(false);
-			UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 		}
 
 		const int32_t predicateIndex =
@@ -11673,8 +12799,8 @@ const Statement::Id GSContainerTag::FIXED_SESSION_MODE_STATEMENT_LIST[] = {
 GSContainerTag::GSContainerTag(
 		GSGridStore &store, RowMapper::Reference mapper,
 		int32_t schemaVerId, int32_t partitionId, int64_t containerId,
-		std::auto_ptr<ContainerKey> normalizedContainerKey) :
-		resourceHeader_(GSResourceType::CONTAINER),
+		std::auto_ptr<ContainerKey> normalizedContainerKey, bool cached) :
+		resourceHeader_(GSResourceType::CONTAINER, &store, NULL),
 		referenceCount_(1),
 		store_(&store),
 		mapper_(mapper),
@@ -11690,7 +12816,7 @@ GSContainerTag::GSContainerTag(
 		containerLocked_(false),
 		transactionStarted_(false),
 		autoCommit_(true),
-		cacheDisabled_(false) {
+		cacheDisabled_(!cached) {
 	store_->createReference(this);
 }
 
@@ -11789,7 +12915,7 @@ void GSContainerTag::createReference(void *resource) {
 	GSResourceType::Id type;
 	if (!GSResourceHeader::getType(resource, type)) {
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 
 	switch (type) {
@@ -11805,7 +12931,7 @@ void GSContainerTag::createReference(void *resource) {
 	case GSResourceType::PARTITION_CONTROLLER:
 	default:
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 	activeResources_.insert(resource);
 	referenceCount_++;
@@ -11853,6 +12979,10 @@ int64_t GSContainerTag::getContainerId() const {
 	return containerId_;
 }
 
+const ContainerKey* GSContainerTag::getContainerKey() const {
+	return getNormalizedContainerKey();
+}
+
 const ContainerKey* GSContainerTag::getNormalizedContainerKey() const {
 	return normalizedContainerKey_.get();
 }
@@ -11898,12 +13028,12 @@ void GSContainerTag::createTrigger(const GSTriggerInfo *info) {
 	tryPutOptionalRequest(reqOut, false, true, true);
 
 	if (info->name == NULL) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 	}
 	reqOut << info->name;
 	reqOut << static_cast<int8_t>(info->type);
 	if (info->uri == NULL) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 	}
 	reqOut << info->uri;
 	reqOut << info->eventTypeFlags;
@@ -11927,11 +13057,11 @@ void GSContainerTag::createTrigger(const GSTriggerInfo *info) {
 			{
 				reqOut << "activemq";
 				if (info->jmsDestinationType == NULL) {
-					UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 				}
 				reqOut << info->jmsDestinationType;
 				if (info->jmsDestinationName == NULL) {
-					UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 				}
 				reqOut << info->jmsDestinationName;
 				if (info->user == NULL) {
@@ -11947,7 +13077,7 @@ void GSContainerTag::createTrigger(const GSTriggerInfo *info) {
 			}
 			break;
 		default:
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	executeStatement(Statement::CREATE_TRIGGER, family);
@@ -12036,13 +13166,13 @@ void GSContainerTag::createOrDropIndex(
 				Statement::CREATE_INDEX : Statement::DROP_INDEX);
 
 		if (!forCreation && filteredInfo.column < 0) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
 					"Column must be specified");
 		}
 		reqOut << filteredInfo.column;
 
 		if (!forCreation && filteredInfo.type == 0) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
 					"Type must be specified");
 		}
 		reqOut << static_cast<int8_t>(GSGridStore::getIndexTypeOrdinal(
@@ -12068,7 +13198,7 @@ bool GSContainerTag::getRow(
 
 	getVarDataPool().clear();
 	if (forUpdate && autoCommit_) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_COMMIT_MODE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_COMMIT_MODE, "");
 	}
 
 	const StatementFamily family = prepareSession(forUpdate ?
@@ -12139,7 +13269,7 @@ bool GSContainerTag::putMultipleRows(
 		return false;
 	}
 	else if (rowObjs == NULL) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 	}
 	const int32_t rowCountInt32 = ClientUtil::sizeValueToInt32(rowCount);
 
@@ -12155,7 +13285,7 @@ bool GSContainerTag::putMultipleRows(
 	const void *const *rowObjsEnd = rowObjs + rowCount;
 	for (const void *const *i = rowObjs; i != rowObjsEnd; ++i) {
 		if (*i == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 		mapper_->encode(cursor, NULL, NULL, *i);
 	}
@@ -12193,7 +13323,15 @@ bool GSContainerTag::removeRow(
 }
 
 GSQuery* GSContainerTag::query(const GSChar *queryString) {
-	std::auto_ptr<GSQuery> queryPtr(new GSQuery(*this, Statement::QUERY_TQL));
+	static struct : public QueryFormatter::Typed<Statement::QUERY_TQL> {
+		virtual void getString(std::ostream &os, ArrayByteInStream &in) const {
+			std::string queryString;
+			in >> queryString;
+			os << queryString;
+		}
+	} formatter;
+
+	std::auto_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
 	queryPtr->getParametersOutStream() << queryString;
 	return queryPtr.release();
 }
@@ -12212,7 +13350,8 @@ GSRowSet* GSContainerTag::queryAndFetch(
 			reqOut, family, TRANSACTION_INFO_DEFAULT, &forUpdate, &source);
 	formatQuery(parameters, reqOut);
 
-	ArrayByteInStream respIn = executeStatement(parameters.statement_, family);
+	ArrayByteInStream respIn =
+			executeStatement(parameters.getStatement(), family);
 
 	return acceptQueryResponse(parameters, forUpdate, respIn, true);
 }
@@ -12299,7 +13438,7 @@ GSRowSet* GSContainerTag::acceptQueryResponse(
 					}
 				}
 
-				UTIL_THROW_ERROR(
+				GS_CLIENT_THROW_ERROR(
 						GS_ERROR_CC_MESSAGE_CORRUPTED,
 						"Protocol error by query result type confliction");
 			}
@@ -12309,7 +13448,7 @@ GSRowSet* GSContainerTag::acceptQueryResponse(
 		}
 
 		if (rawRowSetType < 0) {
-			UTIL_THROW_ERROR(
+			GS_CLIENT_THROW_ERROR(
 					GS_ERROR_CC_MESSAGE_CORRUPTED,
 					"Protocol error by no query result type");
 		}
@@ -12321,7 +13460,7 @@ GSRowSet* GSContainerTag::acceptQueryResponse(
 		rowIdIncluded = isResultRowIdIncluded(type);
 	}
 	else if (isAnyQueryResultTypeEnabled() ||
-			parameters.statement_ == Statement::QUERY_TQL) {
+			parameters.getStatement() == Statement::QUERY_TQL) {
 		int8_t rawType;
 		respIn >> rawType;
 		const QueryResultType type = resolveQueryResultType(rawType);
@@ -12450,7 +13589,8 @@ void GSContainerTag::fetchRowSet(
 	catch (util::Exception &e) {
 		if (e.getErrorCode() == ROW_SET_NOT_FOUND_ERROR_CODE) {
 			connectionId = GridStoreChannel::ConnectionId();
-			UTIL_RETHROW(GS_ERROR_CC_RECOVERABLE_ROW_SET_LOST, e, "");
+			GS_CLIENT_RETHROW_ERROR_CODED(
+					GS_ERROR_CC_RECOVERABLE_ROW_SET_LOST, e, "");
 		}
 		if (GridStoreChannel::isRecoverableError(e.getErrorCode())) {
 			connectionId = GridStoreChannel::ConnectionId();
@@ -12467,7 +13607,7 @@ void GSContainerTag::fetchRowSet(
 			(resultClosed && newRemainingCount > 0 &&
 					!isPartialRowSetLostAcceptable()) ||
 			(!resultClosed && newRemainingCount == 0)) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 				"Unexpected result (resultClosed=" << resultClosed <<
 				", resultRowCount=" << resultRowCount <<
 				", remainingCount=" << remainingCount << ")");
@@ -12494,7 +13634,7 @@ void GSContainerTag::removeRow(
 	checkTransactionPreserved(true, transactionId, transactionStarted, true);
 
 	if (&resolvedMapper != mapper_.get()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
 	XArrayByteOutStream reqOut = getRequestOutStream();
@@ -12521,13 +13661,13 @@ void GSContainerTag::updateRow(
 		const void *rowObj) {
 	if (resolvedMapper.getCategory() == RowMapper::CATEGORY_TIME_SERIES &&
 			!TIME_SERIES_UPDATE_ENABLED) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
 	checkTransactionPreserved(true, transactionId, transactionStarted, true);
 
 	if (&resolvedMapper != mapper_.get()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
 	XArrayByteOutStream reqOut = getRequestOutStream();
@@ -12554,7 +13694,7 @@ void GSContainerTag::updateRow(
 
 void GSContainerTag::abort() {
 	if (autoCommit_) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_COMMIT_MODE,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_COMMIT_MODE,
 				"Illegal commit mode");
 	}
 
@@ -12585,7 +13725,7 @@ void GSContainerTag::abort() {
 
 void GSContainerTag::commit() {
 	if (autoCommit_) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_COMMIT_MODE,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_COMMIT_MODE,
 				"Illegal commit mode");
 	}
 
@@ -12627,14 +13767,17 @@ void GSContainerTag::setAutoCommit(bool enabled) {
 GSQuery* GSContainerTag::queryByGeometry(
 		const GSChar *column, const GSChar *geometry,
 		GSGeometryOperator geometryOp) {
+	static struct : public QueryFormatter::Typed<
+			Statement::QUERY_COLLECTION_GEOMETRY_RELATED> {
+	} formatter;
+
 	checkOpened();
 	if (mapper_->getCategory() != RowMapper::CATEGORY_COLLECTION) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 	const RowMapper::MappingMode mode = getRowMappingMode();
 
-	std::auto_ptr<GSQuery> queryPtr(new GSQuery(
-			*this, Statement::QUERY_COLLECTION_GEOMETRY_RELATED));
+	std::auto_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
 
 	XArrayByteOutStream paramOut = queryPtr->getParametersOutStream();
 	paramOut << mapper_->resolveColumnId(column);
@@ -12644,7 +13787,7 @@ GSQuery* GSContainerTag::queryByGeometry(
 	case GS_GEOMETRY_OPERATOR_INTERSECT:
 		break;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNKNOWN_GEOMETRY_OPERATOR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNKNOWN_GEOMETRY_OPERATOR, "");
 	}
 	paramOut << static_cast<int8_t>(geometryOp);
 
@@ -12653,14 +13796,17 @@ GSQuery* GSContainerTag::queryByGeometry(
 
 GSQuery* GSContainerTag::queryByGeometry(const GSChar *column,
 		const GSChar *geometryIntersection, const GSChar *geometryDisjoint) {
+	static struct : public QueryFormatter::Typed<
+			Statement::QUERY_COLLECTION_GEOMETRY_WITH_EXCLUSION> {
+	} formatter;
+
 	checkOpened();
 	if (mapper_->getCategory() != RowMapper::CATEGORY_COLLECTION) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 	const RowMapper::MappingMode mode = getRowMappingMode();
 
-	std::auto_ptr<GSQuery> queryPtr(new GSQuery(
-			*this, Statement::QUERY_COLLECTION_GEOMETRY_WITH_EXCLUSION));
+	std::auto_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
 
 	XArrayByteOutStream paramOut = queryPtr->getParametersOutStream();
 	paramOut << mapper_->resolveColumnId(column);
@@ -12674,7 +13820,7 @@ GSAggregationResult* GSContainerTag::aggregateTimeSeries(
 		GSTimestamp start, GSTimestamp end,
 		const GSChar *column, GSAggregation aggregation) {
 	if (mapper_->getCategory() != RowMapper::CATEGORY_TIME_SERIES) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
 	const StatementFamily family = prepareSession(STATEMENT_FAMILY_QUERY);
@@ -12700,7 +13846,7 @@ GSAggregationResult* GSContainerTag::aggregateTimeSeries(
 	case GS_AGGREGATION_WEIGHTED_AVERAGE:
 		break;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNKNOWN_AGGREGATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNKNOWN_AGGREGATION, "");
 	}
 	reqOut << static_cast<int8_t>(aggregation);
 
@@ -12722,7 +13868,7 @@ GSAggregationResult* GSContainerTag::aggregateTimeSeries(
 
 bool GSContainerTag::appendTimeSeriesRow(const void *rowObj) {
 	if (mapper_->getCategory() != RowMapper::CATEGORY_TIME_SERIES) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
 	const StatementFamily family = prepareSession(STATEMENT_FAMILY_POST);
@@ -12746,7 +13892,7 @@ bool GSContainerTag::getTimeSeriesRow(
 		GSTimestamp base, GSTimeOperator timeOp, void *rowObj) {
 	getVarDataPool().clear();
 	if (mapper_->getCategory() != RowMapper::CATEGORY_TIME_SERIES) {
-		UTIL_THROW_ERROR(0, "");
+		GS_CLIENT_THROW_ERROR(0, "");
 	}
 
 	const StatementFamily family = prepareSession(STATEMENT_FAMILY_QUERY);
@@ -12764,7 +13910,7 @@ bool GSContainerTag::getTimeSeriesRow(
 	case GS_TIME_OPERATOR_PREVIOUS_ONLY:
 		break;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNKNOWN_TIME_OPERATOR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNKNOWN_TIME_OPERATOR, "");
 	}
 	reqOut << static_cast<int8_t>(timeOp);
 
@@ -12785,7 +13931,7 @@ bool GSContainerTag::interpolateTimeSeriesRow(
 		GSTimestamp base, const GSChar *column, void *rowObj) {
 	getVarDataPool().clear();
 	if (mapper_->getCategory() != RowMapper::CATEGORY_TIME_SERIES) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
 	const StatementFamily family = prepareSession(STATEMENT_FAMILY_QUERY);
@@ -12813,13 +13959,16 @@ bool GSContainerTag::interpolateTimeSeriesRow(
 GSQuery* GSContainerTag::queryByTime(
 		const GSTimestamp *start, const GSTimestamp *end,
 		GSQueryOrder order) {
+	static struct : public QueryFormatter::Typed<
+			Statement::QUERY_TIME_SERIES_RANGE> {
+	} formatter;
+
 	checkOpened();
 	if (mapper_->getCategory() != RowMapper::CATEGORY_TIME_SERIES) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
-	std::auto_ptr<GSQuery> queryPtr(new GSQuery(
-			*this, Statement::QUERY_TIME_SERIES_RANGE));
+	std::auto_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
 
 	XArrayByteOutStream paramOut = queryPtr->getParametersOutStream();
 	paramOut << wrapOptionalTimestamp(start);
@@ -12834,13 +13983,16 @@ GSQuery* GSContainerTag::queryByTime(
 		size_t columnCount, bool useColumnCount,
 		GSInterpolationMode mode,
 		int32_t interval, GSTimeUnit intervalUnit) {
+	static struct : public QueryFormatter::Typed<
+			Statement::QUERY_TIME_SERIES_SAMPLING> {
+	} formatter;
+
 	checkOpened();
 	if (mapper_->getCategory() != RowMapper::CATEGORY_TIME_SERIES) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
-	std::auto_ptr<GSQuery> queryPtr(new GSQuery(
-			*this, Statement::QUERY_TIME_SERIES_SAMPLING));
+	std::auto_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
 
 	XArrayByteOutStream paramOut = queryPtr->getParametersOutStream();
 	paramOut << start;
@@ -12850,7 +14002,7 @@ GSQuery* GSContainerTag::queryByTime(
 	if (useColumnCount) {
 		columnCountInt32 = ClientUtil::sizeValueToInt32(columnCount);
 		if (columnCountInt32 > 0 && columnSet == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 		}
 	}
 	else {
@@ -12878,9 +14030,12 @@ GSQuery* GSContainerTag::queryByTime(
 template<typename Traits>
 GSResult GSContainerTag::getRowChecked(
 		GSContainer *container, const typename Traits::Object *key,
-		void *rowObj, GSBool forUpdate, GSBool *exists) {
+		void *rowObj, GSBool forUpdate, GSBool *exists,
+		const GSInterceptor::FunctionInfo &funcInfo) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(exists, GS_FALSE);
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(
+			funcInfo, container, key, rowObj, forUpdate, exists);
 
 	GSBool existsStorage;
 	if (exists == NULL) {
@@ -12906,9 +14061,12 @@ GSResult GSContainerTag::getRowChecked(
 template<typename Traits>
 GSResult GSContainerTag::putRowChecked(
 		GSContainer *container, const typename Traits::Object *key,
-		const void *rowObj, GSBool *exists) {
+		const void *rowObj, GSBool *exists,
+		const GSInterceptor::FunctionInfo &funcInfo) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(exists, GS_FALSE);
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(
+			funcInfo, container, key, rowObj, exists);
 
 	GSBool existsStorage;
 	if (exists == NULL) {
@@ -12932,9 +14090,10 @@ GSResult GSContainerTag::putRowChecked(
 template<typename Traits>
 GSResult GSContainerTag::removeRowChecked(
 		GSContainer *container, const typename Traits::Object *key,
-		GSBool *exists) {
+		GSBool *exists, const GSInterceptor::FunctionInfo &funcInfo) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(exists, GS_FALSE);
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, container, key, exists);
 
 	GSBool existsStorage;
 	if (exists == NULL) {
@@ -12964,7 +14123,7 @@ GSRow* GSContainerTag::createRow() {
 
 void GSContainerTag::checkOpened() const {
 	if (isClosed()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_RESOURCE_CLOSED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_RESOURCE_CLOSED, "");
 	}
 }
 
@@ -12991,7 +14150,7 @@ GSInterpolationMode GSContainerTag::checkInterpolationMode(
 	case GS_INTERPOLATION_EMPTY:
 		return interpolationMode;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 }
 
@@ -13001,14 +14160,14 @@ GSQueryOrder GSContainerTag::checkQueryOrder(GSQueryOrder order) {
 	case GS_ORDER_DESCENDING:
 		return order;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 }
 
 ArrayByteInStream GSContainerTag::executeStatement(
 		Statement::Id statement, StatementFamily familyForSession) {
 	if (closed_) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_CONTAINER_CLOSED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_CONTAINER_CLOSED, "");
 	}
 
 	const bool sessionRequired = (familyForSession != STATEMENT_FAMILY_NONE);
@@ -13025,7 +14184,7 @@ ArrayByteInStream GSContainerTag::executeStatement(
 			}
 			statementId = statementId_;
 			if (sessionId_ == 0 || statementId == 0) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 			}
 		}
 
@@ -13086,7 +14245,8 @@ ArrayByteInStream GSContainerTag::executeStatement(
 				throw;
 			}
 			else if (trialCount >= MAX_SESSION_REPAIR_COUNT) {
-				UTIL_RETHROW(e.getErrorCode(), e,
+				GS_CLIENT_RETHROW_ERROR(
+						e,
 						"Failed to repair session (trialCount=" << trialCount << ")");
 			}
 		}
@@ -13126,7 +14286,7 @@ ArrayByteInStream GSContainerTag::executeMultiStepStatement(
 		int32_t statementStep) {
 	if (statementStep <= 0) {
 		assert(false);
-		UTIL_THROW_ERROR(
+		GS_CLIENT_THROW_ERROR(
 				GS_ERROR_CC_INTERNAL_ERROR, "Internal error by illegal step");
 	}
 
@@ -13177,7 +14337,7 @@ void GSContainerTag::setSessionIdDirect(
 
 int64_t GSContainerTag::updateStatementIdDirect() {
 	if (sessionId_ == 0) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 	while (++statementId_ == 0) {
 	}
@@ -13261,7 +14421,7 @@ GSContainer::StatementFamily GSContainerTag::prepareSession(
 			break;
 		case STATEMENT_FAMILY_LOCK:
 			if (autoCommit_) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_COMMIT_MODE,
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_COMMIT_MODE,
 						"Illegal commit mode");
 			}
 			sessionRequired = true;
@@ -13278,7 +14438,7 @@ GSContainer::StatementFamily GSContainerTag::prepareSession(
 			break;
 		default:
 			assert(false);
-			UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 		}
 
 		if (!sessionPrepared_) {
@@ -13341,7 +14501,8 @@ void GSContainerTag::createSession() {
 				respIn >> newSessionId;
 				if (newSessionId == 0) {
 					GS_CLIENT_THROW_CONNECTION(
-							GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+							GS_ERROR_CC_MESSAGE_CORRUPTED,
+							"Protocol error by empty session ID");
 				}
 			}
 			else {
@@ -13353,7 +14514,8 @@ void GSContainerTag::createSession() {
 				throw;
 			}
 			else if (trialCount >= MAX_SESSION_REPAIR_COUNT) {
-				UTIL_RETHROW(e.getErrorCode(), e,
+				GS_CLIENT_RETHROW_ERROR(
+						e,
 						"Failed to create session (trialCount=" << trialCount << ")");
 			}
 			continue;
@@ -13372,7 +14534,7 @@ void GSContainerTag::putTransactionInfo(
 	const bool sessionRequired = (familyForSession != STATEMENT_FAMILY_NONE);
 	if (sessionRequired && sessionId_ == 0) {
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 
 	reqOut << (sessionRequired ? sessionId_ : 0);
@@ -13681,7 +14843,7 @@ GSContainer::StatementFamily GSContainerTag::prepareQuerySession(
 	StatementFamily baseFamily;
 	if (forUpdateActual) {
 		if (parameters.isPartialExecutionConfigured()) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION,
 					"Partial execution not supported for update "
 					"or on manual commit (forUpdate=" <<
 					std::boolalpha << parameters.isForUpdate(forUpdate) <<
@@ -13689,7 +14851,7 @@ GSContainer::StatementFamily GSContainerTag::prepareQuerySession(
 		}
 
 		if (neverCreate && (!sessionPrepared_ || sessionId_ == 0)) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 		}
 		baseFamily = STATEMENT_FAMILY_LOCK;
 	}
@@ -13710,7 +14872,7 @@ GSContainer::QueryResultType GSContainerTag::resolveQueryResultType(
 	case RESULT_PARTIAL_EXECUTION_STATE:
 		return static_cast<QueryResultType>(rawType);
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 	}
 }
 
@@ -13725,7 +14887,7 @@ GSRowSetType GSContainerTag::resolveRowSetType(QueryResultType type) {
 	case RESULT_PARTIAL_FETCH_STATE:
 		return GS_ROW_SET_CONTAINER_ROWS;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 }
 
@@ -13769,13 +14931,13 @@ void GSContainerTag::checkTransactionPreserved(
 		bool forUpdate, int64_t transactionId, const bool *transactionStarted,
 		bool updatable) {
 	if (forUpdate && (transactionId == 0 || !updatable)) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_NOT_LOCKED,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_NOT_LOCKED,
 				"Update option must be turned on");
 	}
 
 	if (transactionId == 0) {
 		if (!autoCommit_) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_COMMIT_MODE,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_COMMIT_MODE,
 					"Illegal operation for partial row set "
 					"by auto commit query "
 					"because of currently manual commit mode");
@@ -13786,7 +14948,7 @@ void GSContainerTag::checkTransactionPreserved(
 				(transactionStarted != NULL &&
 						(!(*transactionStarted)) != (!transactionStarted_)) ||
 				autoCommit_) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_TRANSACTION_CLOSED,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_TRANSACTION_CLOSED,
 					"Transaction expired");
 		}
 	}
@@ -13806,7 +14968,7 @@ bool GSContainerTag::filterIndexInfo(
 	if (column >= 0) {
 		const GSBinding &binding = mapper_->getBinding();
 		if (static_cast<size_t>(column) >= binding.entryCount) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 					"Column number out of range (column=" << column << ")");
 		}
 		columnNameById = binding.entries[column].columnName;
@@ -13822,7 +14984,7 @@ bool GSContainerTag::filterIndexInfo(
 			filteredInfo.column = columnByName;
 		}
 		else if (column != columnByName) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 					"Inconsistent column specified ("
 					"specifiedNumber=" << column <<
 					" (actualName=" << columnNameById << "), "
@@ -13832,7 +14994,7 @@ bool GSContainerTag::filterIndexInfo(
 	}
 
 	if (forCreation && filteredInfo.column < 0) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
 					"Column must be specified");
 	}
 
@@ -13846,7 +15008,7 @@ bool GSContainerTag::filterIndexInfo(
 			if (!forCreation) {
 				return false;
 			}
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_DEFAULT_INDEX, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_DEFAULT_INDEX, "");
 		}
 
 		filteredInfo.type = type;
@@ -13889,7 +15051,7 @@ GSTimestamp GSContainerTag::wrapOptionalTimestamp(
 	}
 
 	if (*timestamp == undefTimestamp) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	return *timestamp;
@@ -13904,16 +15066,16 @@ bool GSContainerTag::isAnyQueryResultTypeEnabled() {
 bool GSContainerTag::getRowForInternalController(
 		const GSType *keyType, const void *key, void *rowObj) {
 	if (normalizedContainerKey_.get() == NULL) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 
 	if ((keyType != NULL && *keyType != GS_TYPE_STRING) || key == NULL) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	const GSChar *nameString = *static_cast<const GSChar *const*>(key);
 	if (nameString == NULL) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	GSRow &row = GSRow::resolve(rowObj);
@@ -13924,7 +15086,7 @@ bool GSContainerTag::getRowForInternalController(
 				getContext().getFailoverCount());
 	}
 	else {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	{
@@ -13945,16 +15107,16 @@ bool GSContainerTag::getRowForInternalController(
 bool GSContainerTag::putRowForInternalController(
 		const GSType *keyType, const void *key, const void *rowObj) {
 	if (normalizedContainerKey_.get() == NULL) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 
 	if ((keyType != NULL && *keyType != GS_TYPE_STRING) || key == NULL) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	const GSChar *nameString = *static_cast<const GSChar *const*>(key);
 	if (nameString == NULL) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	const GSRow &row = GSRow::resolve(rowObj);
@@ -13973,11 +15135,11 @@ bool GSContainerTag::putRowForInternalController(
 			getChannel().invalidateMaster(getContext());
 		}
 		else {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 		}
 	}
 	else {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	return true;
@@ -14061,7 +15223,7 @@ GSContainerTag::PartialExecutionStatus::get(ArrayByteInStream &in) {
 			in >> intSize;
 			const size_t size = ClientUtil::toSizeValue(intSize);
 			if (size > in.base().remaining()) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 			}
 
 			EntryBytes &bytes = (*status.entryMap_)[type];
@@ -14111,7 +15273,7 @@ GSContainerTag::PartialExecutionStatus::inherit(
 
 	if (!isEnabled() ||
 			next.entryMap_.get() == NULL || next.entryMap_->empty()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 				"Protocol error by unexpected partial execution");
 	}
 
@@ -14137,12 +15299,27 @@ GSContainerTag::PartialExecutionStatus::inherit(
 		if (progressed) {
 			break;
 		}
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 				"Protocol error by no progress on partial execution");
 	}
 	while (false);
 
 	return next;
+}
+
+
+GSContainer::QueryFormatter::QueryFormatter(Statement::Id statement) :
+		statement_(statement) {
+}
+
+Statement::Id GSContainer::QueryFormatter::getStatement() const {
+	return statement_;
+}
+
+void GSContainer::QueryFormatter::getString(
+		std::ostream &os, ArrayByteInStream &in) const {
+	static_cast<void>(os);
+	static_cast<void>(in);
 }
 
 
@@ -14167,8 +15344,9 @@ GSContainer::QueryData& GSContainer::QueryData::operator=(
 const int64_t GSContainerTag::QueryParameters::DEFAULT_SIZE_OPTION_VALUE =
 		std::numeric_limits<int64_t>::max();
 
-GSContainerTag::QueryParameters::QueryParameters(Statement::Id statement) :
-		statement_(statement),
+GSContainerTag::QueryParameters::QueryParameters(
+		const QueryFormatter &formatter) :
+		formatter_(&formatter),
 		fetchLimit_(DEFAULT_SIZE_OPTION_VALUE),
 		fetchSize_(DEFAULT_SIZE_OPTION_VALUE),
 		executionStatus_(PartialExecutionStatus::STATUS_DISABLED),
@@ -14177,6 +15355,15 @@ GSContainerTag::QueryParameters::QueryParameters(Statement::Id statement) :
 		transactionIdSpecified_(false),
 		initialTransactionStarted_(false),
 		initialTransactionId_(0) {
+}
+
+Statement::Id GSContainerTag::QueryParameters::getStatement() const {
+	return formatter_->getStatement();
+}
+
+GSContainer::QueryParameters::StringFormatter
+GSContainerTag::QueryParameters::toString() const {
+	return StringFormatter(*this);
 }
 
 void GSContainerTag::QueryParameters::putFixed(
@@ -14217,7 +15404,7 @@ bool GSContainerTag::QueryParameters::isPartialExecutionConfigured() const {
 void GSContainerTag::QueryParameters::checkPartialOptions(
 		int64_t fetchSize, const PartialExecutionStatus &executionStatus) {
 	if (isPartialFetch(fetchSize) && executionStatus.isEnabled()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 				"Partial fetch and partial execution "
 				"cannot be enabled at the same time");
 	}
@@ -14241,7 +15428,7 @@ GSContainerTag::QueryParameters GSContainerTag::QueryParameters::inherit(
 	if (transactionIdSpecified_ &&
 			(initialTransactionId_ != transactionId ||
 			(!initialTransactionStarted_) != (!transactionStarted))) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 	dest.transactionIdSpecified_ = true;
 	dest.initialTransactionId_ = transactionId;
@@ -14253,10 +15440,36 @@ GSContainerTag::QueryParameters GSContainerTag::QueryParameters::inherit(
 }
 
 
-GSQueryTag::GSQueryTag(GSContainer &container, Statement::Id statement) :
-		resourceHeader_(GSResourceType::QUERY),
+GSContainerTag::QueryParameters::StringFormatter::StringFormatter(
+		const QueryParameters &parameters) :
+		parameters_(parameters) {
+}
+
+void GSContainerTag::QueryParameters::StringFormatter::format(
+		std::ostream &os) const {
+	if (parameters_.formatter_ == NULL) {
+		return;
+	}
+
+	const util::NormalXArray<uint8_t> &data = parameters_.queryData_.data_;
+	ArrayByteInStream in((util::ArrayInStream(data.data(), data.size())));
+
+	parameters_.formatter_->getString(os, in);
+}
+
+std::ostream& operator<<(
+		std::ostream &os,
+		const GSContainerTag::QueryParameters::StringFormatter &formatter) {
+	formatter.format(os);
+	return os;
+}
+
+
+GSQueryTag::GSQueryTag(
+		GSContainer &container, const QueryFormatter &formatter) :
+		resourceHeader_(GSResourceType::QUERY, &container, NULL),
 		container_(&container),
-		parameters_(statement),
+		parameters_(formatter),
 		lastRowSet_(NULL),
 		lastRowSetVisible_(false),
 		closed_(false) {
@@ -14285,7 +15498,11 @@ GSContainer* GSQueryTag::getContainer() {
 }
 
 Statement::Id GSQueryTag::getStatement() const {
-	return parameters_.statement_;
+	return parameters_.getStatement();
+}
+
+GSQuery::StringFormatter GSQueryTag::toString() const {
+	return parameters_.toString();
 }
 
 XArrayByteOutStream GSQueryTag::getParametersOutStream() {
@@ -14341,7 +15558,7 @@ void GSQueryTag::setFetchOption(
 						option, value, valueType, true)));
 		break;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNKNOWN_FETCH_OPTION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNKNOWN_FETCH_OPTION, "");
 	}
 }
 
@@ -14388,7 +15605,7 @@ void GSQueryTag::checkOpened() {
 	}
 
 	if (closed_ || container_->isClosed()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_RESOURCE_CLOSED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_RESOURCE_CLOSED, "");
 	}
 }
 
@@ -14414,7 +15631,7 @@ int64_t GSQueryTag::filterSizedFetchOption(
 	}
 
 	if (longValue < 0) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	return longValue;
@@ -14431,7 +15648,7 @@ GSQueryTag::filterFetchOption(
 		if (!force) {
 			return NULL;
 		}
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_FIELD_TYPE, "");
 	}
 
 	typedef typename RowMapper::ObjectTypeTraits<T, false>::Object Object;
@@ -14448,7 +15665,7 @@ GSRowSetTag::GSRowSetTag(
 		const PartialFetchStatus &fetchStatus,
 		const GridStoreChannel::ConnectionId &connectionId,
 		bool bufSwapAllowed) :
-		resourceHeader_(GSResourceType::ROW_SET),
+		resourceHeader_(GSResourceType::ROW_SET, &container, NULL),
 		referenceCount_(1),
 		container_(&container),
 		mapper_(mapper),
@@ -14518,6 +15735,10 @@ void GSRowSetTag::removeReference(GSRowSet *&rowSet) throw() {
 	rowSet = NULL;
 }
 
+GSQuery::StringFormatter GSRowSetTag::toQueryString() const {
+	return queryParameters_.toString();
+}
+
 int32_t GSRowSetTag::getSize() const {
 	return static_cast<int32_t>(totalRowCount_);
 }
@@ -14553,7 +15774,7 @@ int64_t GSRowSetTag::getRowId() const {
 	checkInRange();
 
 	if (!cursor_.isRowIdIncluded()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
 	return cursor_.getLastRowID();
@@ -14563,11 +15784,11 @@ const void* GSRowSetTag::getRowKey() const {
 	checkOpened();
 
 	if (!cursor_.isInRange()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_NO_SUCH_ELEMENT, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_NO_SUCH_ELEMENT, "");
 	}
 
 	if (lastKey_ == NULL) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
 	return lastKey_;
@@ -14596,11 +15817,11 @@ void GSRowSetTag::next(void *rowObj) {
 	checkOpened();
 
 	if (!cursor_.hasNext()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_NO_SUCH_ELEMENT, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_NO_SUCH_ELEMENT, "");
 	}
 
 	if (getType() != GS_ROW_SET_CONTAINER_ROWS) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
 	try {
@@ -14627,11 +15848,11 @@ void GSRowSetTag::nextAggregation(GSAggregationResult **aggregationResult) {
 	checkOpened();
 
 	if (!hasNext()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_NO_SUCH_ELEMENT, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_NO_SUCH_ELEMENT, "");
 	}
 
 	if (getType() != GS_ROW_SET_AGGREGATION_RESULT) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
 	try {
@@ -14655,11 +15876,11 @@ void GSRowSetTag::nextQueryAnalysis(GSQueryAnalysisEntry *queryAnalysis) {
 	checkOpened();
 
 	if (!hasNext()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_NO_SUCH_ELEMENT, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_NO_SUCH_ELEMENT, "");
 	}
 
 	if (getType() != GS_ROW_SET_QUERY_ANALYSIS) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
 	try {
@@ -14742,7 +15963,7 @@ void GSRowSetTag::fetchFollowing() {
 		}
 
 		if (connectionId_.isEmpty()) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_RESOURCE_CLOSED, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_RESOURCE_CLOSED, "");
 		}
 
 		try {
@@ -14773,7 +15994,7 @@ void GSRowSetTag::fetchFollowing() {
 	while (false);
 
 	if (followingLost_) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_RECOVERABLE_ROW_SET_LOST,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_RECOVERABLE_ROW_SET_LOST,
 				"Row set lost by modifications (remaining=" <<
 						remainingRowCount_ << ")");
 	}
@@ -14835,19 +16056,19 @@ void GSRowSetTag::checkOpened() const {
 	}
 
 	if (closed_ || container_->isClosed()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_RESOURCE_CLOSED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_RESOURCE_CLOSED, "");
 	}
 }
 
 void GSRowSetTag::checkInRange() const {
 	if (!cursor_.isInRange() && !previousFound_) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_NO_SUCH_ELEMENT, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_NO_SUCH_ELEMENT, "");
 	}
 }
 
 
 GSAggregationResultTag::GSAggregationResultTag(GSContainer &container) :
-		resourceHeader_(GSResourceType::AGGREGATION_RESULT),
+		resourceHeader_(GSResourceType::AGGREGATION_RESULT, &container, NULL),
 		container_(&container),
 		resultType_(static_cast<GSType>(-1)) {
 	container_->createReference(this);
@@ -14940,11 +16161,14 @@ bool GSAggregationResultTag::getValue(void *value, GSType valueType) {
 template<typename Traits>
 GSResult GSAggregationResultTag::getValueTyped(
 		GSAggregationResult *aggregationResult,
-		typename Traits::Object *value, GSBool *assigned) throw() {
+		typename Traits::Object *value, GSBool *assigned,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
 	typedef typename Traits::Object Object;
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT2(
 			value, Object(), assigned, GS_FALSE);
 	GSResourceHeader::clearLastError(aggregationResult);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(
+			funcInfo, aggregationResult, value, assigned);
 
 	if (value != NULL) {
 		*value = Object();
@@ -14972,7 +16196,7 @@ GSResult GSAggregationResultTag::getValueTyped(
 }
 
 GSAggregationResultTag::GSAggregationResultTag() :
-		resourceHeader_(GSResourceType::AGGREGATION_RESULT),
+		resourceHeader_(GSResourceType::AGGREGATION_RESULT, NULL, NULL),
 		container_(NULL),
 		resultType_(static_cast<GSType>(-1)) {
 }
@@ -15011,7 +16235,7 @@ const GSRow& GSRowTag::resolve(const void *resource) {
 	GSResourceType::Id type;
 	if (!GSResourceHeader::getType(resource, type) ||
 			type != GSResourceType::ROW) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	return *static_cast<const GSRow*>(resource);
@@ -15021,7 +16245,7 @@ GSRow& GSRowTag::resolve(void *resource) {
 	GSResourceType::Id type;
 	if (!GSResourceHeader::getType(resource, type) ||
 			type != GSResourceType::ROW) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
 	return *static_cast<GSRow*>(resource);
@@ -15045,7 +16269,7 @@ GSBinding GSRowTag::createBinding(
 			dest.entryCount = 0;
 			return dest;
 		}
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 	}
 
 	for (size_t i = 0; i < columnCount; i++) {
@@ -15063,7 +16287,7 @@ GSBinding GSRowTag::createBinding(
 		typedef RowMapper::TypeOptionMask TypeOptionMask;
 		if ((columnInfo.options &
 				~TypeOptionMask::MASK_GENERAL_SUPPORTED) != 0) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 		}
 
 		entry.options = columnInfo.options;
@@ -15104,11 +16328,13 @@ void GSRowTag::getContainerSchema(RowMapper::ContainerInfoRef<> &infoRef) {
 
 GSResult GSRowTag::getContainerSchema(
 		GSRow *row, GSContainerInfo *schemaInfo,
-		const ClientVersion &version) throw() {
+		const ClientVersion &version,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
 	RowMapper::ContainerInfoRef<>::clear(schemaInfo, version);
 
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(row);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, row, schemaInfo);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(row);
@@ -15126,11 +16352,13 @@ GSResult GSRowTag::getContainerSchema(
 }
 
 template<typename Traits>
-GSResult GSRowTag::getPrimitiveField(GSRow *row, int32_t columnId,
-		typename Traits::Object *value) throw() {
+GSResult GSRowTag::getPrimitiveField(
+		GSRow *row, int32_t columnId, typename Traits::Object *value,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(
 			value, typename Traits::Object());
 	GSResourceHeader::clearLastError(row);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, row, columnId, value);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(row);
@@ -15157,11 +16385,15 @@ GSResult GSRowTag::getPrimitiveField(GSRow *row, int32_t columnId,
 }
 
 template<typename Traits>
-GSResult GSRowTag::getArrayField(GSRow *row, int32_t columnId,
-		typename Traits::Object *value, size_t *arraySize) throw() {
+GSResult GSRowTag::getArrayField(
+		GSRow *row, int32_t columnId, typename Traits::Object *value,
+		size_t *arraySize,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT2(
 			value, typename Traits::Object(), arraySize, size_t());
 	GSResourceHeader::clearLastError(row);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(
+			funcInfo, row, columnId, value, arraySize);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(row);
@@ -15194,10 +16426,12 @@ GSResult GSRowTag::getArrayField(GSRow *row, int32_t columnId,
 }
 
 template<typename Traits>
-GSResult GSRowTag::setPrimitiveField(GSRow *row, int32_t columnId,
-		typename Traits::Object value) throw() {
+GSResult GSRowTag::setPrimitiveField(
+		GSRow *row, int32_t columnId, typename Traits::Object value,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(row);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, row, columnId, value);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(row);
@@ -15223,10 +16457,14 @@ GSResult GSRowTag::setPrimitiveField(GSRow *row, int32_t columnId,
 }
 
 template<typename Traits>
-GSResult GSRowTag::setArrayField(GSRow *row, int32_t columnId,
-		typename Traits::Object value, size_t arraySize) throw() {
+GSResult GSRowTag::setArrayField(
+		GSRow *row, int32_t columnId, typename Traits::Object value,
+		size_t arraySize,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(row);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(
+			funcInfo, row, columnId, value, arraySize);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(row);
@@ -15320,13 +16558,13 @@ void GSRowTag::deallocate(void *varData) {
 
 GSRowTag::GSRowTag(
 		void *parentResource, RowMapper::Reference mapper, size_t objectSize) :
-		resourceHeader_(GSResourceType::ROW),
+		resourceHeader_(GSResourceType::ROW, parentResource, NULL),
 		parentResource_(parentResource),
 		mapper_(mapper),
 		varDataPool_(NULL) {
 	if (!mapper_->isGeneral()) {
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 	assert(objectSize == mapper_->getGeneralRowSize());
 	(void) objectSize;
@@ -15351,7 +16589,7 @@ GSRowTag::GSRowTag(
 	GSResourceType::Id type;
 	if (!GSResourceHeader::getType(parentResource_, type)) {
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 
 	switch (type) {
@@ -15363,7 +16601,7 @@ GSRowTag::GSRowTag(
 		break;
 	default:
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 }
 
@@ -15381,7 +16619,7 @@ GSRowTag::~GSRowTag() {
 	GSResourceType::Id type;
 	if (!GSResourceHeader::getType(parentResource_, type)) {
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 
 	switch (type) {
@@ -15421,7 +16659,7 @@ const GSBindingEntry& GSRowTag::getBindingEntry(int32_t columnId) const {
 	const GSBinding &binding = mapper_->getBinding();
 	if (columnId < 0 ||
 			binding.entryCount <= static_cast<size_t>(columnId)) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 				"Column number out of bounds (" <<
 				"columnNumber=" << columnId << ", " <<
 				"columnCount=" << binding.entryCount << ")");
@@ -15447,7 +16685,7 @@ RowMapper::VarDataPool& GSRowTag::getVarDataPool() {
 		return static_cast<GSContainer*>(parentResource_)->getVarDataPool();
 	default:
 		assert(false);
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 }
 
@@ -15462,7 +16700,7 @@ GSType GSRowTag::checkType(
 		if (!overwriting &&
 				expectedType != NULL && *expectedType != actualType &&
 				*expectedType != RowMapper::ANY_NULL_TYPE) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 		}
 	}
 	else {
@@ -15483,7 +16721,7 @@ GSType GSRowTag::checkType(
 						RowMapper::toNonNullable(columnType)) &&
 					(!RowMapper::isAny(*expectedType) ||
 							!RowMapper::isNullable(entry))) {
-				UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 			}
 		}
 	}
@@ -15787,11 +17025,11 @@ struct GSRowTag::DirectFieldSetter<Traits, false> {
 
 GSRowKeyPredicateTag::GSRowKeyPredicateTag(
 		GSGridStore &store, GSType keyType) :
-		resourceHeader_(GSResourceType::ROW_KEY_PREDICATE),
+		resourceHeader_(GSResourceType::ROW_KEY_PREDICATE, &store, NULL),
 		store_(&store),
 		keyType_(keyType) {
 	if (!RowMapper::isKeyType(keyType)) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
 	}
 	store_->createReference(this);
 }
@@ -15820,10 +17058,11 @@ void GSRowKeyPredicateTag::close(GSRowKeyPredicate **predicate) throw() {
 
 template<typename Traits, GSRowKeyPredicate::RangeElementType RangeType>
 GSResult GSRowKeyPredicateTag::getRangeKey(
-		GSRowKeyPredicate *predicate,
-		const typename Traits::Object **key) throw() {
+		GSRowKeyPredicate *predicate, const typename Traits::Object **key,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(key, NULL);
 	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, predicate, key);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
@@ -15851,10 +17090,11 @@ GSResult GSRowKeyPredicateTag::getRangeKey(
 
 template<typename Traits, GSRowKeyPredicate::RangeElementType RangeType>
 GSResult GSRowKeyPredicateTag::setRangeKey(
-		GSRowKeyPredicate *predicate,
-		const typename Traits::Object *key) throw() {
+		GSRowKeyPredicate *predicate, const typename Traits::Object *key,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, predicate, key);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
@@ -15878,9 +17118,11 @@ GSResult GSRowKeyPredicateTag::setRangeKey(
 template<typename Traits>
 GSResult GSRowKeyPredicateTag::getDistinctKeys(
 		GSRowKeyPredicate *predicate,
-		const typename Traits::Object **keyList, size_t *size) throw() {
+		const typename Traits::Object **keyList, size_t *size,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT2(keyList, NULL, size, 0);
 	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, predicate, keyList, size);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
@@ -15907,10 +17149,11 @@ GSResult GSRowKeyPredicateTag::getDistinctKeys(
 
 template<typename Traits>
 GSResult GSRowKeyPredicateTag::addDistinctKey(
-		GSRowKeyPredicate *predicate,
-		typename Traits::Object key) throw() {
+		GSRowKeyPredicate *predicate, typename Traits::Object key,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, predicate, key);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
@@ -16046,7 +17289,7 @@ bool GSRowKeyPredicateTag::KeyLess::operator()(
 	case GS_TYPE_TIMESTAMP:
 		return key1.asTimestamp < key2.asTimestamp;
 	default:
-		UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 }
 
@@ -16056,7 +17299,7 @@ void GSRowKeyPredicateTag::checkKeyType(const GSType *expectedType) const {
 	}
 
 	if (*expectedType != keyType_) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 }
 
@@ -16098,7 +17341,7 @@ void GSRowKeyPredicateTag::clearKey(GSValue &value) {
 
 
 GSPartitionControllerTag::GSPartitionControllerTag(GSGridStore &store) :
-		resourceHeader_(GSResourceType::PARTITION_CONTROLLER),
+		resourceHeader_(GSResourceType::PARTITION_CONTROLLER, &store, NULL),
 		store_(&store) {
 	store_->createReference(this);
 }
@@ -16150,7 +17393,8 @@ int64_t GSPartitionControllerTag::getContainerCount(int32_t partitionIndex) {
 	int64_t totalCount;
 	respIn >> totalCount;
 	if (totalCount < 0) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+				"Negative result by protocol error");
 	}
 
 	return totalCount;
@@ -16189,7 +17433,7 @@ void GSPartitionControllerTag::getContainerNames(int32_t partitionIndex,
 	respIn >> entryCount;
 	if (entryCount < 0 ||
 			static_cast<size_t>(entryCount) > respIn.base().remaining()) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 	}
 
 	const GSChar **nameListBase;
@@ -16306,7 +17550,7 @@ void GSPartitionControllerTag::assignPreferableHost(
 			sockAddress.assign(host, static_cast<uint16_t>(0));
 		}
 		catch (std::exception &e) {
-			UTIL_RETHROW(GS_ERROR_CC_ILLEGAL_PARAMETER, e, "");
+			GS_CLIENT_RETHROW_ERROR(e, "");
 		}
 		sockAddressPtr = &sockAddress;
 	}
@@ -16323,7 +17567,7 @@ void GSPartitionControllerTag::checkPartitionIndex(int32_t partitionIndex) {
 	if (partitionIndex < 0 ||
 			partitionIndex >= store_->getChannel().getPartitionCount(
 					store_->getContext())) {
-		UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 }
 
@@ -16384,6 +17628,7 @@ GSResult GS_API_CALL gsCompatibleFunc_GetGridStore1(
 		const GSPropertyEntry *properties, GSGridStore **store) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(store, NULL);
 	GSResourceHeader::clearLastError(factory);
+	GS_CLIENT_INTERCEPT_API_CALL(factory, properties, store);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -16392,7 +17637,7 @@ GSResult GS_API_CALL gsCompatibleFunc_GetGridStore1(
 			factory = gsGetDefaultFactory();
 		}
 		if (properties == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 		*store = factory->getGridStore(properties, NULL);
 	}
@@ -16411,6 +17656,7 @@ GSResult GS_API_CALL gsGetGridStore(
 		GSGridStore **store) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(store, NULL);
 	GSResourceHeader::clearLastError(factory);
+	GS_CLIENT_INTERCEPT_API_CALL(factory, properties, propertyCount, store);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -16419,7 +17665,7 @@ GSResult GS_API_CALL gsGetGridStore(
 			factory = gsGetDefaultFactory();
 		}
 		if (properties == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 		*store = factory->getGridStore(properties, &propertyCount);
 	}
@@ -16436,13 +17682,14 @@ GSResult GS_API_CALL gsCompatibleFunc_SetFactoryProperties1(
 		GSGridStoreFactory *factory, const GSPropertyEntry *properties) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(factory);
+	GS_CLIENT_INTERCEPT_API_CALL(factory, properties);
 
 	try {
 		if (factory == NULL) {
 			factory = gsGetDefaultFactory();
 		}
 		if (properties == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 		factory->setProperties(properties, NULL);
 	}
@@ -16457,13 +17704,14 @@ GSResult GS_API_CALL gsSetFactoryProperties(
 		size_t propertyCount) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(factory);
+	GS_CLIENT_INTERCEPT_API_CALL(factory, properties, propertyCount);
 
 	try {
 		if (factory == NULL) {
 			factory = gsGetDefaultFactory();
 		}
 		if (properties == NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
 		factory->setProperties(properties, &propertyCount);
 	}
@@ -16484,6 +17732,7 @@ GSResult GS_API_CALL gsDropCollection(
 		GSGridStore *store, const GSChar *name) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, name);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -16501,6 +17750,7 @@ GSResult GS_API_CALL gsDropTimeSeries(
 		GSGridStore *store, const GSChar *name) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, name);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -16519,6 +17769,7 @@ GSResult GS_API_CALL gsGetRowByPath(
 		GSBool *exists) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(exists, GS_FALSE);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, pathKey, rowObj, exists);
 
 	GSBool existsStorage;
 	if (exists == NULL) {
@@ -16544,6 +17795,7 @@ GSResult GS_API_CALL gsGetCollection(
 		const GSBinding *binding, GSCollection **collection) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(collection, NULL);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, name, binding, collection);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -16566,28 +17818,32 @@ GSResult GS_API_CALL gsGetContainerInfo(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists) {
 	return GSGridStore::getContainerInfo(
-			store, name, info, exists, ClientVersion(1, 0));
+			store, name, info, exists, ClientVersion(1, 0),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsGetContainerInfoV1_5(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists) {
 	return GSGridStore::getContainerInfo(
-			store, name, info, exists, ClientVersion(1, 5));
+			store, name, info, exists, ClientVersion(1, 5),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsGetContainerInfoV2_1(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists) {
 	return GSGridStore::getContainerInfo(
-			store, name, info, exists, ClientVersion(2, 1));
+			store, name, info, exists, ClientVersion(2, 1),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsGetContainerInfoV3_3(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists) {
 	return GSGridStore::getContainerInfo(
-			store, name, info, exists, ClientVersion(3, 5));
+			store, name, info, exists, ClientVersion(3, 5),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsGetTimeSeries(
@@ -16595,6 +17851,7 @@ GSResult GS_API_CALL gsGetTimeSeries(
 		const GSBinding *binding, GSTimeSeries **timeSeries) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(timeSeries, NULL);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, name, binding, timeSeries);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -16618,6 +17875,7 @@ GSResult GS_API_CALL gsPutRowByPath(
 		GSBool *exists) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(exists, GS_FALSE);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, pathKey, rowObj, exists);
 
 	GSBool existsStorage;
 	if (exists == NULL) {
@@ -16644,7 +17902,7 @@ GSResult GS_API_CALL gsPutContainer(
 		GSBool modifiable, GSContainer **container) {
 	return GSGridStore::putContainer(
 			store, name, true, binding, info, modifiable, container, NULL,
-			ClientVersion(1, 0));
+			ClientVersion(1, 0), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsPutCollection(
@@ -16655,7 +17913,8 @@ GSResult GS_API_CALL gsPutCollection(
 	(void) properties;
 	return GSGridStore::putContainer(
 			store, name, true, binding, NULL, modifiable, collection,
-			&containerType, ClientVersion(1, 0));
+			&containerType, ClientVersion(1, 0),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsCompatibleFunc_PutTimeSeries1(
@@ -16664,10 +17923,12 @@ GSResult GS_API_CALL gsCompatibleFunc_PutTimeSeries1(
 		GSBool modifiable, GSTimeSeries **timeSeries) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(timeSeries, NULL);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(
+			store, name, binding, properties, modifiable, timeSeries);
 
 	try {
 		if (properties != NULL) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION,
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION,
 					"Operation not supported for old properties struct");
 		}
 		return gsPutTimeSeries(
@@ -16692,7 +17953,8 @@ GSResult GS_API_CALL gsPutTimeSeries(
 
 	return GSGridStore::putContainer(
 			store, name, true, binding, &info, modifiable, timeSeries,
-			NULL, ClientVersion(1, 5));
+			NULL, ClientVersion(1, 5),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsPutTimeSeriesV2_0(
@@ -16705,13 +17967,15 @@ GSResult GS_API_CALL gsPutTimeSeriesV2_0(
 
 	return GSGridStore::putContainer(
 			store, name, true, binding, &info, modifiable, timeSeries,
-			NULL, ClientVersion(2, 0));
+			NULL, ClientVersion(2, 0),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsRemoveRowByPath(
 		GSGridStore *store, const GSChar *pathKey, GSBool *exists) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(exists, GS_FALSE);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, pathKey, exists);
 
 	GSBool existsStorage;
 	if (exists == NULL) {
@@ -16735,6 +17999,7 @@ GSResult GS_API_CALL gsDeleteRowByPath(
 		GSGridStore *store, const GSChar *pathKey, GSBool *exists) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(exists, GS_FALSE);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, pathKey, exists);
 
 	GSBool existsStorage;
 	if (exists == NULL) {
@@ -16760,7 +18025,7 @@ GSResult GS_API_CALL gsPutContainerGeneral(
 		GSBool modifiable, GSContainer **container) {
 	return GSGridStore::putContainer(
 			store, name, info, modifiable, container, NULL,
-			ClientVersion(1, 5));
+			ClientVersion(1, 5), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsPutContainerGeneralV2_0(
@@ -16769,7 +18034,7 @@ GSResult GS_API_CALL gsPutContainerGeneralV2_0(
 		GSBool modifiable, GSContainer **container) {
 	return GSGridStore::putContainer(
 			store, name, info, modifiable, container, NULL,
-			ClientVersion(2, 0));
+			ClientVersion(2, 0), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsPutContainerGeneralV2_1(
@@ -16778,7 +18043,7 @@ GSResult GS_API_CALL gsPutContainerGeneralV2_1(
 		GSBool modifiable, GSContainer **container) {
 	return GSGridStore::putContainer(
 			store, name, info, modifiable, container, NULL,
-			ClientVersion(2, 1));
+			ClientVersion(2, 1), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsPutContainerGeneralV3_3(
@@ -16787,13 +18052,14 @@ GSResult GS_API_CALL gsPutContainerGeneralV3_3(
 		GSBool modifiable, GSContainer **container) {
 	return GSGridStore::putContainer(
 			store, name, info, modifiable, container, NULL,
-			ClientVersion(3, 5));
+			ClientVersion(3, 5), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsGetContainerGeneral(
 		GSGridStore *store, const GSChar *name, GSContainer **container) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(container, NULL);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, name, container);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -16818,7 +18084,7 @@ GSResult GS_API_CALL gsPutCollectionGeneral(
 	const GSContainerType containerType = GS_CONTAINER_COLLECTION;
 	return GSGridStore::putContainer(
 			store, name, info, modifiable, collection, &containerType,
-			ClientVersion(1, 5));
+			ClientVersion(1, 5), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsPutCollectionGeneralV2_1(
@@ -16828,7 +18094,7 @@ GSResult GS_API_CALL gsPutCollectionGeneralV2_1(
 	const GSContainerType containerType = GS_CONTAINER_COLLECTION;
 	return GSGridStore::putContainer(
 			store, name, info, modifiable, collection, &containerType,
-			ClientVersion(2, 1));
+			ClientVersion(2, 1), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsPutCollectionGeneralV3_3(
@@ -16838,13 +18104,14 @@ GSResult GS_API_CALL gsPutCollectionGeneralV3_3(
 	const GSContainerType containerType = GS_CONTAINER_COLLECTION;
 	return GSGridStore::putContainer(
 			store, name, info, modifiable, collection, &containerType,
-			ClientVersion(3, 5));
+			ClientVersion(3, 5), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsGetCollectionGeneral(
 		GSGridStore *store, const GSChar *name, GSCollection **collection) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(collection, NULL);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, name, collection);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -16870,7 +18137,7 @@ GSResult GS_API_CALL gsPutTimeSeriesGeneral(
 	const GSContainerType containerType = GS_CONTAINER_TIME_SERIES;
 	return GSGridStore::putContainer(
 			store, name, info, modifiable, timeSeries, &containerType,
-			ClientVersion(1, 5));
+			ClientVersion(1, 5), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsPutTimeSeriesGeneralV2_0(
@@ -16880,7 +18147,7 @@ GSResult GS_API_CALL gsPutTimeSeriesGeneralV2_0(
 	const GSContainerType containerType = GS_CONTAINER_TIME_SERIES;
 	return GSGridStore::putContainer(
 			store, name, info, modifiable, timeSeries, &containerType,
-			ClientVersion(2, 0));
+			ClientVersion(2, 0), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsPutTimeSeriesGeneralV2_1(
@@ -16890,7 +18157,7 @@ GSResult GS_API_CALL gsPutTimeSeriesGeneralV2_1(
 	const GSContainerType containerType = GS_CONTAINER_TIME_SERIES;
 	return GSGridStore::putContainer(
 			store, name, info, modifiable, timeSeries, &containerType,
-			ClientVersion(2, 1));
+			ClientVersion(2, 1), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsPutTimeSeriesGeneralV3_3(
@@ -16900,13 +18167,14 @@ GSResult GS_API_CALL gsPutTimeSeriesGeneralV3_3(
 	const GSContainerType containerType = GS_CONTAINER_TIME_SERIES;
 	return GSGridStore::putContainer(
 			store, name, info, modifiable, timeSeries, &containerType,
-			ClientVersion(3, 5));
+			ClientVersion(3, 5), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsGetTimeSeriesGeneral(
 		GSGridStore *store, const GSChar *name, GSTimeSeries **timeSeries) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(timeSeries, NULL);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, name, timeSeries);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -16929,6 +18197,7 @@ GSResult GS_API_CALL gsDropContainer(
 		GSGridStore *store, const GSChar *name) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, name);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -16944,18 +18213,23 @@ GSResult GS_API_CALL gsDropContainer(
 
 GSResult GS_API_CALL gsCreateRowByStore(
 		GSGridStore *store, const GSContainerInfo *info, GSRow **row) {
-	return GSGridStore::createRow(store, info, row, ClientVersion(1, 5));
+	return GSGridStore::createRow(
+			store, info, row, ClientVersion(1, 5),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsCreateRowByStoreV3_3(
 		GSGridStore *store, const GSContainerInfo *info, GSRow **row) {
-	return GSGridStore::createRow(store, info, row, ClientVersion(3, 5));
+	return GSGridStore::createRow(
+			store, info, row, ClientVersion(3, 5),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsFetchAll(
 		GSGridStore *store, GSQuery *const *queryList, size_t queryCount) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, queryList, queryCount);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -16973,6 +18247,7 @@ GSResult GS_API_CALL gsPutMultipleContainerRows(
 		size_t entryCount) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, entryList, entryCount);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -16993,6 +18268,8 @@ GSResult GS_API_CALL gsGetMultipleContainerRows(
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT2(
 			entryList, NULL, entryCount, 0);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(
+			store, predicateList, predicateCount, entryList, entryCount);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -17018,6 +18295,7 @@ GSResult GS_API_CALL gsGetPartitionController(
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(
 			partitionController, NULL);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, partitionController);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -17038,6 +18316,7 @@ GSResult GS_API_CALL gsCreateRowKeyPredicate(
 		GSGridStore *store, GSType keyType, GSRowKeyPredicate **predicate) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(predicate, NULL);
 	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL(store, keyType, predicate);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(store);
@@ -17065,6 +18344,7 @@ GSResult GS_API_CALL gsCreateEventNotification(
 		GSContainer *container, const GSChar *url) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, url);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -17082,6 +18362,7 @@ GSResult GS_API_CALL gsCreateTrigger(
 		GSContainer *container, const GSTriggerInfo *info) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, info);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -17100,6 +18381,7 @@ GSResult GS_API_CALL gsCreateIndex(
 		const GSChar *columnName, GSIndexTypeFlags flags) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, columnName, flags);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -17117,6 +18399,7 @@ GSResult GS_API_CALL gsCreateIndexDetail(
 		GSContainer *container, const GSIndexInfo *info) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, info);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -17134,6 +18417,7 @@ GSResult GS_API_CALL gsDropEventNotification(
 		GSContainer *container, const GSChar *url) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, url);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -17151,6 +18435,7 @@ GSResult GS_API_CALL gsDropTrigger(
 		GSContainer *container, const GSChar *name) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, name);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -17169,6 +18454,7 @@ GSResult GS_API_CALL gsDropIndex(
 		const GSChar *columnName, GSIndexTypeFlags flags) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, columnName, flags);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -17186,6 +18472,7 @@ GSResult GS_API_CALL gsDropIndexDetail(
 		GSContainer *container, const GSIndexInfo *info) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, info);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -17202,6 +18489,7 @@ GSResult GS_API_CALL gsDropIndexDetail(
 GSResult GS_API_CALL gsFlush(GSContainer *container) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -17217,14 +18505,16 @@ GSResult GS_API_CALL gsFlush(GSContainer *container) {
 GSResult GS_API_CALL gsGetRow(
 		GSContainer *container, const void *key, void *rowObj, GSBool *exists) {
 	return GSContainer::getRowChecked<GSContainer::AnyKeyTraits>(
-			container, key, rowObj, GS_FALSE, exists);
+			container, key, rowObj, GS_FALSE, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsPutRow(
 		GSContainer *container, const void *key, const void *rowObj,
 		GSBool *exists) {
 	return GSContainer::putRowChecked<GSContainer::AnyKeyTraits>(
-			container, key, rowObj, exists);
+			container, key, rowObj, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsCompatibleFunc_PutMultipleRows1(
@@ -17232,6 +18522,7 @@ GSResult GS_API_CALL gsCompatibleFunc_PutMultipleRows1(
 		GSBool *exists) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(exists, GS_FALSE);
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, rowCount, rowObjs, exists);
 
 	GSBool existsStorage;
 	if (exists == NULL) {
@@ -17255,6 +18546,7 @@ GSResult GS_API_CALL gsPutMultipleRows(
 		GSBool *exists) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(exists, GS_FALSE);
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, rowObjs, rowCount, exists);
 
 	GSBool existsStorage;
 	if (exists == NULL) {
@@ -17277,6 +18569,7 @@ GSResult GS_API_CALL gsQuery(GSContainer *container,
 		const GSChar *queryString, GSQuery **query) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(query, NULL);
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, queryString, query);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -17302,7 +18595,8 @@ GSResult GS_API_CALL gsRemoveRow(
 GSResult GS_API_CALL gsDeleteRow(
 		GSContainer *container, const void *key, GSBool *exists) {
 	return GSContainer::removeRowChecked<GSContainer::AnyKeyTraits>(
-			container, key, exists);
+			container, key, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerType(
@@ -17329,6 +18623,7 @@ GSResult GS_API_CALL gsCreateRowByContainer(
 		GSContainer *container, GSRow **row) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(row, NULL);
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, row);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -17349,6 +18644,7 @@ GSResult GS_API_CALL gsCreateRowByContainer(
 GSResult GS_API_CALL gsAbort(GSContainer *container) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -17364,6 +18660,7 @@ GSResult GS_API_CALL gsAbort(GSContainer *container) {
 GSResult GS_API_CALL gsCommit(GSContainer *container) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -17379,13 +18676,15 @@ GSResult GS_API_CALL gsCommit(GSContainer *container) {
 GSResult GS_API_CALL gsGetRowForUpdate(GSContainer *container,
 		const void *key, void *rowObj, GSBool *exists) {
 	return GSContainer::getRowChecked<GSContainer::AnyKeyTraits>(
-			container, key, rowObj, GS_TRUE, exists);
+			container, key, rowObj, GS_TRUE, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsSetAutoCommit(
 		GSContainer *container, GSBool enabled) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, enabled);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -17404,7 +18703,8 @@ GSResult GS_API_CALL gsGetRowByInteger(
 		GSBool forUpdate, GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, false> Traits;
 	return GSContainer::getRowChecked<Traits>(
-			container, &key, rowObj, forUpdate, exists);
+			container, &key, rowObj, forUpdate, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsGetRowByLong(
@@ -17412,7 +18712,8 @@ GSResult GS_API_CALL gsGetRowByLong(
 		GSBool forUpdate, GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, false> Traits;
 	return GSContainer::getRowChecked<Traits>(
-			container, &key, rowObj, forUpdate, exists);
+			container, &key, rowObj, forUpdate, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsGetRowByTimestamp(
@@ -17420,7 +18721,8 @@ GSResult GS_API_CALL gsGetRowByTimestamp(
 		GSBool forUpdate, GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, false> Traits;
 	return GSContainer::getRowChecked<Traits>(
-			container, &key, rowObj, forUpdate, exists);
+			container, &key, rowObj, forUpdate, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsGetRowByString(
@@ -17428,7 +18730,8 @@ GSResult GS_API_CALL gsGetRowByString(
 		GSBool forUpdate, GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, false> Traits;
 	return GSContainer::getRowChecked<Traits>(
-			container, &key, rowObj, forUpdate, exists);
+			container, &key, rowObj, forUpdate, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsPutRowByInteger(
@@ -17436,7 +18739,8 @@ GSResult GS_API_CALL gsPutRowByInteger(
 		GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, false> Traits;
 	return GSContainer::putRowChecked<Traits>(
-			container, &key, rowObj, exists);
+			container, &key, rowObj, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsPutRowByLong(
@@ -17444,7 +18748,8 @@ GSResult GS_API_CALL gsPutRowByLong(
 		GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, false> Traits;
 	return GSContainer::putRowChecked<Traits>(
-			container, &key, rowObj, exists);
+			container, &key, rowObj, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsPutRowByTimestamp(
@@ -17452,7 +18757,8 @@ GSResult GS_API_CALL gsPutRowByTimestamp(
 		GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, false> Traits;
 	return GSContainer::putRowChecked<Traits>(
-			container, &key, rowObj, exists);
+			container, &key, rowObj, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsPutRowByString(
@@ -17460,55 +18766,64 @@ GSResult GS_API_CALL gsPutRowByString(
 		GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, false> Traits;
 	return GSContainer::putRowChecked<Traits>(
-			container, &key, rowObj, exists);
+			container, &key, rowObj, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsRemoveRowByInteger(
 		GSContainer *container, int32_t key, GSBool *exists) {
-	return gsDeleteRowByInteger(container, key, exists);
+	return gsDeleteRowByInteger(
+			container, key, exists);
 }
 
 GSResult GS_API_CALL gsRemoveRowByLong(
 		GSContainer *container, int64_t key, GSBool *exists) {
-	return gsDeleteRowByLong(container, key, exists);
+	return gsDeleteRowByLong(
+			container, key, exists);
 }
 
 GSResult GS_API_CALL gsRemoveRowByTimestamp(
 		GSContainer *container, GSTimestamp key, GSBool *exists) {
-	return gsDeleteRowByTimestamp(container, key, exists);
+	return gsDeleteRowByTimestamp(
+			container, key, exists);
 }
 
 GSResult GS_API_CALL gsRemoveRowByString(
 		GSContainer *container, const GSChar *key, GSBool *exists) {
-	return gsDeleteRowByString(container, key, exists);
+	return gsDeleteRowByString(
+			container, key, exists);
 }
 
 GSResult GS_API_CALL gsDeleteRowByInteger(
 		GSContainer *container, int32_t key, GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, false> Traits;
 	return GSContainer::removeRowChecked<Traits>(
-			container, &key, exists);
+			container, &key, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsDeleteRowByLong(
 		GSContainer *container, int64_t key, GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, false> Traits;
 	return GSContainer::removeRowChecked<Traits>(
-			container, &key, exists);
+			container, &key, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsDeleteRowByTimestamp(
 		GSContainer *container, GSTimestamp key, GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, false> Traits;
 	return GSContainer::removeRowChecked<Traits>(
-			container, &key, exists);
+			container, &key, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsDeleteRowByString(
 		GSContainer *container, const GSChar *key, GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, false> Traits;
 	return GSContainer::removeRowChecked<Traits>(
-			container, &key, exists);
+			container, &key, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 
@@ -17517,6 +18832,8 @@ GSResult GS_API_CALL gsQueryByGeometry(
 		GSGeometryOperator geometryOp, GSQuery **query) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(query, NULL);
 	GSResourceHeader::clearLastError(collection);
+	GS_CLIENT_INTERCEPT_API_CALL(
+			collection, column, geometry, geometryOp, query);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(collection);
@@ -17550,6 +18867,8 @@ GSResult GS_API_CALL gsQueryByGeometryWithDisjointCondition(
 		GSQuery **query) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(query, NULL);
 	GSResourceHeader::clearLastError(collection);
+	GS_CLIENT_INTERCEPT_API_CALL(
+			collection, column, geometryIntersection, geometryDisjoint, query);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(collection);
@@ -17577,6 +18896,8 @@ GSResult GS_API_CALL gsAggregateTimeSeries(
 		GSAggregationResult **aggregationResult) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(aggregationResult, NULL);
 	GSResourceHeader::clearLastError(timeSeries);
+	GS_CLIENT_INTERCEPT_API_CALL(
+			timeSeries, start, end, column, aggregation, aggregationResult);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(timeSeries);
@@ -17598,6 +18919,7 @@ GSResult GS_API_CALL gsAppendTimeSeriesRow(
 		GSTimeSeries *timeSeries, const void *rowObj, GSBool *exists) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(exists, GS_FALSE);
 	GSResourceHeader::clearLastError(timeSeries);
+	GS_CLIENT_INTERCEPT_API_CALL(timeSeries, rowObj, exists);
 
 	GSBool existsStorage;
 	if (exists == NULL) {
@@ -17622,6 +18944,7 @@ GSResult GS_API_CALL gsGetRowByBaseTime(
 		void *rowObj, GSBool *exists) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(exists, GS_FALSE);
 	GSResourceHeader::clearLastError(timeSeries);
+	GS_CLIENT_INTERCEPT_API_CALL(timeSeries, base, timeOp, rowObj, exists);
 
 	GSBool existsStorage;
 	if (exists == NULL) {
@@ -17646,6 +18969,7 @@ GSResult GS_API_CALL gsInterpolateTimeSeriesRow(
 		void *rowObj, GSBool *exists) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(exists, GS_FALSE);
 	GSResourceHeader::clearLastError(timeSeries);
+	GS_CLIENT_INTERCEPT_API_CALL(timeSeries, base, column, rowObj, exists);
 
 	GSBool existsStorage;
 	if (exists == NULL) {
@@ -17670,6 +18994,7 @@ GSResult GS_API_CALL gsQueryByTimeSeriesRange(
 		GSQuery **query) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(query, NULL);
 	GSResourceHeader::clearLastError(timeSeries);
+	GS_CLIENT_INTERCEPT_API_CALL(timeSeries, start, end, query);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(timeSeries);
@@ -17692,6 +19017,7 @@ GSResult GS_API_CALL gsQueryByTimeSeriesOrderedRange(
 		GSQueryOrder order, GSQuery **query) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(query, NULL);
 	GSResourceHeader::clearLastError(timeSeries);
+	GS_CLIENT_INTERCEPT_API_CALL(timeSeries, start, end, order, query);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(timeSeries);
@@ -17714,6 +19040,8 @@ GSResult GS_API_CALL gsCompatibleFunc_QueryByTimeSeriesSampling1(
 		GSQuery **query) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(query, NULL);
 	GSResourceHeader::clearLastError(timeSeries);
+	GS_CLIENT_INTERCEPT_API_CALL(
+			timeSeries, start, end, columnSet, interval, intervalUnit, query);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(timeSeries);
@@ -17741,6 +19069,8 @@ GSResult GS_API_CALL gsQueryByTimeSeriesSampling(
 		GSQuery **query) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(query, NULL);
 	GSResourceHeader::clearLastError(timeSeries);
+	GS_CLIENT_INTERCEPT_API_CALL(
+			timeSeries, start, end, columnSet, columnCount, mode, interval, intervalUnit, query);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(timeSeries);
@@ -17769,19 +19099,22 @@ void GS_API_CALL gsCloseRow(GSRow **row) {
 GSResult GS_API_CALL gsGetRowSchema(
 		GSRow *row, GSContainerInfo *schemaInfo) {
 	return GSRow::getContainerSchema(
-			row, schemaInfo, ClientVersion(1, 5));
+			row, schemaInfo, ClientVersion(1, 5),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV2_1(
 		GSRow *row, GSContainerInfo *schemaInfo) {
 	return GSRow::getContainerSchema(
-			row, schemaInfo, ClientVersion(2, 1));
+			row, schemaInfo, ClientVersion(2, 1),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV3_3(
 		GSRow *row, GSContainerInfo *schemaInfo) {
 	return GSRow::getContainerSchema(
-			row, schemaInfo, ClientVersion(3, 5));
+			row, schemaInfo, ClientVersion(3, 5),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldGeneral(
@@ -17789,6 +19122,7 @@ GSResult GS_API_CALL gsSetRowFieldGeneral(
 		GSType type) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(row);
+	GS_CLIENT_INTERCEPT_API_CALL(row, column, fieldValue, type);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(row);
@@ -17811,6 +19145,7 @@ GSResult GS_API_CALL gsGetRowFieldGeneral(
 
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(type, GS_TYPE_STRING);
 	GSResourceHeader::clearLastError(row);
+	GS_CLIENT_INTERCEPT_API_CALL(row, column, fieldValue, type);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(row);
@@ -17835,6 +19170,7 @@ GSResult GS_API_CALL gsGetRowFieldGeneral(
 GSResult GS_API_CALL gsSetRowFieldNull(GSRow *row, int32_t column) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(row);
+	GS_CLIENT_INTERCEPT_API_CALL(row, column);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(row);
@@ -17852,6 +19188,7 @@ GSResult GS_API_CALL gsGetRowFieldNull(
 		GSRow *row, int32_t column, GSBool *nullValue) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(nullValue, GS_FALSE);
 	GSResourceHeader::clearLastError(row);
+	GS_CLIENT_INTERCEPT_API_CALL(row, column, nullValue);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(row);
@@ -17872,127 +19209,168 @@ GSResult GS_API_CALL gsGetRowFieldNull(
 GSResult GS_API_CALL gsSetRowFieldByString(
 		GSRow *row, int32_t column, const GSChar *fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, false> Traits;
-	return GSRow::setPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::setPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsString(
 		GSRow *row, int32_t column, const GSChar **fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, false> Traits;
-	return GSRow::getPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::getPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByBool(
 		GSRow *row, int32_t column, GSBool fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_BOOL, false> Traits;
-	return GSRow::setPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::setPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsBool(
 		GSRow *row, int32_t column, GSBool *fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_BOOL, false> Traits;
-	return GSRow::getPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::getPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByByte(
 		GSRow *row, int32_t column, int8_t fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_BYTE, false> Traits;
-	return GSRow::setPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::setPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsByte(
 		GSRow *row, int32_t column, int8_t *fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_BYTE, false> Traits;
-	return GSRow::getPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::getPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByShort(
 		GSRow *row, int32_t column, int16_t fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_SHORT, false> Traits;
-	return GSRow::setPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::setPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsShort(
 		GSRow *row, int32_t column, int16_t *fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_SHORT, false> Traits;
-	return GSRow::getPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::getPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByInteger(
 		GSRow *row, int32_t column, int32_t fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, false> Traits;
-	return GSRow::setPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::setPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsInteger(
 		GSRow *row, int32_t column, int32_t *fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, false> Traits;
-	return GSRow::getPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::getPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByLong(
 		GSRow *row, int32_t column, int64_t fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, false> Traits;
-	return GSRow::setPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::setPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsLong(
 		GSRow *row, int32_t column, int64_t *fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, false> Traits;
-	return GSRow::getPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::getPrimitiveField<Traits>
+			(row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByFloat(
 		GSRow *row, int32_t column, float fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_FLOAT, false> Traits;
-	return GSRow::setPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::setPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsFloat(
 		GSRow *row, int32_t column, float *fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_FLOAT, false> Traits;
-	return GSRow::getPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::getPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByDouble(
 		GSRow *row, int32_t column, double fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_DOUBLE, false> Traits;
-	return GSRow::setPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::setPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsDouble(
 		GSRow *row, int32_t column, double *fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_DOUBLE, false> Traits;
-	return GSRow::getPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::getPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByTimestamp(
 		GSRow *row, int32_t column, GSTimestamp fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, false> Traits;
-	return GSRow::setPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::setPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsTimestamp(
 		GSRow *row, int32_t column, GSTimestamp *fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, false> Traits;
-	return GSRow::getPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::getPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByGeometry(
 		GSRow *row, int32_t column, const GSChar *fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_GEOMETRY, false> Traits;
-	return GSRow::setPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::setPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsGeometry(
 		GSRow *row, int32_t column, const GSChar **fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_GEOMETRY, false> Traits;
-	return GSRow::getPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::getPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByBlob(
 		GSRow *row, int32_t column, const GSBlob *fieldValue) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(row);
+	GS_CLIENT_INTERCEPT_API_CALL(row, column, fieldValue);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(row);
@@ -18013,133 +19391,170 @@ GSResult GS_API_CALL gsSetRowFieldByBlob(
 GSResult GS_API_CALL gsGetRowFieldAsBlob(
 		GSRow *row, int32_t column, GSBlob *fieldValue) {
 	typedef RowMapper::TypeTraits<GS_TYPE_BLOB, false> Traits;
-	return GSRow::getPrimitiveField<Traits>(row, column, fieldValue);
+	return GSRow::getPrimitiveField<Traits>(
+			row, column, fieldValue,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByStringArray(
 		GSRow *row, int32_t column, const GSChar *const *fieldValue,
 		size_t size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, true> Traits;
-	return GSRow::setArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::setArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsStringArray(
 		GSRow *row, int32_t column, const GSChar *const **fieldValue,
 		size_t *size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, true> Traits;
-	return GSRow::getArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::getArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByBoolArray(
 		GSRow *row, int32_t column, const GSBool *fieldValue,
 		size_t size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_BOOL, true> Traits;
-	return GSRow::setArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::setArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsBoolArray(
 		GSRow *row, int32_t column, const GSBool **fieldValue,
 		size_t *size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_BOOL, true> Traits;
-	return GSRow::getArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::getArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByByteArray(
 		GSRow *row, int32_t column, const int8_t *fieldValue,
 		size_t size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_BYTE, true> Traits;
-	return GSRow::setArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::setArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsByteArray(
 		GSRow *row, int32_t column, const int8_t **fieldValue,
 		size_t *size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_BYTE, true> Traits;
-	return GSRow::getArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::getArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByShortArray(
 		GSRow *row, int32_t column, const int16_t *fieldValue,
 		size_t size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_SHORT, true> Traits;
-	return GSRow::setArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::setArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsShortArray(
 		GSRow *row, int32_t column, const int16_t **fieldValue,
 		size_t *size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_SHORT, true> Traits;
-	return GSRow::getArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::getArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByIntegerArray(
 		GSRow *row, int32_t column, const int32_t *fieldValue,
 		size_t size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, true> Traits;
-	return GSRow::setArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::setArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsIntegerArray(
 		GSRow *row, int32_t column, const int32_t **fieldValue,
 		size_t *size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, true> Traits;
-	return GSRow::getArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::getArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByLongArray(
 		GSRow *row, int32_t column, const int64_t *fieldValue,
 		size_t size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, true> Traits;
-	return GSRow::setArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::setArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsLongArray(
 		GSRow *row, int32_t column, const int64_t **fieldValue,
 		size_t *size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, true> Traits;
-	return GSRow::getArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::getArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByFloatArray(
 		GSRow *row, int32_t column, const float *fieldValue,
 		size_t size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_FLOAT, true> Traits;
-	return GSRow::setArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::setArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsFloatArray(
 		GSRow *row, int32_t column, const float **fieldValue,
 		size_t *size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_FLOAT, true> Traits;
-	return GSRow::getArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::getArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByDoubleArray(
 		GSRow *row, int32_t column, const double *fieldValue,
 		size_t size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_DOUBLE, true> Traits;
-	return GSRow::setArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::setArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsDoubleArray(
 		GSRow *row, int32_t column, const double **fieldValue,
 		size_t *size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_DOUBLE, true> Traits;
-	return GSRow::getArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::getArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsSetRowFieldByTimestampArray(
 		GSRow *row, int32_t column, const GSTimestamp *fieldValue,
 		size_t size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, true> Traits;
-	return GSRow::setArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::setArrayField<Traits>(
+			row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 GSResult GS_API_CALL gsGetRowFieldAsTimestampArray(
 		GSRow *row, int32_t column, const GSTimestamp **fieldValue,
 		size_t *size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, true> Traits;
-	return GSRow::getArrayField<Traits>(row, column, fieldValue, size);
+	return GSRow::getArrayField<Traits>(row, column, fieldValue, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
 
@@ -18153,6 +19568,7 @@ GSResult GS_API_CALL gsFetch(
 		GSQuery *query, GSBool forUpdate, GSRowSet **rowSet) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(rowSet, NULL);
 	GSResourceHeader::clearLastError(query);
+	GS_CLIENT_INTERCEPT_API_CALL(query, forUpdate, rowSet);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(query);
@@ -18174,6 +19590,7 @@ GSResult GS_API_CALL gsSetFetchOption(
 		const void *value, GSType valueType) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(query);
+	GS_CLIENT_INTERCEPT_API_CALL(query, fetchOption, value, valueType);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(query);
@@ -18191,6 +19608,7 @@ GSResult GS_API_CALL gsGetRowSet(
 		GSQuery *query, GSRowSet **rowSet) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(rowSet, NULL);
 	GSResourceHeader::clearLastError(query);
+	GS_CLIENT_INTERCEPT_API_CALL(query, rowSet);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(query);
@@ -18216,6 +19634,7 @@ void GS_API_CALL gsCloseRowSet(GSRowSet **rowSet) {
 GSResult GS_API_CALL gsDeleteCurrentRow(GSRowSet *rowSet) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(rowSet);
+	GS_CLIENT_INTERCEPT_API_CALL(rowSet);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(rowSet);
@@ -18231,6 +19650,7 @@ GSResult GS_API_CALL gsDeleteCurrentRow(GSRowSet *rowSet) {
 GSResult GS_API_CALL gsGetNextRow(GSRowSet *rowSet, void *rowObj) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(rowSet);
+	GS_CLIENT_INTERCEPT_API_CALL(rowSet, rowObj);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(rowSet);
@@ -18248,6 +19668,7 @@ GSResult GS_API_CALL gsGetNextAggregation(
 		GSRowSet *rowSet, GSAggregationResult **aggregationResult) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(aggregationResult, NULL);
 	GSResourceHeader::clearLastError(rowSet);
+	GS_CLIENT_INTERCEPT_API_CALL(rowSet, aggregationResult);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(rowSet);
@@ -18272,6 +19693,7 @@ GSResult GS_API_CALL gsGetNextQueryAnalysis(
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(
 			queryAnalysis, initialQueryAnalysis);
 	GSResourceHeader::clearLastError(rowSet);
+	GS_CLIENT_INTERCEPT_API_CALL(rowSet, queryAnalysis);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(rowSet);
@@ -18337,6 +19759,7 @@ GSResult GS_API_CALL gsUpdateCurrentRow(
 		GSRowSet *rowSet, const void *rowObj) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(rowSet);
+	GS_CLIENT_INTERCEPT_API_CALL(rowSet, rowObj);
 
 	if (rowSet == NULL || rowObj == NULL) {
 		return -1;
@@ -18380,7 +19803,8 @@ GSResult GS_API_CALL gsGetAggregationValueAsLong(
 		GSBool *assigned) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, false> Traits;
 	return GSAggregationResult::getValueTyped<Traits>(
-			aggregationResult, value, assigned);
+			aggregationResult, value, assigned,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(aggregationResult));
 }
 
 GSResult GS_API_CALL gsGetAggregationValueAsDouble(
@@ -18388,7 +19812,8 @@ GSResult GS_API_CALL gsGetAggregationValueAsDouble(
 		GSBool *assigned) {
 	typedef RowMapper::TypeTraits<GS_TYPE_DOUBLE, false> Traits;
 	return GSAggregationResult::getValueTyped<Traits>(
-			aggregationResult, value, assigned);
+			aggregationResult, value, assigned,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(aggregationResult));
 }
 
 GSResult GS_API_CALL gsGetAggregationValueAsTimestamp(
@@ -18396,7 +19821,8 @@ GSResult GS_API_CALL gsGetAggregationValueAsTimestamp(
 		GSBool *assigned) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, false> Traits;
 	return GSAggregationResult::getValueTyped<Traits>(
-			aggregationResult, value, assigned);
+			aggregationResult, value, assigned,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(aggregationResult));
 }
 
 
@@ -18411,6 +19837,7 @@ GSResult GS_API_CALL gsGetPredicateKeyType(
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(
 			keyType, GS_TYPE_STRING);
 	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL(predicate, keyType);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
@@ -18431,6 +19858,7 @@ GSResult GS_API_CALL gsGetPredicateStartKeyGeneral(
 		GSRowKeyPredicate *predicate, const GSValue **startKey) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(startKey, NULL);
 	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL(predicate, startKey);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
@@ -18453,7 +19881,9 @@ GSResult GS_API_CALL gsGetPredicateStartKeyAsString(
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, false> Traits;
 	const GSChar *const *startKeyPtr = NULL;
 	const GSResult result = GSRowKeyPredicate::getRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_START>(predicate, &startKeyPtr);
+			Traits, GSRowKeyPredicate::RANGE_START>(
+			predicate, &startKeyPtr,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 	if (startKey != NULL) {
 		if (startKeyPtr == NULL) {
 			*startKey = NULL;
@@ -18469,27 +19899,34 @@ GSResult GS_API_CALL gsGetPredicateStartKeyAsInteger(
 		GSRowKeyPredicate *predicate, const int32_t **startKey) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, false> Traits;
 	return GSRowKeyPredicate::getRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_START>(predicate, startKey);
+			Traits, GSRowKeyPredicate::RANGE_START>(
+			predicate, startKey,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsGetPredicateStartKeyAsLong(
 		GSRowKeyPredicate *predicate, const int64_t **startKey) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, false> Traits;
 	return GSRowKeyPredicate::getRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_START>(predicate, startKey);
+			Traits, GSRowKeyPredicate::RANGE_START>(
+			predicate, startKey,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsGetPredicateStartKeyAsTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp **startKey) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, false> Traits;
 	return GSRowKeyPredicate::getRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_START>(predicate, startKey);
+			Traits, GSRowKeyPredicate::RANGE_START>(
+			predicate, startKey,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsGetPredicateFinishKeyGeneral(
 		GSRowKeyPredicate *predicate, const GSValue **finishKey) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(finishKey, NULL);
 	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL(predicate, finishKey);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
@@ -18512,7 +19949,9 @@ GSResult GS_API_CALL gsGetPredicateFinishKeyAsString(
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, false> Traits;
 	const GSChar *const *finishKeyPtr = NULL;
 	const GSResult result = GSRowKeyPredicate::getRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_FINISH>(predicate, &finishKeyPtr);
+			Traits, GSRowKeyPredicate::RANGE_FINISH>(
+			predicate, &finishKeyPtr,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 	if (finishKey != NULL) {
 		if (finishKeyPtr == NULL) {
 			*finishKey = NULL;
@@ -18528,27 +19967,34 @@ GSResult GS_API_CALL gsGetPredicateFinishKeyAsInteger(
 		GSRowKeyPredicate *predicate, const int32_t **finishKey) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, false> Traits;
 	return GSRowKeyPredicate::getRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_FINISH>(predicate, finishKey);
+			Traits, GSRowKeyPredicate::RANGE_FINISH>(
+			predicate, finishKey,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsGetPredicateFinishKeyAsLong(
 		GSRowKeyPredicate *predicate, const int64_t **finishKey) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, false> Traits;
 	return GSRowKeyPredicate::getRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_FINISH>(predicate, finishKey);
+			Traits, GSRowKeyPredicate::RANGE_FINISH>(
+			predicate, finishKey,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsGetPredicateFinishKeyAsTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp **finishKey) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, false> Traits;
 	return GSRowKeyPredicate::getRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_FINISH>(predicate, finishKey);
+			Traits, GSRowKeyPredicate::RANGE_FINISH>(
+			predicate, finishKey,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsGetPredicateDistinctKeysGeneral(
 		GSRowKeyPredicate *predicate, const GSValue **keyList, size_t *size) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT2(keyList, NULL, size, 0);
 	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL(predicate, keyList, size);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
@@ -18574,32 +20020,41 @@ GSResult GS_API_CALL gsGetPredicateDistinctKeysAsString(
 		GSRowKeyPredicate *predicate,
 		const GSChar *const **keyList, size_t *size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, false> Traits;
-	return GSRowKeyPredicate::getDistinctKeys<Traits>(predicate, keyList, size);
+	return GSRowKeyPredicate::getDistinctKeys<Traits>(
+			predicate, keyList, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsGetPredicateDistinctKeysAsInteger(
 		GSRowKeyPredicate *predicate, const int32_t **keyList, size_t *size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, false> Traits;
-	return GSRowKeyPredicate::getDistinctKeys<Traits>(predicate, keyList, size);
+	return GSRowKeyPredicate::getDistinctKeys<Traits>(
+			predicate, keyList, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsGetPredicateDistinctKeysAsLong(
 		GSRowKeyPredicate *predicate, const int64_t **keyList, size_t *size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, false> Traits;
-	return GSRowKeyPredicate::getDistinctKeys<Traits>(predicate, keyList, size);
+	return GSRowKeyPredicate::getDistinctKeys<Traits>(
+			predicate, keyList, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsGetPredicateDistinctKeysAsTimestamp(
 		GSRowKeyPredicate *predicate,
 		const GSTimestamp **keyList, size_t *size) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, false> Traits;
-	return GSRowKeyPredicate::getDistinctKeys<Traits>(predicate, keyList, size);
+	return GSRowKeyPredicate::getDistinctKeys<Traits>(
+			predicate, keyList, size,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsSetPredicateStartKeyGeneral(
 		GSRowKeyPredicate *predicate, const GSValue *startKey, GSType keyType) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL(predicate, startKey, keyType);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
@@ -18618,28 +20073,36 @@ GSResult GS_API_CALL gsSetPredicateStartKeyByString(
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, false> Traits;
 	const GSChar *const *startKeyPtr = (startKey == NULL ? NULL : &startKey);
 	return GSRowKeyPredicate::setRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_START>(predicate, startKeyPtr);
+			Traits, GSRowKeyPredicate::RANGE_START>(
+			predicate, startKeyPtr,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsSetPredicateStartKeyByInteger(
 		GSRowKeyPredicate *predicate, const int32_t *startKey) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, false> Traits;
 	return GSRowKeyPredicate::setRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_START>(predicate, startKey);
+			Traits, GSRowKeyPredicate::RANGE_START>(
+			predicate, startKey,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsSetPredicateStartKeyByLong(
 		GSRowKeyPredicate *predicate, const int64_t *startKey) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, false> Traits;
 	return GSRowKeyPredicate::setRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_START>(predicate, startKey);
+			Traits, GSRowKeyPredicate::RANGE_START>(
+			predicate, startKey,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsSetPredicateStartKeyByTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp *startKey) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, false> Traits;
 	return GSRowKeyPredicate::setRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_START>(predicate, startKey);
+			Traits, GSRowKeyPredicate::RANGE_START>(
+			predicate, startKey,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsSetPredicateFinishKeyGeneral(
@@ -18647,6 +20110,7 @@ GSResult GS_API_CALL gsSetPredicateFinishKeyGeneral(
 		GSType keyType) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL(predicate, finishKey, keyType);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
@@ -18665,34 +20129,43 @@ GSResult GS_API_CALL gsSetPredicateFinishKeyByString(
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, false> Traits;
 	const GSChar *const *finishKeyPtr = (finishKey == NULL ? NULL : &finishKey);
 	return GSRowKeyPredicate::setRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_FINISH>(predicate, finishKeyPtr);
+			Traits, GSRowKeyPredicate::RANGE_FINISH>(
+			predicate, finishKeyPtr,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsSetPredicateFinishKeyByInteger(
 		GSRowKeyPredicate *predicate, const int32_t *finishKey) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, false> Traits;
 	return GSRowKeyPredicate::setRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_FINISH>(predicate, finishKey);
+			Traits, GSRowKeyPredicate::RANGE_FINISH>(
+			predicate, finishKey,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsSetPredicateFinishKeyByLong(
 		GSRowKeyPredicate *predicate, const int64_t *finishKey) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, false> Traits;
 	return GSRowKeyPredicate::setRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_FINISH>(predicate, finishKey);
+			Traits, GSRowKeyPredicate::RANGE_FINISH>(
+			predicate, finishKey,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsSetPredicateFinishKeyByTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp *finishKey) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, false> Traits;
 	return GSRowKeyPredicate::setRangeKey<
-			Traits, GSRowKeyPredicate::RANGE_FINISH>(predicate, finishKey);
+			Traits, GSRowKeyPredicate::RANGE_FINISH>(
+			predicate, finishKey,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsAddPredicateKeyGeneral(
 		GSRowKeyPredicate *predicate, const GSValue *key, GSType keyType) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL(predicate, key, keyType);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
@@ -18709,25 +20182,33 @@ GSResult GS_API_CALL gsAddPredicateKeyGeneral(
 GSResult GS_API_CALL gsAddPredicateKeyByString(
 		GSRowKeyPredicate *predicate, const GSChar *key) {
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, false> Traits;
-	return GSRowKeyPredicate::addDistinctKey<Traits>(predicate, key);
+	return GSRowKeyPredicate::addDistinctKey<Traits>(
+			predicate, key,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsAddPredicateKeyByInteger(
 		GSRowKeyPredicate *predicate, int32_t key) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, false> Traits;
-	return GSRowKeyPredicate::addDistinctKey<Traits>(predicate, key);
+	return GSRowKeyPredicate::addDistinctKey<Traits>(
+			predicate, key,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsAddPredicateKeyByLong(
 		GSRowKeyPredicate *predicate, int64_t key) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, false> Traits;
-	return GSRowKeyPredicate::addDistinctKey<Traits>(predicate, key);
+	return GSRowKeyPredicate::addDistinctKey<Traits>(
+			predicate, key,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 GSResult GS_API_CALL gsAddPredicateKeyByTimestamp(
 		GSRowKeyPredicate *predicate, GSTimestamp key) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, false> Traits;
-	return GSRowKeyPredicate::addDistinctKey<Traits>(predicate, key);
+	return GSRowKeyPredicate::addDistinctKey<Traits>(
+			predicate, key,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
 
@@ -18741,6 +20222,7 @@ GSResult GS_API_CALL gsGetPartitionCount(
 		GSPartitionController *controller, int32_t *partitionCount) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(partitionCount, -1);
 	GSResourceHeader::clearLastError(controller);
+	GS_CLIENT_INTERCEPT_API_CALL(controller, partitionCount);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(controller);
@@ -18762,6 +20244,7 @@ GSResult GS_API_CALL gsGetPartitionContainerCount(
 		int64_t *containerCount) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(containerCount, -1);
 	GSResourceHeader::clearLastError(controller);
+	GS_CLIENT_INTERCEPT_API_CALL(controller, partitionIndex, containerCount);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(controller);
@@ -18785,6 +20268,8 @@ GSResult GS_API_CALL gsGetPartitionContainerNames(
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT2(
 			nameList, NULL, size, 0);
 	GSResourceHeader::clearLastError(controller);
+	GS_CLIENT_INTERCEPT_API_CALL(
+			controller, partitionIndex, start, limit, nameList, size);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(controller);
@@ -18811,6 +20296,7 @@ GSResult GS_API_CALL gsGetPartitionHosts(
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT2(
 			addressList, NULL, size, 0);
 	GSResourceHeader::clearLastError(controller);
+	GS_CLIENT_INTERCEPT_API_CALL(controller, partitionIndex, addressList, size);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(controller);
@@ -18836,6 +20322,7 @@ GSResult GS_API_CALL gsGetPartitionOwnerHost(
 		const GSChar **address) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(address, NULL);
 	GSResourceHeader::clearLastError(controller);
+	GS_CLIENT_INTERCEPT_API_CALL(controller, partitionIndex, address);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(controller);
@@ -18858,6 +20345,7 @@ GSResult GS_API_CALL gsGetPartitionBackupHosts(
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT2(
 			addressList, NULL, size, 0);
 	GSResourceHeader::clearLastError(controller);
+	GS_CLIENT_INTERCEPT_API_CALL(controller, partitionIndex, addressList, size);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(controller);
@@ -18883,6 +20371,7 @@ GSResult GS_API_CALL gsAssignPartitionPreferableHost(
 		const GSChar *host) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(controller);
+	GS_CLIENT_INTERCEPT_API_CALL(controller, partitionIndex, host);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(controller);
@@ -18900,6 +20389,7 @@ GSResult GS_API_CALL gsGetPartitionIndexOfContainer(
 		int32_t *partitionIndex) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(partitionIndex, -1);
 	GSResourceHeader::clearLastError(controller);
+	GS_CLIENT_INTERCEPT_API_CALL(controller, containerName, partitionIndex);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(controller);
@@ -19057,12 +20547,115 @@ GSBool GS_API_CALL gsIsTimeoutError(GSResult result) {
 	}
 }
 
+size_t GS_API_CALL gsFormatErrorName(
+		void *gsResource, size_t stackIndex, GSChar *strBuf, size_t bufSize) {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_VALUE(0);
+	try {
+		util::Mutex *mutex;
+		ErrorStack *stack = GSResourceHeader::findErrorStack(gsResource, mutex);
+		if (stack == NULL) {
+			ClientUtil::copyString("", 1, strBuf, bufSize);
+			return 0;
+		}
+
+		DynamicLockGuard<util::Mutex> guard(mutex);
+		return stack->formatErrorName(stackIndex, strBuf, bufSize);
+	}
+	catch (...) {
+	}
+	ClientUtil::copyString("", 1, strBuf, bufSize);
+	return 0;
+}
+
+size_t GS_API_CALL gsFormatErrorDescription(
+		void *gsResource, size_t stackIndex, GSChar *strBuf, size_t bufSize) {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_VALUE(0);
+	try {
+		util::Mutex *mutex;
+		ErrorStack *stack = GSResourceHeader::findErrorStack(gsResource, mutex);
+		if (stack == NULL) {
+			ClientUtil::copyString("", 1, strBuf, bufSize);
+			return 0;
+		}
+
+		DynamicLockGuard<util::Mutex> guard(mutex);
+		return stack->formatErrorDescription(stackIndex, strBuf, bufSize);
+	}
+	catch (...) {
+	}
+	ClientUtil::copyString("", 1, strBuf, bufSize);
+	return 0;
+}
+
+size_t GS_API_CALL gsGetErrorParameterCount(
+		void *gsResource, size_t stackIndex) {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_VALUE(0);
+	try {
+		util::Mutex *mutex;
+		ErrorStack *stack = GSResourceHeader::findErrorStack(gsResource, mutex);
+		if (stack == NULL) {
+			return 0;
+		}
+
+		DynamicLockGuard<util::Mutex> guard(mutex);
+		return stack->getErrorParameterCount(stackIndex);
+	}
+	catch (...) {
+	}
+	return 0;
+}
+
+size_t GS_API_CALL gsFormatErrorParameterName(
+		void *gsResource, size_t stackIndex, size_t parameterIndex,
+		GSChar *strBuf, size_t bufSize) {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_VALUE(0);
+	try {
+		util::Mutex *mutex;
+		ErrorStack *stack = GSResourceHeader::findErrorStack(gsResource, mutex);
+		if (stack == NULL) {
+			ClientUtil::copyString("", 1, strBuf, bufSize);
+			return 0;
+		}
+
+		DynamicLockGuard<util::Mutex> guard(mutex);
+		return stack->formatErrorParameterName(
+				stackIndex, parameterIndex, strBuf, bufSize);
+	}
+	catch (...) {
+	}
+	ClientUtil::copyString("", 1, strBuf, bufSize);
+	return 0;
+}
+
+size_t GS_API_CALL gsFormatErrorParameterValue(
+		void *gsResource, size_t stackIndex, size_t parameterIndex,
+		GSChar *strBuf, size_t bufSize) {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_VALUE(0);
+	try {
+		util::Mutex *mutex;
+		ErrorStack *stack = GSResourceHeader::findErrorStack(gsResource, mutex);
+		if (stack == NULL) {
+			ClientUtil::copyString("", 1, strBuf, bufSize);
+			return 0;
+		}
+
+		DynamicLockGuard<util::Mutex> guard(mutex);
+		return stack->formatErrorParameterValue(
+				stackIndex, parameterIndex, strBuf, bufSize);
+	}
+	catch (...) {
+	}
+	ClientUtil::copyString("", 1, strBuf, bufSize);
+	return 0;
+}
+
 
 #if GS_EXPERIMENTAL_TOOL_ENABLED
 GSResult GS_API_CALL gsExperimentalGetRowIdForUpdate(
 		GSRowSet *rowSet, GSExperimentalRowId *rowId) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(rowSet);
+	GS_CLIENT_INTERCEPT_API_CALL(rowSet, rowId);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(rowSet);
@@ -19073,7 +20666,7 @@ GSResult GS_API_CALL gsExperimentalGetRowIdForUpdate(
 		rowId->internal.container = container;
 		rowId->internal.transactionId = rowSet->getTransactionId();
 		if (rowId->internal.transactionId == 0) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_NOT_LOCKED, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_NOT_LOCKED, "");
 		}
 
 		switch (container->getMapper().getCategory()) {
@@ -19094,14 +20687,14 @@ GSResult GS_API_CALL gsExperimentalGetRowIdForUpdate(
 				}
 				if (bindingEntry == NULL ||
 						bindingEntry->elementType != GS_TYPE_TIMESTAMP) {
-					UTIL_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 				}
 			}
 			rowId->internal.baseId = *static_cast<const GSTimestamp*>(
 					rowSet->getRowKey());
 			break;
 		default:
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 		}
 	}
 	catch (...) {
@@ -19121,6 +20714,7 @@ GSResult GS_API_CALL gsExperimentalUpdateRowById(
 		const void *rowObj) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, rowId, rowObj);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
@@ -19128,7 +20722,7 @@ GSResult GS_API_CALL gsExperimentalUpdateRowById(
 		GS_CLIENT_CHECK_NOT_NULL(rowObj);
 
 		if (rowId->internal.container != container) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 		}
 
 		switch (container->getMapper().getCategory()) {
@@ -19145,7 +20739,7 @@ GSResult GS_API_CALL gsExperimentalUpdateRowById(
 					rowObj);
 			break;
 		default:
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 		}
 	}
 	catch (...) {
@@ -19158,13 +20752,14 @@ GSResult GS_API_CALL gsExperimentalDeleteRowById(
 		GSContainer *container, const GSExperimentalRowId *rowId) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
 	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL(container, rowId);
 
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(container);
 		GS_CLIENT_CHECK_NOT_NULL(rowId);
 
 		if (rowId->internal.container != container) {
-			UTIL_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 		}
 
 		switch (container->getMapper().getCategory()) {
@@ -19180,7 +20775,7 @@ GSResult GS_API_CALL gsExperimentalDeleteRowById(
 					&static_cast<const GSTimestamp&>(rowId->internal.baseId));
 			break;
 		default:
-			UTIL_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 		}
 	}
 	catch (...) {

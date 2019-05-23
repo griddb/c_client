@@ -17,8 +17,7 @@ GS_STRUCT_BINDING(Person,
 	GS_STRUCT_BINDING_ARRAY(lob, lobSize, GS_TYPE_BYTE));
 
 // Operation on Collection data
-int sample1(const char *addr, const char *port, const char *clusterName,
-			const char *user, const char *password) {
+int sample1(const char *args[5]) {
 	static const int8_t personLob[] = { 65, 66, 67, 68, 69, 70, 71, 72, 73, 74 };
 	static const GSBool update = GS_TRUE;
 
@@ -30,11 +29,11 @@ int sample1(const char *addr, const char *port, const char *clusterName,
 	GSResult ret;
 
 	const GSPropertyEntry props[] = {
-			{ "notificationAddress", addr },
-			{ "notificationPort", port },
-			{ "clusterName", clusterName },
-			{ "user", user },
-			{ "password", password } };
+			{ "notificationAddress", args[0] },
+			{ "notificationPort", args[1] },
+			{ "clusterName", args[2] },
+			{ "user", args[3] },
+			{ "password", args[4] } };
 	const size_t propCount = sizeof(props) / sizeof(*props);
 
 	// Acquiring a GridStore instance
@@ -102,5 +101,3 @@ int sample1(const char *addr, const char *port, const char *clusterName,
 
 	return (GS_SUCCEEDED(ret) ? EXIT_SUCCESS : EXIT_FAILURE);
 }
-
-void main(int argc,char *argv[]){ sample1(argv[1],argv[2],argv[3],argv[4],argv[5]);}

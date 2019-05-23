@@ -14,8 +14,7 @@ GS_STRUCT_BINDING(Point,
 	GS_STRUCT_BINDING_ELEMENT(voltage, GS_TYPE_DOUBLE));
 
 // Search and aggregation of time-series data
-int sample3(const char *addr, const char *port, const char *clusterName,
-			const char *user, const char *password) {
+int sample3(const char *args[5]) {
 	GSGridStore *store;
 	GSTimeSeries *ts;
 	GSQuery *query;
@@ -24,11 +23,11 @@ int sample3(const char *addr, const char *port, const char *clusterName,
 
 	// Lower the consistency level because of read-only operation (default: IMMEDIATE)
 	const GSPropertyEntry props[] = {
-			{ "notificationAddress", addr },
-			{ "notificationPort", port },
-			{ "clusterName", clusterName },
-			{ "user", user },
-			{ "password", password },
+			{ "notificationAddress", args[0] },
+			{ "notificationPort", args[1] },
+			{ "clusterName", args[2] },
+			{ "user", args[3] },
+			{ "password", args[4] },
 			{ "consistency", "EVENTUAL" } };
 	const size_t propCount = sizeof(props) / sizeof(*props);
 
@@ -87,5 +86,3 @@ int sample3(const char *addr, const char *port, const char *clusterName,
 
 	return (GS_SUCCEEDED(ret) ? EXIT_SUCCESS : EXIT_FAILURE);
 }
-
-void main(int argc,char *argv[]){ sample3(argv[1],argv[2],argv[3],argv[4],argv[5]);}

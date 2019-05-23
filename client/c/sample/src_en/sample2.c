@@ -14,8 +14,7 @@ GS_STRUCT_BINDING(Point,
 	GS_STRUCT_BINDING_ELEMENT(voltage, GS_TYPE_DOUBLE));
 
 // Storage and extraction of a specific range of time-series data
-int sample2(const char *addr, const char *port, const char *clusterName,
-			const char *user, const char *password) {
+int sample2(const char *args[5]) {
 	GSGridStore *store;
 	GSTimeSeries *ts;
 	Point point;
@@ -26,11 +25,11 @@ int sample2(const char *addr, const char *port, const char *clusterName,
 	GSResult ret = !GS_RESULT_OK;
 
 	const GSPropertyEntry props[] = {
-			{ "notificationAddress", addr },
-			{ "notificationPort", port },
-			{ "clusterName", clusterName },
-			{ "user", user },
-			{ "password", password } };
+			{ "notificationAddress", args[0] },
+			{ "notificationPort", args[1] },
+			{ "clusterName", args[2] },
+			{ "user", args[3] },
+			{ "password", args[4] } };
 	const size_t propCount = sizeof(props) / sizeof(*props);
 
 	// Acquiring a GridStore instance
@@ -70,5 +69,3 @@ int sample2(const char *addr, const char *port, const char *clusterName,
 
 	return (GS_SUCCEEDED(ret) ? EXIT_SUCCESS : EXIT_FAILURE);
 }
-
-void main(int argc,char *argv[]){ sample2(argv[1],argv[2],argv[3],argv[4],argv[5]);}

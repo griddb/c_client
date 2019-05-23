@@ -13,9 +13,8 @@ GS_STRUCT_BINDING(Point,
 	GS_STRUCT_BINDING_ELEMENT(active, GS_TYPE_BOOL)
 	GS_STRUCT_BINDING_ELEMENT(voltage, GS_TYPE_DOUBLE));
 
-// Storage and extraction of a specific range of time-series data
-int sample2(const char *addr, const char *port, const char *clusterName,
-			const char *user, const char *password) {
+// 時系列データの登録と範囲取得
+int sample2(const char *args[5]) {
 	GSGridStore *store;
 	GSTimeSeries *ts;
 	Point point;
@@ -26,28 +25,28 @@ int sample2(const char *addr, const char *port, const char *clusterName,
 	GSResult ret = !GS_RESULT_OK;
 
 	const GSPropertyEntry props[] = {
-			{ "notificationAddress", addr },
-			{ "notificationPort", port },
-			{ "clusterName", clusterName },
-			{ "user", user },
-			{ "password", password } };
+			{ "notificationAddress", args[0] },
+			{ "notificationPort", args[1] },
+			{ "clusterName", args[2] },
+			{ "user", args[3] },
+			{ "password", args[4] } };
 	const size_t propCount = sizeof(props) / sizeof(*props);
 
-	// Acquiring a GridStore instance
+	// GridStoreインスタンスの取得
 	gsGetGridStore(gsGetDefaultFactory(), props, propCount, &store);
 
-	// Creating a TimeSeries (Only obtain the specified TimeSeries if it already exists)
+	// 時系列の作成 (既存の場合は取得のみ)
 	gsPutTimeSeries(store, "point01",
 			GS_GET_STRUCT_BINDING(Point), NULL, GS_FALSE, &ts);
 
-	// Preparing time-series element data
+	// 時系列要素のデータを用意
 	point.active = GS_FALSE;
 	point.voltage = 100;
 
-	// Store the time-series element (GridStore sets its timestamp)
+	// 時系列要素の登録(グリッドストア側で時刻設定)
 	gsAppendTimeSeriesRow(ts, &point, NULL);
 
-	// Extract the specified range of time-series elements: last six hours
+	// 指定区間の時系列の取得: 6時間前から直近まで
 	now = gsCurrentTime();
 	before = gsAddTime(now, -6, GS_TIME_UNIT_HOUR);
 
@@ -65,10 +64,8 @@ int sample2(const char *addr, const char *port, const char *clusterName,
 		printf(" Voltage=%.1lf\n", point.voltage);
 	}
 
-	// Releasing resource
+	// リソースの解放
 	gsCloseGridStore(&store, GS_TRUE);
 
 	return (GS_SUCCEEDED(ret) ? EXIT_SUCCESS : EXIT_FAILURE);
 }
-
-void main(int argc,char *argv[]){ sample2(argv[1],argv[2],argv[3],argv[4],argv[5]);}

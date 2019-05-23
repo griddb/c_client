@@ -16,9 +16,8 @@ GS_STRUCT_BINDING(Person,
 	GS_STRUCT_BINDING_ELEMENT(count, GS_TYPE_LONG)
 	GS_STRUCT_BINDING_ARRAY(lob, lobSize, GS_TYPE_BYTE));
 
-// Operation on Collection data
-int sample1(const char *addr, const char *port, const char *clusterName,
-			const char *user, const char *password) {
+// コレクションデータの操作
+int sample1(const char *args[5]) {
 	static const int8_t personLob[] = { 65, 66, 67, 68, 69, 70, 71, 72, 73, 74 };
 	static const GSBool update = GS_TRUE;
 
@@ -30,53 +29,53 @@ int sample1(const char *addr, const char *port, const char *clusterName,
 	GSResult ret;
 
 	const GSPropertyEntry props[] = {
-			{ "notificationAddress", addr },
-			{ "notificationPort", port },
-			{ "clusterName", clusterName },
-			{ "user", user },
-			{ "password", password } };
+			{ "notificationAddress", args[0] },
+			{ "notificationPort", args[1] },
+			{ "clusterName", args[2] },
+			{ "user", args[3] },
+			{ "password", args[4] } };
 	const size_t propCount = sizeof(props) / sizeof(*props);
 
-	// Acquiring a GridStore instance
+	// GridStoreインスタンスの取得
 	gsGetGridStore(gsGetDefaultFactory(), props, propCount, &store);
 
-	// Creating a collection
+	// コレクションの作成
 	gsPutCollection(store, "col01",
 			GS_GET_STRUCT_BINDING(Person), NULL, GS_FALSE, &col);
 
-	// Setting an index for a column
+	// カラムに索引を設定
 	gsCreateIndex(col, "count", GS_INDEX_FLAG_DEFAULT);
 
-	// Setting auto-commit off
+	// 自動コミットモードをオフ
 	gsSetAutoCommit(col, GS_FALSE);
 
-	// Preparing row data
+	// Rowのデータを用意
 	person.name = "name01";
 	person.status = GS_FALSE;
 	person.count = 1;
 	person.lob = personLob;
 	person.lobSize = sizeof(personLob);
 
-	// Operating a row in KV format: RowKey is "name01"
-	gsPutRow(col, NULL, &person, NULL);	// Registration
-	gsGetRowForUpdate(col, &person.name, &person, NULL);	// Aquisition (Locking to update)
-	gsDeleteRow(col, &person.name, NULL);	// Deletion
+	// KV形式でRowを操作: RowKeyは"name01"
+	gsPutRow(col, NULL, &person, NULL);	// 登録
+	gsGetRowForUpdate(col, &person.name, &person, NULL);	// 取得(更新用にロック)
+	gsDeleteRow(col, &person.name, NULL);	// 削除
 
-	// Operating a row in KV format: RowKey is "name02"
-	gsPutRowByString(col, "name02", &person, NULL);	// Registration (Specifying RowKey)
+	// KV形式でRowを操作: RowKeyは"name02"
+	gsPutRowByString(col, "name02", &person, NULL);	// 登録(RowKeyを指定)
 
-	// Committing transaction (releasing lock)
+	// トランザクションの確定(ロック解除)
 	gsCommit(col);
 
-	// Search rows in a container
+	// コレクション内のRowを検索(クエリ使用)
 	gsQuery(col, "select * where name = 'name02'", &query);
 
-	// Fetching and updating retrieved rows
+	// 検索したRowの取得と更新
 	gsFetch(query, update, &rs);
 	while (gsHasNextRow(rs)) {
 		size_t i;
 
-		// Updating a retrived row
+		// 検索したRowの更新
 		gsGetNextRow(rs, &person);
 		person.count += 1;
 		ret = gsUpdateCurrentRow(rs, &person);
@@ -94,13 +93,11 @@ int sample1(const char *addr, const char *port, const char *clusterName,
 		printf("]\n");
 	}
 
-	// Committing transaction
+	// トランザクションの確定
 	ret = gsCommit(col);
 
-	// Releasing resource
+	// リソースの解放
 	gsCloseGridStore(&store, GS_TRUE);
 
 	return (GS_SUCCEEDED(ret) ? EXIT_SUCCESS : EXIT_FAILURE);
 }
-
-void main(int argc,char *argv[]){ sample1(argv[1],argv[2],argv[3],argv[4],argv[5]);}

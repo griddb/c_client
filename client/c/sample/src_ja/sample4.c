@@ -2,9 +2,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-// Schema definition using container information
-int sample4(const char *addr, const char *port, const char *clusterName,
-			const char *user, const char *password) {
+// コンテナ情報を用いてスキーマ定義
+int sample4(const char *args[5]) {
 	static const int8_t personLob[] = { 65, 66, 67, 68, 69, 70, 71, 72, 73, 74 };
 	static const GSBool update = GS_TRUE;
 
@@ -19,17 +18,17 @@ int sample4(const char *addr, const char *port, const char *clusterName,
 	GSResult ret;
 
 	const GSPropertyEntry props[] = {
-			{ "notificationAddress", addr },
-			{ "notificationPort", port },
-			{ "clusterName", clusterName },
-			{ "user", user },
-			{ "password", password } };
+			{ "notificationAddress", args[0] },
+			{ "notificationPort", args[1] },
+			{ "clusterName", args[2] },
+			{ "user", args[3] },
+			{ "password", args[4] } };
 	const size_t propCount = sizeof(props) / sizeof(*props);
 
-	// Acquiring a GridStore instance
+	// GridStoreインスタンスの取得
 	gsGetGridStore(gsGetDefaultFactory(), props, propCount, &store);
 
-	// Creating a container information
+	// コンテナ情報を作成
 	columnInfo.name = "name";
 	columnInfo.type = GS_TYPE_STRING;
 	columnInfoList[0] = columnInfo;
@@ -52,16 +51,16 @@ int sample4(const char *addr, const char *port, const char *clusterName,
 	info.columnInfoList = columnInfoList;
 	info.rowKeyAssigned = GS_TRUE;
 
-	// Creating a collection
+	// コレクションの作成
 	gsPutContainerGeneral(store, NULL, &info, GS_FALSE, &container);
 
-	// Setting an index for a column
+	// カラムに索引を設定
 	gsCreateIndex(container, "count", GS_INDEX_FLAG_DEFAULT);
 
-	// Setting auto-commit off
+	// 自動コミットモードをオフ
 	gsSetAutoCommit(container, GS_FALSE);
 
-	// Preparing row data
+	// Rowのデータを用意
 	{
 		const GSChar *name = "name01";
 		GSBool status = GS_FALSE;
@@ -76,24 +75,24 @@ int sample4(const char *addr, const char *port, const char *clusterName,
 		gsSetRowFieldByByteArray(row, 3, lobData, lobSize);
 	}
 
-	// Operating a row in KV format: RowKey is "name01"
-	gsPutRow(container, NULL, row, NULL);	// Registration
-	gsGetRowByString(container, "name01", row, update, NULL);	// Aquisition (Locking to update)
-	gsDeleteRowByString(container, "name01", NULL);	// Deletion
+	// KV形式でRowを操作: RowKeyは"name01"
+	gsPutRow(container, NULL, row, NULL);	// 登録
+	gsGetRowByString(container, "name01", row, update, NULL);	// 取得(更新用にロック)
+	gsDeleteRowByString(container, "name01", NULL);	// 削除
 
-	// Operating a row in KV format: RowKey is "name02"
-	gsPutRowByString(container, "name02", row, NULL);	// Registration (Specifying RowKey)
+	// KV形式でRowを操作: RowKeyは"name02"
+	gsPutRowByString(container, "name02", row, NULL);	// 登録(RowKeyを指定)
 
-	// Release of an unnecessary row object
+	// 不要ロウオブジェクトの解放
 	gsCloseRow(&row);
 
-	// Committing transaction (releasing lock)
+	// トランザクションの確定(ロック解除)
 	gsCommit(container);
 
-	// Search rows in a container
+	// コレクション内のRowを検索(クエリ使用)
 	gsQuery(container, "select * where name = 'name02'", &query);
 
-	// Fetching and updating retrieved rows
+	// 検索したRowの取得と更新
 	gsFetch(query, update, &rs);
 	while (gsHasNextRow(rs)) {
 		const GSChar *name;
@@ -105,7 +104,7 @@ int sample4(const char *addr, const char *port, const char *clusterName,
 
 		gsCreateRowByContainer(container, &row);
 
-		// Updating a retrived row
+		// 検索したRowの更新
 		gsGetNextRow(rs, row);
 		gsGetRowFieldAsString(row, 0, &name);
 		gsGetRowFieldAsBool(row, 1, &status);
@@ -129,16 +128,14 @@ int sample4(const char *addr, const char *port, const char *clusterName,
 		printf("]\n");
 	}
 
-	// Committing transaction
+	// トランザクションの確定
 	ret = gsCommit(container);
 
-	// Deleting a collection
+	// コレクションの削除
 	gsDropContainer(store, info.name);
 
-	// Releasing resource
+	// リソースの解放
 	gsCloseGridStore(&store, GS_TRUE);
 
 	return (GS_SUCCEEDED(ret) ? EXIT_SUCCESS : EXIT_FAILURE);
 }
-
-void main(int argc,char *argv[]){ sample4(argv[1],argv[2],argv[3],argv[4],argv[5]);}

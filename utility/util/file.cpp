@@ -70,7 +70,6 @@
 */
 #include "util/file.h"
 #include "util/code.h"
-#include "util/system.h"
 #include "util/os.h"
 #include <vector>
 #include <assert.h>
@@ -745,7 +744,7 @@ void NamedFile::open(const char8_t *name, FileFlag flags, FilePermission perm) {
 	}
 
 	std::wstring encodedName;
-	CodeConverter(Code::WCHAR_T, Code::UTF8)(nameStr, encodedName);
+	CodeConverter(Code::UTF8, Code::WCHAR_T)(nameStr, encodedName);
 
 	const uint32_t MAX_RETRIES = 10;
 	const DWORD RETRY_DELAY = 250;
