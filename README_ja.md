@@ -10,11 +10,10 @@ GridDB CクライアントはC言語用のインタフェースを提供します。
 
 以下の環境でCクライアントのビルドとサンプルプログラムの実行を確認しています。
 
-    OS:             CentOS 7.3(x64)
-    GCC:            Version 4.8.5
-    GridDB server:  Version 4.1 CE(Community Edition)
+    OS: CentOS 7.6(x64) (gcc 4.8.5), Windows 10(x64) (VS2017)
+    GridDB server: V4.2 CE(Community Edition), CentOS 7.5(x64)
 
-## クイックスタート
+## クイックスタート(CentOS)
 
 ### Cクライアントのビルド
 
@@ -39,13 +38,36 @@ GridDB CクライアントはC言語用のインタフェースを提供します。
       <GridDB cluster name> <GridDB user> <GridDB password>
       -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
 
-※Cクライアント(Community Edittion)では空間型は利用できません。  
-※client/c/includeフォルダの下に、ビルドに使われるgridstore.hファイルがあります。  
-※client/c/sampleフォルダの下に、サンプルプログラムがあります。
+## クイックスタート(Windows)
+
+### Cクライアントのビルド
+
+client.slnファイルをクリックしてVSを起動後、clientプロジェクトをビルドしてください。
+
+bin/x64フォルダの下に以下のファイルが作成されます。
+
+    gridstore_c.dll
+    gridstore_c.lib
+
+### サンプルプログラムの実行
+事前にGridDBサーバを起動しておく必要があります。
+
+client.slnファイルをクリックしてVSを起動後、sampleプロジェクトをビルドすると、bin/x64フォルダの下にsample.exeファイルが作成されます。
+
+    > sample.exe sample1 en <GridDB notification address(default is 239.0.0.1)> <GridDB notification port(default is 31999)>
+      <GridDB cluster name> <GridDB user> <GridDB password>
+      -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
+
+
+(追加情報)
+- client/c/includeフォルダの下に、ビルドに使われるgridstore.hファイルがあります。  
+- client/c/sampleフォルダの下に、サンプルプログラムがあります。
 
 ## ドキュメント
   詳細は以下のドキュメントを参照してください。
   - [APIリファレンス](https://griddb.github.io/griddb_nosql/manual/GridDB_API_Reference_ja.html)
+
+※Cクライアント(Community Edition)では空間型は利用できません。  
 
 ## コミュニティ
   * Issues  

@@ -10,11 +10,10 @@ Please refer to the API(C) section in API Reference for detailed information.
 
 Library building and program execution are checked in the environment below.
 
-    OS:             CentOS 7.3(x64)
-    GCC:            Version 4.8.5
-    GridDB server:  Version 4.1 CE(Community Edition)
+    OS: CentOS 7.6(x64) (gcc 4.8.5), Windows 10(x64) (VS2017)
+    GridDB server: V4.2 CE(Community Edition) on CentOS 7.6(x64)
 
-## Quick start
+## Quick start (CentOS)
 
 ### Build a C client
     
@@ -41,14 +40,37 @@ GridDB server need to be started in advance.
       <GridDB cluster name> <GridDB user> <GridDB password>
       -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
 
-Note: GEOMETRY type is not available for C Client(Community Edition).  
-Note: The gridstore.h file on client/c/include folder is used for building.  
-Note: There are some samples on client/c/sample folder.
+## Quick start (Windows)
+
+### Build a C client
+
+After starting VS with client.sln, build client project.
+
+The following files are created under the bin/x64 folder.
+
+    gridstore_c.dll
+    gridstore_c.lib
+
+### Execute a sample program
+GridDB server need to be started in advance.
+
+After starting VS with client.sln, build sample project. A sample.exe is created under the bin/x64 folder.
+
+    > sample.exe sample1 en <GridDB notification address(default is 239.0.0.1)> <GridDB notification port(default is 31999)>
+      <GridDB cluster name> <GridDB user> <GridDB password>
+      -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
+
+
+(Additional information)
+- The gridstore.h file on client/c/include folder is used for building.  
+- There are some samples on client/c/sample folder.
 
 ## Document
   Refer to the file below for more detailed information.  
   - [API Reference](https://griddb.github.io/griddb_nosql/manual/GridDB_API_Reference.html)
   - [API Reference(Japanese)](https://griddb.github.io/griddb_nosql/manual/GridDB_API_Reference_ja.html)
+
+Note: GEOMETRY type is not available for C Client CE(Community Edition).  
 
 ## Community
   * Issues  
