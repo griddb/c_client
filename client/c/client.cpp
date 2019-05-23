@@ -2111,17 +2111,10 @@ void RowMapper::decode(InputCursor &cursor, void *rowObj) const {
 				for (; pendingPtrArraySize > 0; pendingPtrArraySize--) {
 					void *elemPtr = static_cast<void**>(
 							pendingVarData)[pendingPtrArraySize];
-					try {
-						deallocate(cursor.varDataPool_, rowObj, elemPtr);
-					}
-					catch (...) {
-					}
+					deallocate(cursor.varDataPool_, rowObj, elemPtr);
+
 				}
-				try {
-					deallocate(cursor.varDataPool_, rowObj, pendingVarData);
-				}
-				catch (...) {
-				}
+				deallocate(cursor.varDataPool_, rowObj, pendingVarData);
 			}
 
 			if (general_) {
