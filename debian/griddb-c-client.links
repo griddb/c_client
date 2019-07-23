@@ -1,0 +1,5 @@
+usr/griddb_c_client-4.2.0/lib/libgridstore.so.0.0.0              usr/lib/x86_64-linux-gnu/libgridstore.so.0.0.0
+usr/griddb_c_client-4.2.0/lib/libgridstore.so.0.0.0              usr/lib/x86_64-linux-gnu/libgridstore.so.0
+usr/griddb_c_client-4.2.0/lib/libgridstore.so.0.0.0              usr/lib/x86_64-linux-gnu/libgridstore.so
+
+usr/griddb_c_client-4.2.0/lib/gridstore.h                        usr/include/gridstore.h
