@@ -1,0 +1,24 @@
+#!/usr/bin/make -f
+
+#%:
+#	dh $@
+
+configure: clean
+	cd client/c && \
+	./bootstrap.sh && \
+	./configure
+
+build: configure
+	cd client/c && \
+	make
+
+binary:
+	dh_install
+	dh_installdeb
+	dh_gencontrol
+	dh_link
+	dh_builddeb
+
+clean:
+
+.PHONY: clean configure build binary
