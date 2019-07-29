@@ -1,7 +1,7 @@
 Source: griddb-c-client
 Section: unknown
 Priority: extra
-Maintainer:
+Maintainer: Katsuhiko Nonomura <contact@griddb.org>
 Build-Depends: debhelper (>= 10)
 Standards-Version: 4.2.0-2
 Homepage: https://github.com/griddb/c_client
