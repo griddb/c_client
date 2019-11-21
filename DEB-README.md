@@ -20,9 +20,11 @@ Program execution are checked in the environment below.
 
 (A) Using apt-get command
 
-	$ sudo sh -c "echo 'deb https://download.opensuse.org/repositories/home:/oanhltk/xUbuntu_18.04/ /' > /etc/apt/sources.list.d/home:oanhltk.list"
-	$ sudo apt-get update
-	$ sudo apt-get install griddb-c-client
+    $ sudo sh -c "echo 'deb http://download.opensuse.org/repositories/home:/oanhltk/xUbuntu_18.04/ /' > /etc/apt/sources.list.d/home:oanhltk.list"
+    $ wget -nv https://download.opensuse.org/repositories/home:oanhltk/xUbuntu_18.04/Release.key -O Release.key
+    $ sudo apt-key add - < Release.key
+    $ sudo apt-get update
+    $ sudo apt-get install griddb-c-client
 
     About installation information: 
     https://software.opensuse.org/download/package?project=home:oanhltk&package=griddb-c-client
