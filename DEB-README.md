@@ -26,8 +26,8 @@ Program execution are checked in the environment below.
     $ sudo apt-get update
     $ sudo apt-get install griddb-c-client
 
-    About installation information: 
-    https://software.opensuse.org/download/package?project=home:oanhltk&package=griddb-c-client
+  About installation information: 
+  https://software.opensuse.org/download/package?project=home:oanhltk&package=griddb-c-client
 
 (B) Using dpkg command
 - After downloading DEB file (https://github.com/griddb/c_client/releases), please run the following:
