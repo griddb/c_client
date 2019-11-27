@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 
-void main(int argc, char *argv[]){
+void main(int argc, char *argv[]) {
 
 	/* 定数 */
 	// コンテナ名
@@ -12,7 +12,7 @@ void main(int argc, char *argv[]){
 
 	// 登録するロウデータ (各コンテナのロウ数5)
 	const int rowCount = 5;
-	const GSChar * nameList[5] = { "notebook PC", "desktop PC", "keybord", "mouse", "printer" };
+	const GSChar * nameList[5] = { "notebook PC", "desktop PC", "keyboard", "mouse", "printer" };
 	const int numberList[2][5] = { { 108, 72, 25, 45, 62 }, { 50, 11, 208, 23, 153 } };
 
 	/* 変数 */
@@ -21,17 +21,17 @@ void main(int argc, char *argv[]){
 	GSResult ret;
 	int i;
 	int j;
-	
+
 	// コンテナ作成用
 	GSContainerInfo info0 = GS_CONTAINER_INFO_INITIALIZER;
 	GSColumnInfo columnInfo = GS_COLUMN_INFO_INITIALIZER;
 	GSColumnInfo columnInfoList[3];
-	
+
 	// ロウ登録用
 	GSRow *row;
-    GSRow * rowList[5];
-    const void * const * rowObj;
-	
+	GSRow * rowList[5];
+	const void * const * rowObj;
+
 	// 入力用の変数
 	GSRowKeyPredicate *predicate;
 	GSRowKeyPredicateEntry predEntryValueList[2];
@@ -41,6 +41,7 @@ void main(int argc, char *argv[]){
 	const GSContainerRowEntry *outEntryList;
 	size_t outEntryCount;
 	GSContainerRowEntry outEntry = GS_CONTAINER_ROW_ENTRY_INITIALIZER;
+	GSRow *allRowList[2][5];
 	int id;
 	GSChar const *productName;
 	int count;
@@ -49,8 +50,8 @@ void main(int argc, char *argv[]){
 	size_t stackSize;
 	GSResult errorCode;
 	GSChar errMsgBuf1[1024], errMsgBuf2[1024];	// エラーメッセージを格納するバッファ
-	
-	
+
+
 	//===============================================
 	// クラスタに接続する
 	//===============================================
@@ -63,7 +64,7 @@ void main(int argc, char *argv[]){
 		{ "user", "admin" },
 		{ "password", "admin" },
 		{ "applicationName", "SampleC" }
-	};		
+	};
 
 	/*
 	// 接続情報を指定する (固定リスト方式)
@@ -81,27 +82,27 @@ void main(int argc, char *argv[]){
 
 	// GridStoreインスタンスを取得する
 	ret = gsGetGridStore(gsGetDefaultFactory(), props, propCount, &store);
-	if ( !GS_SUCCEEDED(ret) ){
+	if (!GS_SUCCEEDED(ret)) {
 		fprintf(stderr, "ERROR gsGetGridStore\n");
 		goto LABEL_ERROR;
 	}
 	// コンテナ作成や取得などの操作を行うと、クラスタに接続される
 	ret = gsGetContainerGeneral(store, "containerName", &container);
-	if ( !GS_SUCCEEDED(ret) ){
+	if (!GS_SUCCEEDED(ret)) {
 		fprintf(stderr, "ERROR gsGetContainerGeneral\n");
 		goto LABEL_ERROR;
 	}
 	gsCloseContainer(&container, GS_TRUE);
 	printf("Connect to Cluster\n");
-	
-	
+
+
 	//===============================================
 	// データ準備 (コンテナ作成＆ロウ登録)
 	//===============================================
 	// コンテナ情報を設定する
 	info0.type = GS_CONTAINER_COLLECTION;
 	info0.rowKeyAssigned = GS_TRUE;
-	
+
 	columnInfo.name = "id";
 	columnInfo.type = GS_TYPE_INTEGER;
 	columnInfoList[0] = columnInfo;
@@ -117,17 +118,17 @@ void main(int argc, char *argv[]){
 	info0.columnCount = sizeof(columnInfoList) / sizeof(*columnInfoList);
 	info0.columnInfoList = columnInfoList;
 
-	for ( i = 0; i < containerCount; i++ ){
+	for (i = 0; i < containerCount; i++) {
 		// コレクションを作成する
 		ret = gsPutContainerGeneral(store, containerNameList[i], &info0, GS_FALSE, &container);
-		if ( !GS_SUCCEEDED(ret) ){
+		if (!GS_SUCCEEDED(ret)) {
 			fprintf(stderr, "ERROR gsPutCollectionGeneral\n");
 			goto LABEL_ERROR;
 		}
 		printf("Sample data generation: Create Collection name=%s\n", containerNameList[i]);
 
 		// 複数のロウを登録する
-		for ( j = 0; j < rowCount; j++ ){
+		for (j = 0; j < rowCount; j++) {
 			gsCreateRowByContainer(container, &row);
 			gsSetRowFieldByInteger(row, 0, j);
 			gsSetRowFieldByString(row, 1, nameList[j]);
@@ -137,16 +138,16 @@ void main(int argc, char *argv[]){
 		}
 		rowObj = (void *)rowList;
 		ret = gsPutMultipleRows(container, rowObj, rowCount, NULL);
-		if ( !GS_SUCCEEDED(ret) ){
+		if (!GS_SUCCEEDED(ret)) {
 			fprintf(stderr, "ERROR gsPutMultipleRows\n");
 			goto LABEL_ERROR;
 		}
 		printf("Sample data generation: Put Rows count=%d\n", rowCount);
-		
+
 		gsCloseContainer(&container, GS_TRUE);
 	}
-	
-	
+
+
 	//===============================================
 	// 複数のコンテナから一括でロウを取得する
 	//===============================================
@@ -156,7 +157,7 @@ void main(int argc, char *argv[]){
 
 		// GSRowKeyPredicateを生成
 		gsCreateRowKeyPredicate(store, GS_TYPE_INTEGER, &predicate);
-		
+
 		// 個別条件を設定 (ロウキーの値が0または2)
 		gsAddPredicateKeyByInteger(predicate, 0);
 		gsAddPredicateKeyByInteger(predicate, 2);
@@ -170,17 +171,26 @@ void main(int argc, char *argv[]){
 
 	// (2)複数コンテナからロウを一括取得する
 	ret = gsGetMultipleContainerRows(store, predEntryList, containerCount, &outEntryList, &outEntryCount);
-	if ( !GS_SUCCEEDED(ret) ){
+	if (!GS_SUCCEEDED(ret)) {
 		fprintf(stderr, "ERROR gsGetMultipleContainerRows\n");
 		goto LABEL_ERROR;
 	}
 
-	// (3)取得結果を出力する
+	// (3)取得結果をコピーする
+	// ※gsGetRowFieldAsStringなど、結果を取得する関数は、
+	//   値の書き換えが行われうる仕様
+	//   関数呼び出し前に結果はコピーしておく
 	for (i = 0; i < outEntryCount; i++) {
 		outEntry = outEntryList[i];
-
 		for (j = 0; j < outEntry.rowCount; j++) {
-			row = (GSRow *)outEntry.rowList[j];
+			allRowList[i][j] = (GSRow*)outEntry.rowList[j];
+		}
+	}
+	
+	// (4)取得結果を出力する
+	for (i = 0; i < outEntryCount; i++) {
+		for (j = 0; j < outEntryList[i].rowCount; j++) {
+			row = allRowList[i][j];
 
 			gsGetRowFieldAsInteger(row, 0, &id);
 			gsGetRowFieldAsString(row, 1, &productName);
@@ -207,7 +217,7 @@ LABEL_ERROR:
 		//===============================================
 		// エラーコードとエラーメッセージを出力する
 		stackSize = gsGetErrorStackSize(store);
-		for (i = 0; i < stackSize; i++ ){
+		for (i = 0; i < stackSize; i++) {
 			errorCode = gsGetErrorCode(store, i);
 			gsFormatErrorMessage(store, i, errMsgBuf1, sizeof(errMsgBuf1));
 			gsFormatErrorLocation(store, i, errMsgBuf2, sizeof(errMsgBuf2));
