@@ -18,15 +18,15 @@
 	@brief Implementation of Client Internal Module
 */
 #include "client.h"
+
 #include "gs_error_common.h"
 #include "sha2.h"
 #include <algorithm>
-#include <functional>
+#include <functional> 
 
 #if !defined(GS_DLL_INSIDE) && !defined(GS_CLIENT_UNIT_TEST)
 #error
 #endif
-
 
 #ifndef GS_CLIENT_CONFIG_FILE_LOGGING_ONLY
 #define GS_CLIENT_CONFIG_FILE_LOGGING_ONLY 1
@@ -63,7 +63,7 @@ static const bool CLIENT_TIME_SERIES_PROPERTIES_OLD = false;
 #endif
 
 #define GS_BINDING_ENTRY_INITIALIZER \
-	{ NULL, GSType(), 0, 0, GSTypeOption() }
+	{ NULL, GSType(), 0, 0, GSTypeOption(), NULL, NULL }
 
 
 #define GS_CLIENT_CHECK_FACTORY_AND_RETURN_VALUE(returnValue) \
@@ -661,62 +661,264 @@ DynamicLockGuard<L>::~DynamicLockGuard() {
 template class DynamicLockGuard<util::Mutex>;
 
 
-GSTimestamp TimestampUtil::current() {
+GSTimestamp TimestampUtils::current() {
 	return util::DateTime::now(CLIENT_TRIM_MILLISECONDS).getUnixTime();
 }
 
-GSTimestamp TimestampUtil::add(
-		GSTimestamp timestamp, int32_t amount, GSTimeUnit timeUnit) {
-	util::DateTime dateTime = timestamp;
+int64_t TimestampUtils::getField(
+		GSTimestamp timestamp, GSTimeUnit timeUnit,
+		const GSTimeZone *zone) {
+	ZonedOptionSource optionSrc;
+	return util::DateTime(timestamp).getField(
+			resolveFieldType(timeUnit), resolveZonedOption(optionSrc, zone));
+}
 
-	util::DateTime::FieldType fieldType;
-	switch (timeUnit) {
-	case GS_TIME_UNIT_YEAR:
-		fieldType = util::DateTime::FIELD_YEAR;
-		break;
-	case GS_TIME_UNIT_MONTH:
-		fieldType = util::DateTime::FIELD_MONTH;
-		break;
-	case GS_TIME_UNIT_DAY:
-		fieldType = util::DateTime::FIELD_DAY_OF_MONTH;
-		break;
-	case GS_TIME_UNIT_HOUR:
-		fieldType = util::DateTime::FIELD_HOUR;
-		break;
-	case GS_TIME_UNIT_MINUTE:
-		fieldType = util::DateTime::FIELD_MINUTE;
-		break;
-	case GS_TIME_UNIT_SECOND:
-		fieldType = util::DateTime::FIELD_SECOND;
-		break;
-	case GS_TIME_UNIT_MILLISECOND:
-		fieldType = util::DateTime::FIELD_MILLISECOND;
-		break;
-	default:
-		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNKNOWN_TIME_UNIT, "");
+void TimestampUtils::setField(
+		GSTimestamp &timestamp, int64_t amount, GSTimeUnit timeUnit,
+		const GSTimeZone *zone) {
+	if (amount < std::numeric_limits<int32_t>::min() ||
+			amount > std::numeric_limits<int32_t>::max()) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
-	dateTime.addField(amount, fieldType);
+	util::DateTime dateTime(timestamp);
+
+	ZonedOptionSource optionSrc;
+
+	util::DateTime::FieldData fieldData;
+	dateTime.getFields(fieldData, resolveZonedOption(optionSrc, zone));
+
+	fieldData.setValue(resolveFieldType(timeUnit), static_cast<int32_t>(amount));
+	dateTime.setFields(fieldData, resolveZonedOption(optionSrc, zone));
+
+	timestamp = dateTime.getUnixTime();
+}
+
+GSTimestamp TimestampUtils::add(
+		GSTimestamp timestamp, int64_t amount, GSTimeUnit timeUnit,
+		const GSTimeZone *zone) {
+	util::DateTime dateTime(timestamp);
+	ZonedOptionSource optionSrc;
+	dateTime.addField(
+			amount, resolveFieldType(timeUnit),
+			resolveZonedOption(optionSrc, zone));
 	return dateTime.getUnixTime();
 }
 
-size_t TimestampUtil::format(
-		GSTimestamp timestamp, GSChar *strBuf, size_t bufSize) {
+int64_t TimestampUtils::diff(
+		GSTimestamp timestamp1, GSTimestamp timestamp2,
+		GSTimeUnit timeUnit, const GSTimeZone *zone) {
+	ZonedOptionSource optionSrc;
+	return util::DateTime(timestamp1).getDifference(
+			util::DateTime(timestamp2), resolveFieldType(timeUnit),
+			resolveZonedOption(optionSrc, zone));
+}
+
+size_t TimestampUtils::format(
+		GSTimestamp timestamp, GSChar *strBuf, size_t bufSize,
+		const GSTimeZone *zone) {
 	util::NormalOStringStream oss;
-	util::DateTime(timestamp).format(oss, CLIENT_TRIM_MILLISECONDS, false);
+	ZonedOptionSource optionSrc;
+	util::DateTime(timestamp).format(
+			oss, resolveZonedOption(optionSrc, zone));
 
 	return ClientUtil::copyString(oss.str(), strBuf, bufSize);
 }
 
-bool TimestampUtil::parse(const GSChar *str, GSTimestamp &timestamp) {
+bool TimestampUtils::parse(const GSChar *str, GSTimestamp &timestamp) {
 	util::DateTime dateTime;
-	if (!util::DateTime::parse(str, dateTime, CLIENT_TRIM_MILLISECONDS)) {
+
+	const bool throwOnError = false;
+	ZonedOptionSource optionSrc;
+	if (!dateTime.parse(
+			str, strlen(str), throwOnError,
+			resolveZonedOption(optionSrc, NULL))) {
 		timestamp = -1;
 		return false;
 	}
 
 	timestamp = dateTime.getUnixTime();
 	return true;
+}
+
+int64_t TimestampUtils::getZoneOffset(
+		const GSTimeZone &zone, GSTimeUnit timeUnit) {
+	const util::DateTime::FieldType fieldType = resolveFieldType(timeUnit);
+
+	const int64_t millis = resolveZone(zone).getOffsetMillis();
+	switch (fieldType) {
+	case util::DateTime::FIELD_MILLISECOND:
+		return millis;
+	case util::DateTime::FIELD_SECOND:
+		return millis / 1000;
+	case util::DateTime::FIELD_MINUTE:
+		return millis / 1000 / 60;
+	case util::DateTime::FIELD_HOUR:
+		return millis / 1000 / 60 / 60;
+	default:
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+	}
+}
+
+void TimestampUtils::setZoneOffset(
+		GSTimeZone &zone, int64_t offset, GSTimeUnit timeUnit) {
+	const util::DateTime::FieldType fieldType = resolveFieldType(timeUnit);
+	if (fieldType != util::DateTime::FIELD_MILLISECOND) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNKNOWN_TIME_UNIT, "");
+	}
+
+	int64_t millis;
+	switch (fieldType) {
+	case util::DateTime::FIELD_MILLISECOND:
+		millis = offset;
+		break;
+	case util::DateTime::FIELD_SECOND:
+		millis = offset * 1000;
+		break;
+	case util::DateTime::FIELD_MINUTE:
+		millis = offset* 1000 * 60;
+		break;
+	case util::DateTime::FIELD_HOUR:
+		millis = offset * 1000 * 60 * 60;
+		break;
+	default:
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+	}
+
+	zone = toGSZone(resolveZone(millis));
+}
+
+size_t TimestampUtils::formatZone(
+		const GSTimeZone &zone, GSChar *strBuf, size_t bufSize) {
+	const util::TimeZone zoneUtil = resolveZone(zone);
+
+	util::NormalOStringStream oss;
+	zoneUtil.format(oss);
+
+	return ClientUtil::copyString(oss.str(), strBuf, bufSize);
+}
+
+bool TimestampUtils::parseZone(const GSChar *str, GSTimeZone &zone) {
+	util::TimeZone zoneUtil;
+
+	const bool throwOnError = false;
+	if (!zoneUtil.parse(str, strlen(str), throwOnError)) {
+		const GSTimeZone initialZone = GS_TIME_ZONE_INITIALIZER;
+		zone = initialZone;
+		return false;
+	}
+
+	zone = toGSZone(zoneUtil);
+	return true;
+}
+
+GSTimestamp TimestampUtils::add(
+		GSTimestamp timestamp, int64_t amount, GSTimeUnit timeUnit) {
+	return add(timestamp, amount, timeUnit, NULL);
+}
+
+size_t TimestampUtils::format(
+		GSTimestamp timestamp, GSChar *strBuf, size_t bufSize) {
+	return format(timestamp, strBuf, bufSize, NULL);
+}
+
+util::DateTime::FieldType TimestampUtils::resolveFieldType(
+		GSTimeUnit timeUnit) {
+	switch (timeUnit) {
+	case GS_TIME_UNIT_YEAR:
+		return util::DateTime::FIELD_YEAR;
+	case GS_TIME_UNIT_MONTH:
+		return util::DateTime::FIELD_MONTH;
+	case GS_TIME_UNIT_DAY:
+		return util::DateTime::FIELD_DAY_OF_MONTH;
+	case GS_TIME_UNIT_HOUR:
+		return util::DateTime::FIELD_HOUR;
+	case GS_TIME_UNIT_MINUTE:
+		return util::DateTime::FIELD_MINUTE;
+	case GS_TIME_UNIT_SECOND:
+		return util::DateTime::FIELD_SECOND;
+	case GS_TIME_UNIT_MILLISECOND:
+		return util::DateTime::FIELD_MILLISECOND;
+	default:
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNKNOWN_TIME_UNIT, "");
+	}
+}
+
+util::DateTime::Option TimestampUtils::resolveOption() {
+	util::DateTime::Option option =
+			util::DateTime::Option::create(CLIENT_TRIM_MILLISECONDS);
+	option.maxTimeMillis_ = resolveTimestampMaxUnixTime();
+	return option;
+}
+
+util::DateTime::ZonedOption TimestampUtils::resolveZonedOption(
+		ZonedOptionSource &optionSrc, const GSTimeZone *zone) {
+	optionSrc.fields_ = resolveTimestampMaxFields();
+
+	util::DateTime::ZonedOption option;
+	option.baseOption_ = resolveOption();
+	if (zone != NULL) {
+		option.zone_ = resolveZone(*zone);
+	}
+	option.maxFields_ = &optionSrc.fields_;
+
+	return option;
+}
+
+util::DateTime::FieldData TimestampUtils::resolveTimestampMaxFields() {
+	util::DateTime::FieldData fields;
+	fields.year_ = 10000;
+	fields.month_ = 1;
+	fields.monthDay_ = 1;
+	fields.hour_ = 23;
+	fields.minute_ = 59;
+	fields.second_ = 59;
+	fields.milliSecond_ = 999;
+
+	util::DateTime time;
+	util::DateTime::ZonedOption option;
+	try {
+		time.setFields(fields, option);
+	}
+	catch (util::UtilityException&) {
+		assert(sizeof(void*) <= 4);
+		util::DateTime::max(option.baseOption_).getFields(fields, option);
+	}
+
+	return fields;
+}
+
+int64_t TimestampUtils::resolveTimestampMaxUnixTime() {
+	util::DateTime::FieldData fields = resolveTimestampMaxFields();
+	if (fields.year_ >= 10000) {
+		fields.year_ = 9999;
+		fields.month_ = 12;
+		fields.monthDay_ = 31;
+	}
+	util::DateTime time;
+	util::DateTime::ZonedOption option;
+	time.setFields(fields, option);
+	return time.getUnixTime();
+}
+
+GSTimeZone TimestampUtils::toGSZone(const util::TimeZone &src) {
+	GSTimeZone dest = GS_TIME_ZONE_INITIALIZER;
+	dest.internalData.offsetMillis = src.getOffsetMillis();
+	return dest;
+}
+
+util::TimeZone TimestampUtils::resolveZone(const GSTimeZone &zone) {
+	return resolveZone(zone.internalData.offsetMillis);
+}
+
+util::TimeZone TimestampUtils::resolveZone(const int64_t &offsetMillis) {
+	util::TimeZone zoneUtil;
+	zoneUtil.setOffsetMillis(offsetMillis);
+
+	const bool throwOnError = true;
+	zoneUtil.checkRange(throwOnError);
+
+	return zoneUtil;
 }
 
 
@@ -1296,7 +1498,7 @@ const bool RowMapper::RESTRICT_KEY_ORDER_FIRST = true;
 
 RowMapper::Cache *RowMapper::cache_ = NULL;
 
-const RowMapper::Config RowMapper::BASIC_CONFIG(false, false, true);
+const RowMapper::Config RowMapper::BASIC_CONFIG(false, false, true, true);
 
 const RowMapper RowMapper::AGGREGATION_RESULT_MAPPER(
 		CATEGORY_AGGREGATION_RESULT, NULL, BASIC_CONFIG);
@@ -1321,12 +1523,21 @@ RowMapper::RowMapper(
 		rowTypeCategory_(rowTypeCategory),
 		general_(config.anyTypeAllowed_),
 		nullableAllowed_(config.nullableAllowed_),
+		compositeKeyOffeset_(0),
 		binding_(checkAndCopyBinding(
-				binding, columnIdMap_, rowTypeCategory, config)),
-		keyColumnId_(findRowKeyId(&binding_)),
-		varColumnCount_(-1), nullsByteSize_(-1), nullsOffset_(-1)
-{
-	setupAccessInfo();
+				binding, general_, columnIdMap_, rowTypeCategory,
+				compositeKeyOffeset_, config)),
+		varColumnCount_(-1), nullsByteSize_(-1), nullsOffset_(-1) {
+	try {
+		makeKeyMapper(
+				binding_, rowTypeCategory_, compositeKeyOffeset_,
+				general_, config, keyMapper_);
+		setupAccessInfo();
+	}
+	catch (...) {
+		clear();
+		throw;
+	}
 }
 
 RowMapper::RowMapper(
@@ -1337,13 +1548,21 @@ RowMapper::RowMapper(
 		rowTypeCategory_(srcMapper.rowTypeCategory_),
 		general_(srcMapper.general_),
 		nullableAllowed_(srcMapper.nullableAllowed_),
+		compositeKeyOffeset_(srcMapper.compositeKeyOffeset_),
 		binding_(createReorderedBinding(
 				srcMapper, columnIdMap_, schemaIn, config,
 				columnOrderIgnorable)),
-		keyColumnId_(findRowKeyId(&binding_)),
-		varColumnCount_(-1), nullsByteSize_(-1), nullsOffset_(-1)
-{
-	setupAccessInfo();
+		varColumnCount_(-1), nullsByteSize_(-1), nullsOffset_(-1) {
+	try {
+		makeKeyMapper(
+				binding_, rowTypeCategory_, compositeKeyOffeset_, general_,
+				config, keyMapper_);
+		setupAccessInfo();
+	}
+	catch (...) {
+		clear();
+		throw;
+	}
 }
 
 RowMapper::RowMapper(
@@ -1354,18 +1573,16 @@ RowMapper::RowMapper(
 		rowTypeCategory_(rowTypeCategory),
 		general_(general),
 		nullableAllowed_(nullableAllowed),
-		keyColumnId_(-1),
+		compositeKeyOffeset_(0),
 		varColumnCount_(-1),
 		nullsByteSize_(-1),
-		nullsOffset_(-1)
-{
+		nullsOffset_(-1) {
 	binding_.entries = NULL;
 	binding_.entryCount = 0;
 }
 
 RowMapper::~RowMapper() {
-	delete[] binding_.entries;
-	binding_.entries = NULL;
+	clear();
 }
 
 std::auto_ptr<RowMapper> RowMapper::getInstance(
@@ -1430,13 +1647,13 @@ const RowMapper& RowMapper::getQueryAnalysisMapper() {
 	return QUERY_ANALYSIS_MAPPER;
 }
 
-void RowMapper::checkSchemaMatched(const RowMapper &mapper) const {
+void RowMapper::checkSchemaMatched(const RowMapper &mapper, bool full) const {
 	if (this == &mapper) {
 		return;
 	}
 
-	if (rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT ||
-			mapper.rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT) {
+	if (full && (rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT ||
+			mapper.rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT)) {
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
 	}
 
@@ -1460,12 +1677,20 @@ void RowMapper::checkSchemaMatched(const RowMapper &mapper) const {
 			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 		}
 
-		if (strcmp(thisEntry.columnName, entry.columnName) != 0 &&
+		if (isKeyColumn(thisEntry) ^ isKeyColumn(entry)) {
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+		}
+
+		if (full && strcmp(thisEntry.columnName, entry.columnName) != 0 &&
 				ClientUtil::normalizeSymbolUnchecked(thisEntry.columnName) !=
 				ClientUtil::normalizeSymbolUnchecked(entry.columnName)) {
 			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 		}
 	}
+}
+
+void RowMapper::checkKeySchemaMatched(const RowMapper &mapper) const {
+	resolveKeyMapper().checkSchemaMatched(mapper.resolveKeyMapper(), true);
 }
 
 bool RowMapper::matches(
@@ -1532,14 +1757,16 @@ bool RowMapper::matches(
 	}
 
 	const size_t entryCount = importColumnCount(schemaIn);
-	int32_t keyColumnId = importKeyListBegin(schemaIn, config, entryCount);
+	std::vector<int32_t> keyColumnList;
+	importKeyListBegin(schemaIn, config, entryCount, keyColumnList);
 
 	if (entryCount != binding_.entryCount) {
 		return false;
 	}
 
+	size_t keyCount = 0;
 	for (size_t i = 0; i < entryCount; i++) {
-		GSBindingEntry inEntry;
+		GSBindingEntry inEntry = GS_BINDING_ENTRY_INITIALIZER;
 		std::string columnName;
 		importColumnSchema(
 				schemaIn, config, inEntry, &columnName, NULL);
@@ -1569,11 +1796,23 @@ bool RowMapper::matches(
 				(baseEntry.options & mask) != entry.options) {
 			return false;
 		}
+
+		if ((baseEntry.options & GS_TYPE_OPTION_KEY) != 0) {
+			keyCount++;
+		}
 	}
 
-	importKeyListEnd(schemaIn, config, entryCount, keyColumnId);
-	if (keyColumnId != keyColumnId_) {
+	importKeyListEnd(schemaIn, config, entryCount, keyColumnList);
+	if (keyColumnList.size() != keyCount) {
 		return false;
+	}
+
+	for (std::vector<int32_t>::iterator it = keyColumnList.begin();
+			it != keyColumnList.end(); ++it) {
+		const GSBindingEntry &baseEntry = baseMapper.binding_.entries[*it];
+		if ((baseEntry.options & GS_TYPE_OPTION_KEY) == 0) {
+			return false;
+		}
 	}
 
 	return true;
@@ -1592,10 +1831,16 @@ size_t RowMapper::getDigest(
 		return 0;
 	}
 
+	size_t keyCount = 0;
 	for (size_t i = 0; i < entryCount; i++) {
 		const GSBindingEntry &entry = binding->entries[i];
 		result = 31 * result + getDigest(entry);
+
+		if ((entry.options & GS_TYPE_OPTION_KEY) != 0) {
+			keyCount++;
+		}
 	}
+	result = 31 * result + keyCount;
 
 	return result;
 }
@@ -1604,7 +1849,9 @@ size_t RowMapper::getDigest(
 		const RowMapper &baseMapper, ArrayByteInStream schemaIn,
 		const Config &config) {
 	const size_t entryCount = importColumnCount(schemaIn);
-	int32_t keyColumnId = importKeyListBegin(schemaIn, config, entryCount);
+
+	std::vector<int32_t> keyColumnList;
+	importKeyListBegin(schemaIn, config, entryCount, keyColumnList);
 
 	if (entryCount != baseMapper.binding_.entryCount) {
 		return 0;
@@ -1631,7 +1878,8 @@ size_t RowMapper::getDigest(
 				getDigest(baseMapper.binding_.entries[it->second.id_]);
 	}
 
-	importKeyListEnd(schemaIn, config, entryCount, keyColumnId);
+	importKeyListEnd(schemaIn, config, entryCount, keyColumnList);
+	result = 31 * result + keyColumnList.size();
 
 	return result;
 }
@@ -1661,14 +1909,22 @@ void RowMapper::getContainerSchema(
 
 	containerInfo.rowKeyAssigned = ClientUtil::toGSBool(hasKey());
 
+	containerInfo.rowKeyColumnCount =
+			toKeyList(containerInfo.rowKeyColumnList, varDataPool);
+
 	containerInfoRef.set(containerInfo);
 
 	containerInfoRef.createColumnInfoList(binding_.entryCount, varDataPool);
 	for (size_t i = 0; i < binding_.entryCount; i++) {
 		const GSColumnInfo &columnInfo =
 				getColumnSchema(binding_.entries[i], &varDataPool);
-		containerInfoRef.setColumnInfo(static_cast<int32_t>(i), columnInfo);
+		containerInfoRef.setColumnInfo(i, columnInfo);
 	}
+}
+
+void RowMapper::getKeyContainerSchema(
+		ContainerInfoRef<> &containerInfoRef, VarDataPool &varDataPool) const {
+	resolveKeyMapper().getContainerSchema(containerInfoRef, varDataPool);
 }
 
 GSColumnInfo RowMapper::getColumnSchema(
@@ -1712,8 +1968,33 @@ const GSBinding& RowMapper::getBinding() const {
 	return binding_;
 }
 
+const GSBinding& RowMapper::getKeyBinding() const {
+	return resolveKeyMapper().getBinding();
+}
+
+const GSBinding* RowMapper::findKeyBinding() const {
+	const RowMapper *keyMapper = findKeyMapper();
+	if (keyMapper == NULL) {
+		return NULL;
+	}
+	return &keyMapper_->binding_;
+}
+
 bool RowMapper::hasKey() const {
-	return (keyColumnId_ >= 0);
+	return (findKeyMapper() != NULL);
+}
+
+RowMapper::KeyCategory RowMapper::getKeyCategory() const {
+	const RowMapper *keyMapper = findKeyMapper();
+	if (keyMapper == NULL) {
+		return KEY_CATEGORY_NONE;
+	}
+	else if (keyMapper->binding_.entryCount == 1) {
+		return KEY_CATEGORY_SINGLE;
+	}
+	else {
+		return KEY_CATEGORY_COMPOSITE;
+	}
 }
 
 GSType RowMapper::getElementType(int32_t columnId) const {
@@ -1754,11 +2035,33 @@ void RowMapper::exportSchema(
 	}
 
 	exportColumnCount(out, binding_.entryCount);
-	exportKeyListBegin(out, config, keyColumnId_);
+	exportKeyListBegin(out, config, findKeyBinding());
 	for (size_t i = 0; i < binding_.entryCount; i++) {
 		exportColumnSchema(out, binding_.entries[i]);
 	}
-	exportKeyListEnd(out, config, keyColumnId_);
+	exportKeyListEnd(out, config, findKeyBinding());
+}
+
+void RowMapper::exportKeySchemaSingle(XArrayByteOutStream &out) const {
+	const GSBinding &keyBinding = resolveKeyMapper().binding_;
+	if (keyBinding.entryCount > 1) {
+		out << static_cast<int8_t>(-1);
+	}
+	else {
+		assert(keyBinding.entryCount > 0);
+		out << static_cast<int8_t>(keyBinding.entries[0].elementType);
+	}
+}
+
+void RowMapper::exportKeySchemaComposite(XArrayByteOutStream &out) const {
+	const GSBinding &keyBinding = resolveKeyMapper().binding_;
+	const int32_t columnCount = static_cast<int32_t>(keyBinding.entryCount);
+	if (columnCount > 1) {
+		out << columnCount;
+		for (int32_t i = 0; i < columnCount; i++) {
+			out << static_cast<int8_t>(keyBinding.entries[i].elementType);
+		}
+	}
 }
 
 size_t RowMapper::importColumnCount(ArrayByteInStream &in) {
@@ -1772,8 +2075,14 @@ void RowMapper::exportColumnCount(
 	out << ClientUtil::sizeValueToInt32(columnCount);
 }
 
-int32_t RowMapper::importKeyListBegin(
-		ArrayByteInStream &in, const Config &config, size_t columnCount) {
+void RowMapper::importKeyListBegin(
+		ArrayByteInStream &in, const Config &config, size_t columnCount,
+		std::vector<int32_t> &keyColumnList) {
+	if (!keyColumnList.empty()) {
+		assert(false);
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+
 	if (!config.keyExtensible_) {
 		int32_t columnId;
 		in >> columnId;
@@ -1782,62 +2091,92 @@ int32_t RowMapper::importKeyListBegin(
 			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 					"Protocol error by illegal index of row key column");
 		}
-		return columnId;
+		keyColumnList.push_back(columnId);
 	}
-
-	return std::numeric_limits<int32_t>::max();
 }
 
 void RowMapper::importKeyListEnd(
 		ArrayByteInStream &in, const Config &config, size_t columnCount,
-		int32_t &keyColumnId) {
+		std::vector<int32_t> &keyColumnList) {
+	if (!keyColumnList.empty()) {
+		assert(false);
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+
 	if (config.keyExtensible_) {
 		int16_t count;
 		in >> count;
-		if (!(count == 0 || count == 1)) {
+		if (count < 0 || static_cast<size_t>(count) > columnCount ||
+			(!config.keyComposable_ && !(count == 0 || count == 1))) {
 			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 					"Protocol error by illegal row key count");
 		}
 
-		keyColumnId = -1;
 		for (int16_t i = 0; i < count; i++) {
 			int16_t columnId;
 			in >> columnId;
-			if (columnId != 0 ||
-					columnId >= static_cast<int32_t>(columnCount)) {
+			if (columnId < 0 || static_cast<size_t>(columnId) >= columnCount ||
+					(columnId != i && RESTRICT_KEY_ORDER_FIRST)) {
 				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
 						"Protocol error by illegal index of row key column");
 			}
-			if (i == 0) {
-				keyColumnId = columnId;
-			}
+			keyColumnList.push_back(columnId);
 		}
 	}
-
-	assert(keyColumnId == 0 || keyColumnId == -1);
 }
 
 void RowMapper::exportKeyListBegin(
 		XArrayByteOutStream &out, const Config &config,
-		const int32_t &keyColumnId) {
+		const GSBinding *keyBinding) {
 	if (!config.keyExtensible_) {
+		int32_t keyColumnId = -1;
+		if (keyBinding != NULL) {
+			for (size_t i = 0; i < keyBinding->entryCount; i++) {
+				if (!isKeyColumn(keyBinding->entries[i])) {
+					continue;
+				}
+				if (keyColumnId >= 0) {
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+				}
+				if (i > 0 && RESTRICT_KEY_ORDER_FIRST) {
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+				}
+				keyColumnId = static_cast<int32_t>(i);
+			}
+		}
 		out << keyColumnId;
 	}
 }
 
 void RowMapper::exportKeyListEnd(
 		XArrayByteOutStream &out, const Config &config,
-		const int32_t &keyColumnId) {
+		const GSBinding *keyBinding) {
 	if (config.keyExtensible_) {
-		const int16_t count = (keyColumnId < 0 ? 0 : 1);
+		int16_t count = 0;
+		if (keyBinding != NULL) {
+			for (size_t i = 0; i < keyBinding->entryCount; i++) {
+				if (!isKeyColumn(keyBinding->entries[i])) {
+					continue;
+				}
+				count++;
+			}
+		}
+		if (!config.keyComposable_ && count > 1) {
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		}
 		out << count;
 
-		for (int16_t i = 0; i < count; i++) {
-			const int16_t columnId = static_cast<int16_t>(keyColumnId);
-			if (columnId != 0) {
-				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		if (keyBinding != NULL) {
+			for (size_t i = 0; i < keyBinding->entryCount; i++) {
+				if (!isKeyColumn(keyBinding->entries[i])) {
+					continue;
+				}
+				const int16_t columnId = static_cast<int16_t>(i);
+				if (!config.keyComposable_ && columnId != 0) {
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+				}
+				out << columnId;
 			}
-			out << columnId;
 		}
 	}
 }
@@ -1878,6 +2217,8 @@ void RowMapper::exportColumnSchema(
 void RowMapper::importColumnSchema(
 		ArrayByteInStream &in, const Config &config, GSBindingEntry &entry,
 		std::string *nameStr, VarDataPool *varDataPool) {
+	const GSBindingEntry initialEntry = GS_BINDING_ENTRY_INITIALIZER;
+	entry = initialEntry;
 
 	if (nameStr != NULL) {
 		in >> *nameStr;
@@ -1915,44 +2256,89 @@ int32_t RowMapper::resolveColumnId(const GSChar *name) const {
 }
 
 void RowMapper::encodeKeyGeneral(
-		XArrayByteOutStream &out, MappingMode mode,
-		const GSType keyType, const GSValue &value) {
-	switch (keyType) {
-	case GS_TYPE_STRING:
-		if (mode == MODE_ROWWISE_SEPARATED_V2) {
-			ClientUtil::writeVarDataString(out, value.asString);
-		} else {
-			out << value.asString;
+		XArrayByteOutStream &out, MappingMode mode, bool keyGeneral,
+		const GSType *keyType, const void *keyObj) const {
+	const size_t keyCount = 1;
+	bool withEncodedSize = false;
+	bool withKeyCount = false;
+	encodeKeyGeneral(
+			out, mode, keyGeneral, keyType, &keyObj, &keyObj + keyCount,
+			keyCount, withEncodedSize, withKeyCount);
+}
+
+template<typename It>
+void RowMapper::encodeKeyGeneral(
+		XArrayByteOutStream &out, MappingMode mode, bool keyGeneral,
+		const GSType *keyType, It begin, It end, size_t keyCount,
+		bool withEncodedSize, bool withKeyCount) const {
+	const RowMapper &keyMapper = resolveKeyMapper();
+	const GSBinding &keyBinding = keyMapper.binding_;
+	const bool composite = (keyBinding.entryCount > 1);
+
+	const size_t headPos = out.base().position();
+	if (withEncodedSize && composite) {
+		out << ClientUtil::sizeValueToInt32(0);
+	}
+
+	const size_t bodyPos = out.base().position();
+
+	if (withKeyCount) {
+		out << ClientUtil::sizeValueToInt32(keyCount);
+	}
+
+	std::auto_ptr<OutputCursor> compositeCursor;
+	if (composite) {
+		compositeCursor.reset(new OutputCursor(
+				out, keyMapper, mode, static_cast<int32_t>(keyCount), false));
+	}
+
+	const GSType frontKeyType = keyBinding.entries[0].elementType;
+	if (keyType != NULL) {
+		if (composite) {
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
+					"Unacceptable key type for composite key");
 		}
-		break;
-	case GS_TYPE_INTEGER:
-		out << value.asInteger;
-		break;
-	case GS_TYPE_LONG:
-		out << value.asLong;
-		break;
-	case GS_TYPE_TIMESTAMP:
-		out << value.asTimestamp;
-		break;
-	default:
-		assert(false);
-		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
+		if (*keyType != frontKeyType) {
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
+					"Key type unmatched");
+		}
+	}
+
+	for (It it = begin; it != end; ++it) {
+		if (compositeCursor.get() == NULL) {
+			const void *subKeyObj = *it;
+
+			if (keyGeneral || composite) {
+				const RowMapper &keyCodingMapper =
+						resolveKeyCodingMapper(keyGeneral, keyType, *it);
+				const GSBindingEntry &keyEntry =
+						keyCodingMapper.binding_.entries[0];
+
+				subKeyObj = getField(keyEntry, *it);
+			}
+
+			encodeKeyField(out, mode, frontKeyType, subKeyObj);
+		}
+		else {
+			const RowMapper &codingKeyMapper =
+					keyMapper.resolveCodingMapper(false, *it);
+			codingKeyMapper.encode(
+					*compositeCursor, false, NULL, NULL, false, *it);
+		}
+	}
+
+	if (withEncodedSize && composite) {
+		const size_t endPos = out.base().position();
+		out.base().position(headPos);
+		out << ClientUtil::sizeValueToInt32(endPos - bodyPos);
+		out.base().position(endPos);
 	}
 }
 
-void RowMapper::encodeKeyByObj(
-		XArrayByteOutStream &out, MappingMode mode,
-		const GSType *keyType, const void *keyObj) const {
-	assert(keyObj != NULL);
-
-	const GSBindingEntry &entry = resolveKeyEntry();
-	assert(!isArrayColumn(entry));
-
-	if (keyType != NULL && *keyType != entry.elementType) {
-		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
-	}
-
-	switch (entry.elementType) {
+void RowMapper::encodeKeyField(
+		XArrayByteOutStream &out, MappingMode mode, GSType keyType,
+		const void *keyObj) {
+	switch (keyType) {
 	case GS_TYPE_STRING:
 		{
 			const GSChar *keyStr = *static_cast<const GSChar* const*>(keyObj);
@@ -1982,10 +2368,34 @@ void RowMapper::encodeKeyByObj(
 	}
 }
 
+void RowMapper::encodeKeyByObj(
+		XArrayByteOutStream &out, MappingMode mode, const GSType *keyType,
+		const void *keyObj) const {
+	const GSBinding &keyBinding = resolveKeyMapper().binding_;
+	if (keyBinding.entryCount != 1) {
+		assert(false);
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+
+	const GSBindingEntry &entry = keyBinding.entries[0];
+	assert(!isArrayColumn(entry));
+	if (keyType != NULL && *keyType != entry.elementType) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED, "");
+	}
+
+	encodeKeyField(out, mode, entry.elementType, keyObj);
+}
+
 void RowMapper::encodeKeyByString(
 		XArrayByteOutStream &out, MappingMode mode,
 		const GSChar *keyString, OutputCursor *cursor) const {
-	const GSBindingEntry &entry = resolveKeyEntry();
+	const GSBinding &keyBinding = resolveKeyMapper().binding_;
+	if (keyBinding.entryCount != 1) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE,
+				"Path key operation not supported for composite key");
+	}
+
+	const GSBindingEntry &entry = keyBinding.entries[0];
 	assert(!isArrayColumn(entry));
 
 	switch (entry.elementType) {
@@ -2015,7 +2425,7 @@ void RowMapper::encodeKeyByString(
 		break;
 	case GS_TYPE_TIMESTAMP: {
 		GSTimestamp timestamp;
-		if (!TimestampUtil::parse(keyString, timestamp)) {
+		if (!TimestampUtils::parse(keyString, timestamp)) {
 			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_VALUE_FORMAT, keyString);
 		}
 		out << timestamp;
@@ -2027,16 +2437,33 @@ void RowMapper::encodeKeyByString(
 	}
 }
 
-void RowMapper::encode(XArrayByteOutStream &out, MappingMode mode,
-		const GSType *keyType, const void *keyObj,
-		const void *rowObj) const {
-	OutputCursor cursor(out, *this, mode, 1);
-	encode(cursor, keyType, keyObj, rowObj);
+void RowMapper::encode(
+		XArrayByteOutStream &out, MappingMode mode, const GSType *keyType,
+		const void *keyObj, const void *rowObj) const {
+	const bool keyGeneral = false;
+	const bool rowGeneral = false;
+	encode(out, mode, keyGeneral, keyType, keyObj, rowGeneral, rowObj);
 }
 
-void RowMapper::encode(OutputCursor &cursor,
-		const GSType *keyType, const void *keyObj,
+void RowMapper::encode(
+		OutputCursor &cursor, const GSType *keyType, const void *keyObj,
 		const void *rowObj) const {
+	const bool keyGeneral = false;
+	const bool rowGeneral = false;
+	encode(cursor, keyGeneral, keyType, keyObj, rowGeneral, rowObj);
+}
+
+void RowMapper::encode(
+		XArrayByteOutStream &out, MappingMode mode,
+		bool keyGeneral, const GSType *keyType, const void *keyObj,
+		bool rowGeneral, const void *rowObj) const {
+	OutputCursor cursor(out, *this, mode, 1);
+	encode(cursor, keyGeneral, keyType, keyObj, rowGeneral, rowObj);
+}
+
+void RowMapper::encode(
+		OutputCursor &cursor, bool keyGeneral, const GSType *keyType,
+		const void *keyObj, bool rowGeneral, const void *rowObj) const {
 	if (rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT) {
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
 	}
@@ -2044,11 +2471,36 @@ void RowMapper::encode(OutputCursor &cursor,
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED, "");
 	}
 
-	const RowMapper &codingMapper = resolveCodingMapper(rowObj);
+	const RowMapper &codingMapper = resolveCodingMapper(rowGeneral, rowObj);
+
+	const bool composite = (getKeyCategory() == KEY_CATEGORY_COMPOSITE);
+	if (composite && keyType != NULL) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
+				"Unacceptable key type for composite key");
+	}
+	const RowMapper *keyCodingMapper =
+			((keyGeneral || composite) && keyObj != NULL ?
+					&resolveKeyCodingMapper(keyGeneral, keyType, keyObj) :
+					NULL);
+
+	size_t keyIndex = 0;
 	cursor.beginRow(codingMapper, -1, codingMapper.findNulls(rowObj));
 	for (size_t i = 0; i < binding_.entryCount; i++) {
+		const GSType *subKeyType = keyType;
+		const void *subKeyObj = keyObj;
+
+		if (keyCodingMapper != NULL) {
+			const GSBindingEntry &keyEntry =
+					keyCodingMapper->binding_.entries[keyIndex];
+
+			subKeyType = &keyEntry.elementType;
+			subKeyObj = getField(keyEntry, keyObj);
+			keyIndex++;
+		}
+
 		codingMapper.encodeField(
-				cursor, static_cast<int32_t>(i), keyType, keyObj, rowObj);
+				cursor, static_cast<int32_t>(i), subKeyType, subKeyObj,
+				rowObj);
 	}
 	cursor.endRow();
 }
@@ -2056,15 +2508,22 @@ void RowMapper::encode(OutputCursor &cursor,
 void RowMapper::encodeWithKeyString(
 		XArrayByteOutStream &out, MappingMode mode,
 		const GSChar *keyString, const void *rowObj) const {
+	const bool rowGeneral = false;
+	encodeWithKeyString(out, mode, keyString, rowGeneral, rowObj);
+}
+
+void RowMapper::encodeWithKeyString(
+		XArrayByteOutStream &out, MappingMode mode,
+		const GSChar *keyString, bool rowGeneral, const void *rowObj) const {
 	if (rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT || !hasKey()) {
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
 	}
 
-	const RowMapper &codingMapper = resolveCodingMapper(rowObj);
+	const RowMapper &codingMapper = resolveCodingMapper(rowGeneral, rowObj);
 	OutputCursor cursor(out, codingMapper, mode, 1);
 	cursor.beginRow(codingMapper, -1, codingMapper.findNulls(rowObj));
 	for (size_t i = 0; i < binding_.entryCount; i++) {
-		if (static_cast<int32_t>(i) == keyColumnId_) {
+		if (isKeyColumn(binding_.entries[i])) {
 			cursor.beginField();
 			codingMapper.encodeKeyByString(out, mode, keyString, &cursor);
 		}
@@ -2076,13 +2535,27 @@ void RowMapper::encodeWithKeyString(
 	cursor.endRow();
 }
 
-void RowMapper::decode(ArrayByteInStream &in, MappingMode mode,
+void RowMapper::decode(
+		ArrayByteInStream &in, MappingMode mode,
 		VarDataPool *varDataPool, void *rowObj) const {
-	InputCursor cursor(in, *this, mode, 1, false, varDataPool);
-	decode(cursor, rowObj);
+	const bool rowGeneral = false;
+	decode(in, mode, varDataPool, rowGeneral, rowObj);
 }
 
 void RowMapper::decode(InputCursor &cursor, void *rowObj) const {
+	const bool rowGeneral = false;
+	decode(cursor, rowGeneral, rowObj);
+}
+
+void RowMapper::decode(
+		ArrayByteInStream &in, MappingMode mode,
+		VarDataPool *varDataPool, bool rowGeneral, void *rowObj) const {
+	InputCursor cursor(in, *this, mode, 1, false, varDataPool);
+	decode(cursor, rowGeneral, rowObj);
+}
+
+void RowMapper::decode(
+		InputCursor &cursor, bool rowGeneral, void *rowObj) const {
 	if (rowTypeCategory_ == CATEGORY_AGGREGATION_RESULT ||
 			cursor.base_.mode_ == MODE_AGGREGATED) {
 		if (general_) {
@@ -2097,7 +2570,8 @@ void RowMapper::decode(InputCursor &cursor, void *rowObj) const {
 		size_t pendingPtrArraySize = 0;
 
 		try {
-			const RowMapper &codingMapper = resolveCodingMapper(rowObj);
+			const RowMapper &codingMapper =
+					resolveCodingMapper(rowGeneral, rowObj);
 			cursor.beginRow(codingMapper, codingMapper.findNulls(rowObj));
 			for (size_t i = 0; i < binding_.entryCount; i++) {
 				codingMapper.decodeField(
@@ -2111,10 +2585,17 @@ void RowMapper::decode(InputCursor &cursor, void *rowObj) const {
 				for (; pendingPtrArraySize > 0; pendingPtrArraySize--) {
 					void *elemPtr = static_cast<void**>(
 							pendingVarData)[pendingPtrArraySize];
-					deallocate(cursor.varDataPool_, rowObj, elemPtr);
-
+					try {
+						deallocate(cursor.varDataPool_, rowObj, elemPtr);
+					}
+					catch (...) {
+					}
 				}
-				deallocate(cursor.varDataPool_, rowObj, pendingVarData);
+				try {
+					deallocate(cursor.varDataPool_, rowObj, pendingVarData);
+				}
+				catch (...) {
+				}
 			}
 
 			if (general_) {
@@ -2125,37 +2606,36 @@ void RowMapper::decode(InputCursor &cursor, void *rowObj) const {
 	}
 }
 
-void* RowMapper::extractKey(void *rowObj, KeyStorage &keyStorage) const {
-	if (!hasKey()) {
-		return NULL;
-	}
+void RowMapper::resolveKey(const void *rowObj, GSRowKey &keyObj) const {
+	const GSBinding &keyBinding = resolveKeyMapper().binding_;
+	for (size_t i = 0; i < keyBinding.entryCount; i++) {
+		const GSBindingEntry &entry = keyBinding.entries[i];
+		assert(!isArrayColumn(entry));
 
-	const GSBindingEntry &entry = resolveKeyEntry();
-	assert(!isArrayColumn(entry));
-
-	switch (entry.elementType) {
-	case GS_TYPE_STRING:
-		keyStorage.strStorage_ = *static_cast<const GSChar *const*>(
-				getField(resolveKeyEntry(), rowObj));
-		keyStorage.value_.strValue_ = keyStorage.strStorage_.c_str();
-		break;
-	case GS_TYPE_INTEGER:
-		keyStorage.value_.intValue_ = *static_cast<int32_t*>(
-				getField(resolveKeyEntry(), rowObj));
-		break;
-	case GS_TYPE_LONG:
-		keyStorage.value_.longValue_ = *static_cast<int64_t*>(
-				getField(resolveKeyEntry(), rowObj));
-		break;
-	case GS_TYPE_TIMESTAMP:
-		keyStorage.value_.longValue_ = *static_cast<GSTimestamp*>(
-				getField(resolveKeyEntry(), rowObj));
-		break;
-	default:
-		assert(false);
-		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
+		GSValue value;
+		switch (entry.elementType) {
+		case GS_TYPE_STRING:
+			value.asString = *static_cast<const GSChar *const*>(
+					getField(entry, rowObj));
+			break;
+		case GS_TYPE_INTEGER:
+			value.asInteger =
+					*static_cast<const int32_t*>(getField(entry, rowObj));
+			break;
+		case GS_TYPE_LONG:
+			value.asLong =
+					*static_cast<const int64_t*>(getField(entry, rowObj));
+			break;
+		case GS_TYPE_TIMESTAMP:
+			value.asTimestamp =
+					*static_cast<const GSTimestamp*>(getField(entry, rowObj));
+			break;
+		default:
+			assert(false);
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
+		}
+		keyObj.setField(static_cast<int32_t>(i), value, entry.elementType);
 	}
-	return &keyStorage;
 }
 
 size_t RowMapper::getGeneralRowSize() const {
@@ -2172,6 +2652,10 @@ size_t RowMapper::getGeneralRowSize() const {
 	}
 
 	return size;
+}
+
+size_t RowMapper::getGeneralRowKeySize() const {
+	return resolveKeyMapper().getGeneralRowSize();
 }
 
 void RowMapper::encodeGeometry(
@@ -2349,6 +2833,10 @@ GSType RowMapper::toElementType(GSType type, bool &arrayUsed) {
 
 bool RowMapper::isArrayColumn(const GSBindingEntry &entry) {
 	return (entry.arraySizeOffset != static_cast<size_t>(-1));
+}
+
+bool RowMapper::isKeyColumn(const GSBindingEntry &entry) {
+	return ((entry.options & GS_TYPE_OPTION_KEY) != 0);
 }
 
 GSBindingEntry RowMapper::getEntryGeneral(
@@ -2768,9 +3256,20 @@ GSTypeOption RowMapper::filterInitialValueNull(
 	return (options & mask);
 }
 
-const RowMapper::ContainerInfoRef<true> RowMapper::toInfoRef(
+RowMapper::BindingRef RowMapper::toBindingRef(
+		const GSBinding *binding, const ClientVersion &version) throw() {
+	return BindingRef(binding, version);
+}
+
+RowMapper::ContainerInfoRef<true> RowMapper::toInfoRef(
 		const GSContainerInfo *info, const ClientVersion &version) throw() {
 	return ContainerInfoRef<true>(info, version);
+}
+
+void RowMapper::clear() {
+	delete[] binding_.entries;
+	binding_.entries = NULL;
+	binding_.entryCount = 0;
 }
 
 size_t RowMapper::getDigest(const GSBindingEntry &entry) {
@@ -2781,7 +3280,9 @@ size_t RowMapper::getDigest(const GSBindingEntry &entry) {
 			static_cast<size_t>(toNonNullable(entry.elementType));
 	result = 31 * result + entry.offset;
 	result = 31 * result + entry.arraySizeOffset;
-	result = 31 * result + filterTypeOptions(entry, true, true);
+	result = 31 * result +
+			(filterTypeOptions(entry, true, true) &
+			~static_cast<GSTypeOption>(GS_TYPE_OPTION_KEY));
 
 	return result;
 }
@@ -2800,11 +3301,14 @@ size_t RowMapper::getDigest(const GSChar *str) {
 }
 
 GSBinding RowMapper::checkAndCopyBinding(
-		const GSBinding *src, ColumnIdMap &columnIdMap,
-		RowTypeCategory rowTypeCategory, const Config &config) {
+		const GSBinding *src, bool general, ColumnIdMap &columnIdMap,
+		RowTypeCategory rowTypeCategory, size_t &compositeKeyOffeset,
+		const Config &config) {
 	columnIdMap.clear();
+	compositeKeyOffeset = 0;
 
 	size_t entryCount = 0;
+	const GSBinding *keyBinding = NULL;
 	if (rowTypeCategory == CATEGORY_AGGREGATION_RESULT) {
 		if (src != NULL) {
 			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_ROW_MAPPING, "");
@@ -2816,13 +3320,14 @@ GSBinding RowMapper::checkAndCopyBinding(
 		}
 	}
 	else {
-		entryCount = src->entryCount;
+		entryCount = checkNestedBindingEntryCount(*src, keyBinding);
 	}
 
 	if (rowTypeCategory == CATEGORY_TIME_SERIES && entryCount > 0 &&
 			(src->entries[0].elementType != GS_TYPE_TIMESTAMP ||
 					isArrayColumn(src->entries[0]))) {
-		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE,
+				"Illegal key type for time series");
 	}
 
 	GSBinding dest;
@@ -2830,12 +3335,20 @@ GSBinding RowMapper::checkAndCopyBinding(
 	dest.entryCount = entryCount;
 
 	try {
-		int32_t keyColumnId = -1;
+		size_t keyCount = 0;
+		size_t subPos = 0;
 		for (size_t i = 0; i < entryCount; i++) {
 			const GSChar *columnName;
 			GSBindingEntry &entry = dest.entries[i];
 			{
-				const GSBindingEntry &srcEntry = src->entries[i];
+				bool nested;
+				size_t upperOffset;
+				GSBindingEntry srcEntry = getNestedBindingEntry(
+						*src, keyBinding, i, subPos, &nested, &upperOffset);
+				if (nested) {
+					srcEntry.options |=
+							static_cast<GSTypeOption>(GS_TYPE_OPTION_KEY);
+				}
 
 				columnName = srcEntry.columnName;
 
@@ -2845,6 +3358,13 @@ GSBinding RowMapper::checkAndCopyBinding(
 				entry.options = filterTypeOptions(
 						srcEntry,
 						config.anyTypeAllowed_, config.nullableAllowed_);
+				entry.keyBinding = NULL;
+				entry.keyBindingGetter = NULL;
+
+				if (nested) {
+					entry.offset += upperOffset;
+					compositeKeyOffeset = upperOffset;
+				}
 			}
 
 			bool availableAsKey = false;
@@ -2882,16 +3402,29 @@ GSBinding RowMapper::checkAndCopyBinding(
 			};
 
 			if ((entry.options & GS_TYPE_OPTION_KEY) != 0) {
-				if (i != 0 && RESTRICT_KEY_ORDER_FIRST) {
-					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
-				}
-				if (keyColumnId >= 0) {
-					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MULTIPLE_KEYS_FOUND, "");
-				}
 				if (!availableAsKey) {
 					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
 				}
-				keyColumnId = idEntry.id_;
+				if (i != keyCount && RESTRICT_KEY_ORDER_FIRST) {
+					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA,
+							"Key must be ordered before non key coulumns");
+				}
+				if (keyCount > 0) {
+					if (rowTypeCategory != CATEGORY_COLLECTION) {
+						GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MULTIPLE_KEYS_FOUND,
+								"Multiple keys found for time series");
+					}
+					if (!config.keyComposable_) {
+						GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MULTIPLE_KEYS_FOUND,
+								"Multiple keys found");
+					}
+					if (!general && keyBinding == NULL) {
+						GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MULTIPLE_KEYS_FOUND,
+								"Multiple keys specified "
+								"without using composite key binding");
+					}
+				}
+				keyCount++;
 			}
 
 			if (columnName != NULL || !config.anyTypeAllowed_) {
@@ -2904,8 +3437,10 @@ GSBinding RowMapper::checkAndCopyBinding(
 			}
 		}
 
+		subPos = 0;
 		for (size_t i = 0; i < entryCount; i++) {
-			const GSBindingEntry &srcEntry = src->entries[i];
+			const GSBindingEntry &srcEntry = getNestedBindingEntry(
+					*src, keyBinding, i, subPos, NULL, NULL);
 			GSBindingEntry &destEntry = dest.entries[i];
 			if (srcEntry.columnName == NULL) {
 				destEntry.columnName = NULL;
@@ -2952,7 +3487,8 @@ GSBinding RowMapper::createReorderedBinding(
 	dest.entryCount = srcBinding.entryCount;
 
 	try {
-		int32_t keyColumnId = importKeyListBegin(in, config, entryCount);
+		std::vector<int32_t> keyColumnList;
+		importKeyListBegin(in, config, entryCount, keyColumnList);
 
 		for (size_t i = 0; i < srcBinding.entryCount; i++) {
 			ColumnIdEntry idEntry = {
@@ -2998,11 +3534,23 @@ GSBinding RowMapper::createReorderedBinding(
 			}
 		}
 
-		importKeyListEnd(in, config, entryCount, keyColumnId);
+		importKeyListEnd(in, config, entryCount, keyColumnList);
 
 		if (baseMapper.rowTypeCategory_ == CATEGORY_TIME_SERIES &&
 				newColumnIdList[0] != 0) {
 			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+		}
+
+		for (size_t i = 0; i < srcBinding.entryCount; i++) {
+			dest.entries[i].options = 0;
+		}
+		for (std::vector<int32_t>::iterator it = keyColumnList.begin();
+				it != keyColumnList.end(); ++it) {
+			GSTypeOption &options = dest.entries[*it].options;
+			if (options != 0) {
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+			}
+			options |= static_cast<GSTypeOption>(GS_TYPE_OPTION_KEY);
 		}
 
 		for (size_t i = 0; i < srcBinding.entryCount; i++) {
@@ -3020,13 +3568,13 @@ GSBinding RowMapper::createReorderedBinding(
 			destEntry.elementType = srcEntry.elementType;
 			destEntry.offset = srcEntry.offset;
 			destEntry.arraySizeOffset = srcEntry.arraySizeOffset;
-			destEntry.options = srcEntry.options;
-		}
 
-		if ((keyColumnId >= 0 && baseMapper.keyColumnId_ < 0) ||
-				(baseMapper.keyColumnId_ >= 0 &&
-				keyColumnId != newColumnIdList[baseMapper.keyColumnId_])) {
-			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
+			if ((destEntry.options & GS_TYPE_OPTION_KEY) !=
+					(srcEntry.options & GS_TYPE_OPTION_KEY)) {
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA,
+						"Inconsistent remote schema (key column)");
+			}
+			destEntry.options = srcEntry.options;
 		}
 	}
 	catch (...) {
@@ -3036,6 +3584,180 @@ GSBinding RowMapper::createReorderedBinding(
 	}
 
 	return dest;
+}
+
+size_t RowMapper::checkNestedBindingEntryCount(
+		const GSBinding &binding, const GSBinding *&keyBinding) {
+	size_t count = 0;
+	bool nested = false;
+	keyBinding = NULL;
+	for (size_t i = 0; i < binding.entryCount; i++) {
+		const GSBindingEntry &entry = binding.entries[i];
+		if (!isKeyBindingFound(entry)) {
+			count++;
+			continue;
+		}
+
+		if (nested) {
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
+					"Multiple composite row key specified");
+		}
+		nested = true;
+
+		keyBinding = entry.keyBinding;
+		if (keyBinding == NULL) {
+			try {
+				keyBinding = entry.keyBindingGetter();
+			}
+			catch (...) {
+			}
+			if (keyBinding == NULL) {
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
+						"Failed to get key binding");
+			}
+		}
+
+		count += keyBinding->entryCount;
+	}
+	return count;
+}
+
+const GSBindingEntry& RowMapper::getNestedBindingEntry(
+		const GSBinding &binding, const GSBinding *keyBinding,
+		size_t totalPos, size_t &subPos, bool *nested,
+		size_t *upperOffset) {
+	if (nested != NULL) {
+		*nested = false;
+	}
+	if (upperOffset != NULL) {
+		*upperOffset = 0;
+	}
+
+	assert(subPos <= totalPos);
+	const size_t topPos = totalPos - subPos;
+
+	assert(topPos < binding.entryCount);
+	const GSBindingEntry &topEntry = binding.entries[topPos];
+
+	if (subPos > 0 && (topEntry.options & GS_TYPE_OPTION_KEY) != 0) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
+				"Both composite row key and single row key specified");
+	}
+
+	if (!isKeyBindingFound(topEntry)) {
+		return topEntry;
+	}
+
+	if (topEntry.options != 0) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
+				"Composite row key cannot be set options currently");
+	}
+
+	if (topEntry.elementType != -1) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
+				"Composite row key cannot be set element type");
+	}
+
+	if (topEntry.arraySizeOffset != static_cast<size_t>(-1)) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
+				"Composite row key cannot be set as array");
+	}
+
+	if (keyBinding == NULL) {
+		assert(false);
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+
+	if (keyBinding->entryCount <= 1) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA,
+				"Entry list for composite row key is empty or single");
+	}
+	if (keyBinding->entries == NULL) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
+				"Address of entry list for composite row key is empty");
+	}
+
+	if (subPos >= keyBinding->entryCount) {
+		assert(false);
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+
+	const GSBindingEntry &subEntry = keyBinding->entries[subPos];
+	if ((subEntry.options & GS_TYPE_OPTION_KEY) != 0) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
+				"Entry of composite row key cannot be set as key");
+	}
+
+	if (isKeyBindingFound(subEntry)) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
+				"Entry of composite row key cannot be nested");
+	}
+
+	if (subPos + 1 < keyBinding->entryCount) {
+		subPos++;
+	}
+
+	if (nested != NULL) {
+		*nested = true;
+	}
+	if (upperOffset != NULL) {
+		*upperOffset = topEntry.offset;
+	}
+	return subEntry;
+}
+
+bool RowMapper::isKeyBindingFound(const GSBindingEntry &entry) {
+	return (entry.keyBinding != NULL || entry.keyBindingGetter != NULL);
+}
+
+void RowMapper::makeKeyMapper(
+		const GSBinding &binding, RowTypeCategory rowTypeCategory,
+		size_t compositeKeyOffeset, bool general, const Config &config,
+		std::auto_ptr<RowMapper> &keyMapper) {
+	size_t keyCount = 0;
+	for (size_t i = 0; i < binding.entryCount; i++) {
+		if ((binding.entries[i].options & GS_TYPE_OPTION_KEY) != 0) {
+			keyCount++;
+		}
+	}
+
+	if (keyCount == 0) {
+		return;
+	}
+
+	const size_t digest = 0;
+	keyMapper.reset(new RowMapper(
+			digest, rowTypeCategory, general, config.nullableAllowed_));
+
+	GSBinding &keyBinding = keyMapper->binding_;
+	keyBinding.entries = new GSBindingEntry[keyCount];
+	keyBinding.entryCount = keyCount;
+
+	ColumnIdMap &columnIdMap = keyMapper->columnIdMap_;
+	GSBindingEntry *destIt = keyBinding.entries;
+	for (size_t i = 0; i < keyCount; i++, destIt++) {
+		const GSBindingEntry &src = binding.entries[i];
+		if ((src.options & GS_TYPE_OPTION_KEY) == 0) {
+			continue;
+		}
+		*destIt = src;
+
+		assert(compositeKeyOffeset <= src.offset);
+		destIt->offset -= compositeKeyOffeset;
+
+		if (src.columnName == NULL) {
+			continue;
+		}
+		const ColumnIdEntry idEntry = {
+			src.columnName, static_cast<int32_t>(columnIdMap.size())
+		};
+		const std::string &normalizedName =
+				ClientUtil::normalizeSymbolUnchecked(src.columnName);
+		columnIdMap.insert(ColumnIdMap::value_type(normalizedName, idEntry));
+	}
+	assert(keyBinding.entries + keyCount == destIt);
+
+	keyMapper->setupAccessInfo();
 }
 
 template<GSType T, typename M>
@@ -3053,17 +3775,6 @@ template<>
 const GSChar* RowMapper::maskNullString<GS_TYPE_GEOMETRY, util::TrueType>(
 		const GSChar *src) {
 	return (src == NULL ? "POINT(EMPTY)" : src);
-}
-
-int32_t RowMapper::findRowKeyId(const GSBinding *binding) {
-	if (binding != NULL) {
-		for (size_t i = 0; i < binding->entryCount; i++) {
-			if (binding->entries[i].options & GS_TYPE_OPTION_KEY) {
-				return static_cast<int32_t>(i);
-			}
-		}
-	}
-	return -1;
 }
 
 void* RowMapper::getField(const GSBindingEntry &entry, void *rowObj) {
@@ -3086,8 +3797,29 @@ size_t RowMapper::getArrayFieldSize(
 			static_cast<const uint8_t*>(rowObj) + entry.arraySizeOffset);
 }
 
-const RowMapper& RowMapper::resolveCodingMapper(const void *rowObj) const {
-	if (!general_) {
+size_t RowMapper::toKeyList(
+		const int32_t *&list, VarDataPool &varDataPool) const {
+	list = NULL;
+	const RowMapper *keyMapper = findKeyMapper();
+	if (keyMapper == NULL) {
+		return 0;
+	}
+
+	const size_t count = keyMapper->binding_.entryCount;
+	int32_t *dest = static_cast<int32_t*>(
+			varDataPool.allocate(sizeof(int32_t) * count));
+
+	for (size_t i = 0; i < count; i++) {
+		dest[i] = static_cast<int32_t>(i);
+	}
+
+	list = dest;
+	return count;
+}
+
+const RowMapper& RowMapper::resolveCodingMapper(
+		bool rowGeneral, const void *rowObj) const {
+	if (!general_ || rowGeneral) {
 		return *this;
 	}
 
@@ -3097,36 +3829,49 @@ const RowMapper& RowMapper::resolveCodingMapper(const void *rowObj) const {
 		return *this;
 	}
 
-	if (binding_.entryCount != mapper.binding_.entryCount) {
-		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
-	}
-
-	if (hasKey() ^ mapper.hasKey()) {
-		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
-	}
-
-	for (size_t i = 0; i < binding_.entryCount; i++) {
-		const GSBindingEntry &entry = binding_.entries[i];
-		const GSBindingEntry &anotherEntry = mapper.binding_.entries[i];
-
-		if (entry.elementType != anotherEntry.elementType) {
-			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
-		}
-
-		if (isArrayColumn(entry) ^ isArrayColumn(anotherEntry)) {
-			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
-		}
-	}
-
+	checkSchemaMatched(mapper, false);
 	return mapper;
 }
 
-const GSBindingEntry& RowMapper::resolveKeyEntry() const {
-	if (keyColumnId_ < 0) {
-		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_FOUND, "");
-	}
+const RowMapper& RowMapper::resolveKeyCodingMapper(
+		bool keyGeneral, const GSType *keyType, const void *keyObj) const {
+	const bool composite =
+			(getKeyCategory() == RowMapper::KEY_CATEGORY_COMPOSITE);
+	if (keyGeneral || composite) {
+		if (keyType != NULL && composite) {
+			assert(false);
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		}
 
-	return binding_.entries[keyColumnId_];
+		const RowMapper &keyMapper =
+				GSRow::resolve(keyObj).getRowMapper().resolveKeyMapper();
+		resolveKeyMapper().checkSchemaMatched(keyMapper, false);
+
+		return keyMapper;
+	}
+	else {
+		return resolveKeyMapper();
+	}
+}
+
+const RowMapper& RowMapper::resolveKeyMapper() const {
+	const RowMapper *keyMapper = findKeyMapper();
+	if (keyMapper == NULL) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_FOUND,
+				"Row key does not exist");
+	}
+	return *keyMapper;
+}
+
+const RowMapper* RowMapper::findKeyMapper() const {
+	const RowMapper *keyMapper = keyMapper_.get();
+	if (keyMapper == NULL) {
+		if (binding_.entryCount > 0 && isKeyColumn(binding_.entries[0])) {
+			return this;
+		}
+		return NULL;
+	}
+	return keyMapper;
 }
 
 const GSBindingEntry& RowMapper::getEntry(int32_t columnId) const {
@@ -3418,7 +4163,7 @@ void RowMapper::encodeField(OutputCursor &cursor, int32_t columnId,
 	const MappingMode mode = cursor.base_.mode_;
 
 	if (isArrayColumn(entry)) {
-		if (columnId == keyColumnId_ && keyObj != NULL) {
+		if (isKeyColumn(entry) && keyObj != NULL) {
 			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 		}
 
@@ -3512,7 +4257,7 @@ void RowMapper::encodeField(OutputCursor &cursor, int32_t columnId,
 	}
 	else {
 		const void *fieldValue;
-		if (keyObj != NULL && columnId == keyColumnId_) {
+		if (keyObj != NULL && isKeyColumn(entry)) {
 			if (keyType != NULL && *keyType != entry.elementType) {
 				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
 			}
@@ -4013,6 +4758,28 @@ RowMapper::Initializer::~Initializer() {
 
 
 
+const RowMapper& RowMapper::RowTool::resolveKeyMapper(
+		const RowMapper &mapper) {
+	return mapper.resolveKeyMapper();
+}
+
+
+RowMapper::GeneralRowHolder::GeneralRowHolder() : row_(NULL) {
+}
+
+RowMapper::GeneralRowHolder::~GeneralRowHolder() {
+}
+
+void RowMapper::GeneralRowHolder::reset(GSRow *row) throw() {
+	GSRow::close(&row_);
+	row_ = row;
+}
+
+GSRow* RowMapper::GeneralRowHolder::get() const throw() {
+	return row_;
+}
+
+
 RowMapper::BaseCursor::BaseCursor(
 		const RowMapper &mapper, MappingMode mode, int32_t rowCount,
 		bool rowIdIncluded, size_t topPos) :
@@ -4087,10 +4854,12 @@ size_t RowMapper::BaseCursor::getVarDataTop(
 
 
 RowMapper::Config::Config(
-		bool anyTypeAllowed, bool nullableAllowed, bool keyExtensible) :
+		bool anyTypeAllowed, bool nullableAllowed, bool keyExtensible,
+		bool keyComposable) :
 		anyTypeAllowed_(anyTypeAllowed),
 		nullableAllowed_(nullableAllowed),
-		keyExtensible_(keyExtensible) {
+		keyExtensible_(keyExtensible),
+		keyComposable_(keyComposable) {
 }
 
 
@@ -4405,8 +5174,11 @@ const RowMapper* RowMapper::Cache::resolve(
 	std::auto_ptr<RowMapper> mapper(new RowMapper(
 			digest, rowTypeCategory, general, config.nullableAllowed_));
 	mapper->binding_ = checkAndCopyBinding(
-			binding, mapper->columnIdMap_, rowTypeCategory, config);
-	mapper->keyColumnId_ = findRowKeyId(&mapper->binding_);
+			binding, general, mapper->columnIdMap_, rowTypeCategory,
+			mapper->compositeKeyOffeset_, config);
+	makeKeyMapper(
+			mapper->binding_, rowTypeCategory, mapper->compositeKeyOffeset_,
+			mapper->general_, config, mapper->keyMapper_);
 	mapper->setupAccessInfo(); 
 	mapper->refCount_++;
 	entryMap_.insert(std::make_pair(digest, mapper.get()));
@@ -4432,10 +5204,14 @@ const RowMapper* RowMapper::Cache::resolve(
 	std::auto_ptr<RowMapper> mapper(new RowMapper(
 			digest, baseMapper.rowTypeCategory_, baseMapper.general_,
 			baseMapper.nullableAllowed_));
+	mapper->compositeKeyOffeset_ = baseMapper.compositeKeyOffeset_;
 	mapper->binding_ = createReorderedBinding(
 			baseMapper, mapper->columnIdMap_, schemaIn,
 			config, columnOrderIgnorable);
-	mapper->keyColumnId_ = findRowKeyId(&mapper->binding_);
+	makeKeyMapper(
+			mapper->binding_, mapper->rowTypeCategory_,
+			mapper->compositeKeyOffeset_, mapper->general_, config,
+			mapper->keyMapper_);
 	mapper->setupAccessInfo(); 
 	mapper->refCount_++;
 
@@ -4445,10 +5221,10 @@ const RowMapper* RowMapper::Cache::resolve(
 
 const RowMapper* RowMapper::Cache::resolve(
 		const RowMapper::ContainerInfoRef<true> &infoRef,
-		const Config &config) {
+		const Config &config, bool forKey) {
 	std::vector<GSBindingEntry> entryList;
-	const GSBinding &binding =
-			GSRow::createBinding(infoRef, entryList, config.anyTypeAllowed_);
+	const GSBinding &binding = GSRow::createBinding(
+			infoRef, entryList, config.anyTypeAllowed_, forKey);
 
 	return resolve(
 			containerTypeToCategory(infoRef.getType()), &binding, true,
@@ -4584,6 +5360,65 @@ catch (...) {
 }
 
 
+RowMapper::BindingRef::BindingRef(
+		RefType ref, const ClientVersion &version) throw() :
+		ref_(ref),
+		version_(version) {
+}
+
+GSBinding RowMapper::BindingRef::get(RefStorage &storage) const {
+	storage.clear();
+
+	for (size_t i = 0; i < ref_->entryCount; i++) {
+		const GSBindingEntry &srcEntry =
+				*static_cast<const GSBindingEntry*>(getEntryRef(i));
+
+		GSBindingEntry destEntry = GS_BINDING_ENTRY_INITIALIZER;
+		destEntry.columnName = srcEntry.columnName;
+		destEntry.elementType = srcEntry.elementType;
+		destEntry.offset = srcEntry.offset;
+		destEntry.arraySizeOffset = srcEntry.arraySizeOffset;
+		destEntry.options = srcEntry.options;
+
+		if (version_.since(4, 3)) {
+			destEntry.keyBinding = srcEntry.keyBinding;
+			destEntry.keyBindingGetter = srcEntry.keyBindingGetter;
+		}
+		else {
+			destEntry.keyBinding = NULL;
+			destEntry.keyBindingGetter = NULL;
+		}
+		storage.push_back(destEntry);
+	}
+
+	GSBinding dest;
+	dest.entryCount = ref_->entryCount;
+	if (ref_->entryCount > 0) {
+		dest.entries = &storage[0];
+	}
+	else {
+		dest.entries = NULL;
+	}
+
+	return dest;
+}
+
+RowMapper::BindingRef::RawPtrType RowMapper::BindingRef::getEntryRef(
+		size_t index) const {
+	RawPtrType addr = ref_->entries;
+	return static_cast<BytePtrType>(addr) + getEntrySize() * index;
+}
+
+size_t RowMapper::BindingRef::getEntrySize() const {
+	if (version_.since(4, 3)) {
+		return sizeof(BindingEntryTraits<1>::Type);
+	}
+	else {
+		return sizeof(BindingEntryTraits<0>::Type);
+	}
+}
+
+
 template<bool Const>
 RowMapper::ContainerInfoRef<Const>::ContainerInfoRef(
 		RefType ref, const ClientVersion &version) throw() :
@@ -4631,6 +5466,9 @@ void RowMapper::ContainerInfoRef<false>::clear() throw() {
 
 	ref_->columnCount = 0;
 	ref_->columnInfoList = NULL;
+
+	ref_->indexInfoCount = 0;
+	ref_->indexInfoList = NULL;
 }
 
 template<bool Const>
@@ -4672,9 +5510,9 @@ void RowMapper::ContainerInfoRef<Const>::get(
 		info.dataAffinity = ref_->dataAffinity;
 	}
 
-	if (version_.since(3, 5)) {
-		info.indexInfoCount = ref_->indexInfoCount;
-		info.indexInfoList = ref_->indexInfoList;
+	if (version_.since(4, 3)) {
+		info.rowKeyColumnCount = ref_->rowKeyColumnCount;
+		info.rowKeyColumnList = ref_->rowKeyColumnList;
 	}
 }
 
@@ -4698,9 +5536,9 @@ void RowMapper::ContainerInfoRef<false>::set(const GSContainerInfo &info) {
 		ref_->dataAffinity = info.dataAffinity;
 	}
 
-	if (version_.since(3, 5)) {
-		ref_->indexInfoCount = info.indexInfoCount;
-		ref_->indexInfoList = info.indexInfoList;
+	if (version_.since(4, 3)) {
+		ref_->rowKeyColumnCount = info.rowKeyColumnCount;
+		ref_->rowKeyColumnList = info.rowKeyColumnList;
 	}
 }
 
@@ -4723,6 +5561,19 @@ bool RowMapper::ContainerInfoRef<Const>::isRowKeyAssigned() const {
 }
 
 template<bool Const>
+size_t RowMapper::ContainerInfoRef<Const>::getRowKeyColumnCount() const {
+	assert(ref_ != NULL);
+	return ref_->rowKeyColumnCount;
+}
+
+template<bool Const>
+const int32_t*
+RowMapper::ContainerInfoRef<Const>::getRowKeyColumnList() const {
+	assert(ref_ != NULL);
+	return ref_->rowKeyColumnList;
+}
+
+template<bool Const>
 size_t RowMapper::ContainerInfoRef<Const>::getColumnCount() const {
 	assert(ref_ != NULL);
 	return ref_->columnCount;
@@ -4730,11 +5581,12 @@ size_t RowMapper::ContainerInfoRef<Const>::getColumnCount() const {
 
 template<bool Const>
 GSColumnInfo RowMapper::ContainerInfoRef<Const>::getColumnInfo(
-		int32_t column) const {
+		size_t column) const {
 	assert(ref_ != NULL);
 
 	const GSColumnInfo *columnInfoRef = static_cast<const GSColumnInfo*>(
-			getColumnInfoRef<true>(*this, ref_->columnInfoList, column));
+			ContainerInfoRef<true>::getColumnInfoRef(
+					*this, ref_->columnInfoList, column));
 
 	GSColumnInfo columnInfo = GS_COLUMN_INFO_INITIALIZER;
 	columnInfo.name = columnInfoRef->name;
@@ -4748,17 +5600,24 @@ GSColumnInfo RowMapper::ContainerInfoRef<Const>::getColumnInfo(
 		columnInfo.options = columnInfoRef->options;
 	}
 
+	if (!version_.since(4, 3) &&
+			((columnInfoRef->options & GS_TYPE_OPTION_KEY) != 0)) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION,
+				"Row key option for column info cannot be specified at"
+				" requested API version");
+	}
+
 	return columnInfo;
 }
 
 template<>
 void RowMapper::ContainerInfoRef<false>::setColumnInfo(
-		int32_t column, const GSColumnInfo &columnInfo) {
+		size_t column, const GSColumnInfo &columnInfo) {
 	assert(ref_ != NULL);
 	assert(columnInfoList_ != NULL);
 
 	GSColumnInfo *columnInfoRef = static_cast<GSColumnInfo*>(
-			getColumnInfoRef<false>(*this, columnInfoList_, column));
+			getColumnInfoRef(*this, columnInfoList_, column));
 
 	columnInfoRef->name = columnInfo.name;
 	columnInfoRef->type = columnInfo.type;
@@ -4770,11 +5629,22 @@ void RowMapper::ContainerInfoRef<false>::setColumnInfo(
 	if (version_.since(3, 5)) {
 		columnInfoRef->options = columnInfo.options;
 	}
+
+	if (!version_.since(4, 3) &&
+			((columnInfoRef->options & GS_TYPE_OPTION_KEY) != 0)) {
+		if (column > 0) {
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION,
+					"Container with composite row key cannot be accessible at"
+					" requested API version");
+		}
+		columnInfoRef->options &=
+				~static_cast<GSTypeOption>(GS_TYPE_OPTION_KEY);
+	}
 }
 
 template<bool Const>
 void RowMapper::ContainerInfoRef<Const>::setColumnInfo(
-		int32_t column, const GSColumnInfo &columnInfo) {
+		size_t column, const GSColumnInfo &columnInfo) {
 	assert(false);
 	static_cast<void>(column);
 	static_cast<void>(columnInfo);
@@ -4811,20 +5681,116 @@ const void* RowMapper::ContainerInfoRef<Const>::getRawColumnInfoList() const {
 }
 
 template<bool Const>
+size_t RowMapper::ContainerInfoRef<Const>::getIndexCount() const {
+	assert(ref_ != NULL);
+	if (version_.since(3, 5)) {
+		return ref_->indexInfoCount;
+	}
+	else {
+		return 0;
+	}
+}
+
+template<bool Const>
+GSIndexInfo RowMapper::ContainerInfoRef<Const>::getIndexInfo(
+		size_t pos) const {
+	assert(ref_ != NULL);
+
+	if (!version_.since(3, 5)) {
+		assert(false);
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+
+	const GSIndexInfo *indexInfoRef = static_cast<const GSIndexInfo*>(
+			ContainerInfoRef<true>::getIndexInfoRef(
+					*this, ref_->indexInfoList, pos));
+
+	GSIndexInfo info = GS_INDEX_INFO_INITIALIZER;
+	copyVersionedIndexInfo(version_, *indexInfoRef, info);
+	return info;
+}
+
+template<>
+void RowMapper::ContainerInfoRef<false>::setIndexInfo(
+		size_t pos, const GSIndexInfo &indexInfo) {
+	assert(ref_ != NULL);
+
+	if (!version_.since(4, 3) &&
+			(indexInfo.columnCount > 1 || indexInfo.columnNameCount > 1)) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION,
+				"Container with composite index cannot be accessible at"
+				" requested API version");
+	}
+
+	assert(indexInfoList_ != NULL);
+	GSIndexInfo *indexInfoRef = static_cast<GSIndexInfo*>(
+			getIndexInfoRef(*this, indexInfoList_, pos));
+	copyVersionedIndexInfo(version_, indexInfo, *indexInfoRef);
+}
+
+template<bool Const>
+void RowMapper::ContainerInfoRef<Const>::setIndexInfo(
+		size_t pos, const GSIndexInfo &indexInfo) {
+	assert(false);
+	static_cast<void>(pos);
+	static_cast<void>(indexInfo);
+}
+
+template<>
+void RowMapper::ContainerInfoRef<false>::createIndexInfoList(
+		size_t count, VarDataPool &pool) {
+	assert(ref_ != NULL);
+
+	if (!version_.since(3, 5)) {
+		return;
+	}
+
+	if (count == 0) {
+		indexInfoList_ = NULL;
+	}
+	else {
+		indexInfoList_ = pool.allocate(getIndexInfoSize() * count);
+	}
+
+	ref_->indexInfoList = static_cast<GSIndexInfo*>(indexInfoList_);
+	ref_->indexInfoCount = count;
+}
+
+template<bool Const>
+void RowMapper::ContainerInfoRef<Const>::createIndexInfoList(
+		size_t count, VarDataPool &pool) {
+	assert(false);
+	static_cast<void>(count);
+	static_cast<void>(pool);
+}
+
+template<bool Const>
+void RowMapper::ContainerInfoRef<Const>::copyVersionedIndexInfo(
+		const ClientVersion &version, const GSIndexInfo &src,
+		GSIndexInfo &dest) {
+
+	dest.name = src.name;
+	dest.type = src.type;
+	dest.column = src.column;
+	dest.columnName = src.columnName;
+
+	if (version.since(4, 3)) {
+		dest.columnCount = src.columnCount;
+		dest.columnList = src.columnList;
+		dest.columnNameCount = src.columnNameCount;
+		dest.columnNameList = src.columnNameList;
+	}
+}
+
+template<bool Const>
 template<bool RefConst>
-typename util::Conditional<RefConst, const void*, void*>::Type
+typename RowMapper::ContainerInfoRef<Const>::RawPtrType
 RowMapper::ContainerInfoRef<Const>::getColumnInfoRef(
-		const ContainerInfoRef &infoRef,
-		typename util::Conditional<
-				RefConst, const void*, void*>::Type columnInfoList,
-		int32_t column) {
-	assert(column >= 0);
-	assert(static_cast<size_t>(column) < infoRef.getColumnCount());
+		const ContainerInfoRef<RefConst> &infoRef, RawPtrType columnInfoList,
+		size_t column) {
+	assert(column < infoRef.getColumnCount());
 
-	typedef typename util::Conditional<
-			RefConst, const uint8_t*, uint8_t*>::Type BytesType;
-
-	return static_cast<BytesType>(columnInfoList) +
+	return static_cast<BytePtrType>(columnInfoList) +
 			infoRef.getColumnInfoSize() * column;
 }
 
@@ -4833,11 +5799,33 @@ size_t RowMapper::ContainerInfoRef<Const>::getColumnInfoSize() const {
 	if (version_.since(3, 5)) {
 		return sizeof(ColumnInfoTraits<2>::Type);
 	}
-	if (version_.since(1, 5)) {
+	else if (version_.since(1, 5)) {
 		return sizeof(ColumnInfoTraits<1>::Type);
 	}
 	else {
 		return sizeof(ColumnInfoTraits<0>::Type);
+	}
+}
+
+template<bool Const>
+template<bool RefConst>
+typename RowMapper::ContainerInfoRef<Const>::RawPtrType
+RowMapper::ContainerInfoRef<Const>::getIndexInfoRef(
+		const ContainerInfoRef<RefConst> &infoRef, RawPtrType indexInfoList,
+		size_t pos) {
+	assert(pos < infoRef.getIndexCount());
+
+	return static_cast<BytePtrType>(indexInfoList) +
+			infoRef.getIndexInfoSize() * pos;
+}
+
+template<bool Const>
+size_t RowMapper::ContainerInfoRef<Const>::getIndexInfoSize() const {
+	if (version_.since(4, 3)) {
+		return sizeof(IndexInfoTraits<1>::Type);
+	}
+	else {
+		return sizeof(IndexInfoTraits<0>::Type);
 	}
 }
 
@@ -5574,6 +6562,7 @@ bool NodeConnection::loginInternal(
 		}
 		request.applicationName_ = loginInfo.applicationName_;
 		request.storeMemoryAgingSwapRate_ = loginInfo.storeMemoryAgingSwapRate_;
+		request.timeZoneOffset_ = loginInfo.timeZoneOffset_;
 		request.format(reqOut);
 	}
 
@@ -5953,7 +6942,8 @@ NodeConnection::LoginInfo::LoginInfo(
 		const GSChar *user, const GSChar *password, bool ownerMode,
 		const GSChar *clusterName, const GSChar *dbName,
 		int64_t transactionTimeoutMillis, const GSChar *applicationName,
-		double storeMemoryAgingSwapRate) :
+		double storeMemoryAgingSwapRate,
+		const util::TimeZone &timeZoneOffset) :
 		user_(user),
 		passwordDigest_(Auth::Challenge::makeDigest(alloc_, user, password)),
 		database_(dbName),
@@ -5962,7 +6952,8 @@ NodeConnection::LoginInfo::LoginInfo(
 		transactionTimeoutSecs_(
 				Properties::timeoutToInt32Seconds(transactionTimeoutMillis)),
 		applicationName_(applicationName),
-		storeMemoryAgingSwapRate_(storeMemoryAgingSwapRate) {
+		storeMemoryAgingSwapRate_(storeMemoryAgingSwapRate),
+		timeZoneOffset_(timeZoneOffset) {
 }
 
 void NodeConnection::LoginInfo::setPassword(const GSChar *password) {
@@ -5982,6 +6973,8 @@ NodeConnection::OptionalRequest::OptionalRequest() :
 		fetchLimit_(-1),
 		fetchSize_(-1),
 		fetchBytesSize_(0),
+		featureVersion_(-1),
+		acceptableFeatureVersion_(-1),
 		storeMemoryAgingSwapRate_(-1) {
 }
 
@@ -5999,6 +6992,8 @@ NodeConnection::OptionalRequest::OptionalRequest(
 		fetchLimit_(fetchLimit),
 		fetchSize_(fetchSize),
 		fetchBytesSize_(0),
+		featureVersion_(-1),
+		acceptableFeatureVersion_(-1),
 		storeMemoryAgingSwapRate_(-1) {
 }
 
@@ -6017,6 +7012,12 @@ void NodeConnection::OptionalRequest::putExt(
 void NodeConnection::OptionalRequest::format(
 		XArrayByteOutStream &reqOut) const {
 	Formatter formatter(reqOut);
+
+	if (featureVersion_ >= 0) {
+		formatter.putType(LEGACY_VERSION_BLOCK);
+		const int8_t value = 1;
+		reqOut << value;
+	}
 
 	if (transactionTimeout_ != -1) {
 		formatter.putType(TYPE_TRANSACTION_TIMEOUT);
@@ -6081,6 +7082,16 @@ void NodeConnection::OptionalRequest::format(
 		reqOut << fetchBytesSize_;
 	}
 
+	if (featureVersion_ >= 0) {
+		formatter.putType(FEATURE_VERSION);
+		reqOut << featureVersion_;
+	}
+
+	if (acceptableFeatureVersion_ >= 0) {
+		formatter.putType(ACCEPTABLE_FEATURE_VERSION);
+		reqOut << acceptableFeatureVersion_;
+	}
+
 	if (!applicationName_.empty()) {
 		formatter.putType(APPLICATION_NAME);
 		reqOut << applicationName_;
@@ -6089,6 +7100,11 @@ void NodeConnection::OptionalRequest::format(
 	if (storeMemoryAgingSwapRate_ >= 0) {
 		formatter.putType(STORE_MEMORY_AGING_SWAP_RATE);
 		reqOut << storeMemoryAgingSwapRate_;
+	}
+
+	if (!timeZoneOffset_.isEmpty()) {
+		formatter.putType(TIME_ZONE_OFFSET);
+		reqOut << timeZoneOffset_.getOffsetMillis();
 	}
 
 	if (extRequestMap_.get() != NULL) {
@@ -8164,7 +9180,7 @@ void GridStoreChannel::LocalConfig::set(const Properties &properties) {
 
 GridStoreChannel::Source::Source() :
 		partitionCount_(0),
-		loginInfo_("", "", false, "", "", -1, "", -1),
+		loginInfo_("", "", false, "", "", -1, "", -1, util::TimeZone()),
 		interceptorManager_(NULL) {
 }
 
@@ -8267,7 +9283,8 @@ void GridStoreChannel::Source::set(const Properties &properties) {
 			database.c_str(),
 			localConfig.transactionTimeoutMillis_,
 			applicationName.c_str(),
-			resolveStoreMemoryAgingSwapRate(properties));
+			resolveStoreMemoryAgingSwapRate(properties),
+			resolveTimeZoneOffset(properties));
 }
 
 double GridStoreChannel::Source::resolveStoreMemoryAgingSwapRate(
@@ -8285,6 +9302,31 @@ double GridStoreChannel::Source::resolveStoreMemoryAgingSwapRate(
 	}
 
 	return value;
+}
+
+util::TimeZone GridStoreChannel::Source::resolveTimeZoneOffset(
+		const Properties &properties) {
+	const char8_t *name = "timeZone";
+
+	std::string value;
+	if (!properties.getString(name, value)) {
+		return util::TimeZone();
+	}
+
+	try {
+		util::TimeZone zone;
+		const bool throwOnError = true;
+		zone.parse(value.c_str(), value.size(), throwOnError);
+		return zone;
+	}
+	catch (util::UtilityException &e) {
+		if (e.getErrorCode() != util::UtilityException::CODE_INVALID_PARAMETER) {
+			throw;
+		}
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY,
+				"Illegal time zone format (name=" << name <<
+				", value=" << value << ")");
+	}
 }
 
 
@@ -9874,11 +10916,12 @@ const GSChar *const GSGridStoreTag::CONTEXT_CONTROLLER_NAME =
 		"##internal.contextController";
 bool GSGridStoreTag::pathKeyOperationEnabled_ = false;
 
-RowMapper::Config GSGridStoreTag::DEFAULT_MAPPER_CONFIG(false, true, true);
+RowMapper::Config GSGridStoreTag::DEFAULT_MAPPER_CONFIG(
+		false, true, true, true);
 RowMapper::Config GSGridStoreTag::COMPATIBLE_MAPPER_CONFIG_14(
-		false, true, false);
+		false, true, false, false);
 RowMapper::Config GSGridStoreTag::COMPATIBLE_MAPPER_CONFIG_13(
-		false, false, false);
+		false, false, false, false);
 
 GSGridStoreTag::GSGridStoreTag(
 		GridStoreChannel &channel, GridStoreChannel::Context context) :
@@ -10145,7 +11188,11 @@ bool GSGridStoreTag::getContainerInfo(
 	channel_.applyPartitionId(context_, partitionId);
 
 	XArrayByteOutStream reqOut = channel_.getRequestOutStream(req_);
-	NodeConnection::tryPutEmptyOptionalRequest(reqOut);
+
+	NodeConnection::OptionalRequest optionalRequest;
+	optionalRequest.acceptableFeatureVersion_ =
+			NodeConnection::OptionalRequest::FEATURE_V4_3;
+	optionalRequest.format(reqOut);
 
 	putContainerKey(reqOut, channel_, context_, key, keyConverter);
 
@@ -10252,7 +11299,7 @@ bool GSGridStoreTag::getContainerInfo(
 	if (!indexInfoList.empty() && !columnInfoList.empty()) {
 		applyIndexInfoList(
 				indexInfoList, columnInfoList, indexFlagsSpecified, *varDataPool,
-				info);
+				infoRef);
 	}
 
 	infoRef.set(info);
@@ -10263,7 +11310,7 @@ bool GSGridStoreTag::getContainerInfo(
 		for (std::vector<GSColumnInfo>::iterator it = columnInfoList.begin();
 				it != columnInfoList.end(); ++it) {
 			infoRef.setColumnInfo(
-					static_cast<int32_t>(it - columnInfoList.begin()), *it);
+					static_cast<size_t>(it - columnInfoList.begin()), *it);
 		}
 	}
 
@@ -10302,10 +11349,13 @@ GSResult GSGridStoreTag::getContainerInfo(
 }
 
 GSContainer* GSGridStoreTag::getContainer(
-		const GSChar *name, const GSBinding &binding,
+		const GSChar *name, const RowMapper::BindingRef &bindingRef,
 		GSContainerType containerType) {
 	const ContainerKeyConverter &keyConverter = context_.getKeyConverter();
 	const ContainerKey &key = keyConverter.parse(name, false);
+
+	RowMapper::BindingRef::RefStorage bindingRefStorage;
+	const GSBinding &binding = bindingRef.get(bindingRefStorage);
 
 	ContainerCache *cache = context_.getContainerCache();
 	if (cache != NULL) {
@@ -10369,16 +11419,78 @@ GSContainer* GSGridStoreTag::getContainer(
 
 GSCollection* GSGridStoreTag::getCollection(
 		const GSChar *name, const GSBinding &binding) {
-	return getContainer(name, binding, GS_CONTAINER_COLLECTION);
+	return getContainer(
+			name, RowMapper::toBindingRef(&binding, ClientVersion()),
+			GS_CONTAINER_COLLECTION);
 }
 
 GSTimeSeries* GSGridStoreTag::getTimeSeries(
 		const GSChar *name, const GSBinding &binding) {
-	return getContainer(name, binding, GS_CONTAINER_TIME_SERIES);
+	return getContainer(
+			name, RowMapper::toBindingRef(&binding, ClientVersion()),
+			GS_CONTAINER_TIME_SERIES);
+}
+
+GSResult GSGridStoreTag::getCollection(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSCollection **collection,
+		const ClientVersion &version,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(collection, NULL);
+	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(
+			funcInfo, store, name, binding, collection);
+
+	try {
+		GS_CLIENT_CHECK_NOT_NULL(store);
+		GS_CLIENT_CHECK_NOT_NULL(name);
+		GS_CLIENT_CHECK_NOT_NULL(binding);
+		GS_CLIENT_CHECK_NOT_NULL(collection);
+
+		*collection = store->getContainer(
+				name, RowMapper::toBindingRef(binding, version),
+				GS_CONTAINER_COLLECTION);
+	}
+	catch (...) {
+		if (collection != NULL) {
+			*collection = NULL;
+		}
+		return GSResourceHeader::setCurrentException(store);
+	}
+	return GS_RESULT_OK;
+}
+
+GSResult GSGridStoreTag::getTimeSeries(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSTimeSeries **timeSeries,
+		const ClientVersion &version,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(timeSeries, NULL);
+	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(
+			funcInfo, store, name, binding, timeSeries);
+
+	try {
+		GS_CLIENT_CHECK_NOT_NULL(store);
+		GS_CLIENT_CHECK_NOT_NULL(name);
+		GS_CLIENT_CHECK_NOT_NULL(binding);
+		GS_CLIENT_CHECK_NOT_NULL(timeSeries);
+
+		*timeSeries = store->getContainer(
+				name, RowMapper::toBindingRef(binding, version),
+				GS_CONTAINER_TIME_SERIES);
+	}
+	catch (...) {
+		if (timeSeries != NULL) {
+			*timeSeries = NULL;
+		}
+		return GSResourceHeader::setCurrentException(store);
+	}
+	return GS_RESULT_OK;
 }
 
 GSContainer* GSGridStoreTag::putContainer(
-		const GSChar *name, const GSBinding &binding,
+		const GSChar *name, const RowMapper::BindingRef &bindingRef,
 		const RowMapper::ContainerInfoRef<true> &containerInfoRef,
 		GSBool modifiable, const GSContainerType *containerType) {
 	GSContainerInfo containerInfoStorage;
@@ -10394,6 +11506,9 @@ GSContainer* GSGridStoreTag::putContainer(
 
 	const ContainerKeyConverter &keyConverter = context_.getKeyConverter();
 	const ContainerKey &key = keyConverter.parse(name, false);
+
+	RowMapper::BindingRef::RefStorage bindingRefStorage;
+	const GSBinding &binding = bindingRef.get(bindingRefStorage);
 
 	ContainerCache *cache = context_.getContainerCache();
 	if (cache != NULL && !modifiable && containerInfo == NULL) {
@@ -10428,6 +11543,7 @@ GSContainer* GSGridStoreTag::putContainer(
 	if (containerInfo != NULL &&
 			(containerInfoRef.getColumnCount() > 0 ||
 			containerInfo->rowKeyAssigned ||
+			containerInfo->rowKeyColumnCount > 0 ||
 			containerInfo->columnOrderIgnorable)) {
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA,
 				"Schema can not be specified on ContainerInfo");
@@ -10486,7 +11602,8 @@ GSResult GSGridStoreTag::putContainer(
 		GS_CLIENT_CHECK_NOT_NULL(container);
 
 		*container = store->putContainer(
-				name, *binding, RowMapper::toInfoRef(info, version),
+				name, RowMapper::toBindingRef(binding, version),
+				RowMapper::toInfoRef(info, version),
 				modifiable, containerType);
 	}
 	catch (...) {
@@ -10573,7 +11690,7 @@ GSContainer* GSGridStoreTag::putContainer(
 			containerInfo.timeSeriesProperties != NULL) {
 		std::vector<GSBindingEntry> entryList;
 		const GSBinding &binding =
-				GSRow::createBinding(containerInfoRef, entryList);
+				GSRow::createBinding(containerInfoRef, entryList, false);
 
 		GSCollection *container = findContainerByCache(
 				*cache, key, keyConverter, &binding, containerType, true);
@@ -10707,7 +11824,8 @@ bool GSGridStoreTag::getRow(const GSChar *pathKey, void *rowObj) {
 			duplicateContainer(resolveContainer(containerKey));
 	const GSChar *rowKeyStrPtr = rowKeyStr.c_str();
 
-	return container->getRow(NULL, &rowKeyStrPtr, rowObj, false, true);
+	return container->getRow(
+			false, NULL, &rowKeyStrPtr, false, rowObj, false, true);
 }
 
 bool GSGridStoreTag::putRow(const GSChar *pathKey, const void *rowObj) {
@@ -10719,7 +11837,7 @@ bool GSGridStoreTag::putRow(const GSChar *pathKey, const void *rowObj) {
 			duplicateContainer(resolveContainer(containerKey));
 	const GSChar *rowKeyStrPtr = rowKeyStr.c_str();
 
-	return container->putRow(NULL, &rowKeyStrPtr, rowObj, true);
+	return container->putRow(false,NULL, &rowKeyStrPtr, false, rowObj, true);
 }
 
 bool GSGridStoreTag::removeRow(const GSChar *pathKey) {
@@ -10731,7 +11849,7 @@ bool GSGridStoreTag::removeRow(const GSChar *pathKey) {
 			duplicateContainer(resolveContainer(containerKey));
 	const GSChar *rowKeyStrPtr = rowKeyStr.c_str();
 
-	return container->removeRow(NULL, &rowKeyStrPtr, true);
+	return container->removeRow(false,NULL, &rowKeyStrPtr, true);
 }
 
 void GSGridStoreTag::fetchAll(GSQuery *const *queryList, size_t queryCount) {
@@ -10975,7 +12093,8 @@ void GSGridStoreTag::multiGet(
 				GSRow *row = GSRow::create(*this, mapperRef);
 				cleaner.allRowList_.push_back(row);
 
-				mapper->decode(cursor, row);
+				const bool rowGeneral = false;
+				mapper->decode(cursor, rowGeneral, row);
 
 				rowList.push_back(row);
 			}
@@ -11025,13 +12144,13 @@ void GSGridStoreTag::multiGet(
 }
 
 GSRow* GSGridStoreTag::createRow(
-		const RowMapper::ContainerInfoRef<true> &infoRef) {
+		const RowMapper::ContainerInfoRef<true> &infoRef, bool forKey) {
 	channel_.checkContextAvailable(context_);
 	RowMapper::Cache &cache = RowMapper::getDefaultCache();
 	RowMapper::Reference mapper(
-			cache, cache.resolve(infoRef, getRowMapperConfig()));
+			cache, cache.resolve(infoRef, getRowMapperConfig(), forKey));
 
-	return GSRow::create(*this, mapper);
+	return GSRow::create(*this, mapper, forKey);
 }
 
 GSResult GSGridStoreTag::createRow(
@@ -11047,7 +12166,8 @@ GSResult GSGridStoreTag::createRow(
 		GS_CLIENT_CHECK_NOT_NULL(info);
 		GS_CLIENT_CHECK_NOT_NULL(row);
 
-		*row = store->createRow(RowMapper::toInfoRef(info, version));
+		const bool forKey = false;
+		*row = store->createRow(RowMapper::toInfoRef(info, version), forKey);
 	}
 	catch (...) {
 		if (row != NULL) {
@@ -11058,9 +12178,83 @@ GSResult GSGridStoreTag::createRow(
 	return GS_RESULT_OK;
 }
 
+GSResult GSGridStoreTag::createRowKey(
+		GSGridStore *store, const GSContainerInfo *info, GSRowKey **key,
+		const ClientVersion &version,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(key, NULL);
+	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, store, info, key);
+
+	try {
+		GS_CLIENT_CHECK_NOT_NULL(store);
+		GS_CLIENT_CHECK_NOT_NULL(info);
+		GS_CLIENT_CHECK_NOT_NULL(key);
+
+		const bool forKey = true;
+		*key = store->createRow(RowMapper::toInfoRef(info, version), forKey);
+	}
+	catch (...) {
+		if (key != NULL) {
+			*key = NULL;
+		}
+		return GSResourceHeader::setCurrentException(store);
+	}
+	return GS_RESULT_OK;
+}
+
 GSRowKeyPredicate* GSGridStoreTag::createRowKeyPredicate(GSType keyType) {
 	channel_.checkContextAvailable(context_);
-	return new GSRowKeyPredicate(*this, keyType);
+
+	GSColumnInfo columnInfoStorage;
+	const GSContainerInfo &info = GSRowKeyPredicate::createSingleKeySchema(
+			keyType, columnInfoStorage);
+	const RowMapper::ContainerInfoRef<true> &infoRef =
+			RowMapper::toInfoRef(&info, ClientVersion());
+
+	RowMapper::Config config = getRowMapperConfig();
+	config.anyTypeAllowed_ = true;
+
+	RowMapper::Cache &cache = RowMapper::getDefaultCache();
+	RowMapper::Reference mapper(cache, cache.resolve(infoRef, config));
+
+	return new GSRowKeyPredicate(*this, mapper);
+}
+
+GSRowKeyPredicate* GSGridStoreTag::createRowKeyPredicateGeneral(
+		const RowMapper::ContainerInfoRef<true> &infoRef) {
+	channel_.checkContextAvailable(context_);
+
+	RowMapper::Cache &cache = RowMapper::getDefaultCache();
+	RowMapper::Reference mapper(cache, cache.resolve(
+			infoRef, GSRowKeyPredicate::KEY_MAPPER_CONFIG));
+
+	return new GSRowKeyPredicate(*this, mapper);
+}
+
+GSResult GSGridStoreTag::createRowKeyPredicateGeneral(
+		GSGridStore *store, const GSContainerInfo *info,
+		GSRowKeyPredicate **predicate, const ClientVersion &version,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(predicate, NULL);
+	GSResourceHeader::clearLastError(store);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, store, predicate, info);
+
+	try {
+		GS_CLIENT_CHECK_NOT_NULL(store);
+		GS_CLIENT_CHECK_NOT_NULL(info);
+		GS_CLIENT_CHECK_NOT_NULL(predicate);
+
+		*predicate = store->createRowKeyPredicateGeneral(
+				RowMapper::toInfoRef(info, version));
+	}
+	catch (...) {
+		if (predicate != NULL) {
+			*predicate = NULL;
+		}
+		return GSResourceHeader::setCurrentException(store);
+	}
+	return GS_RESULT_OK;
 }
 
 GSPartitionController* GSGridStoreTag::getPartitionController() {
@@ -11089,13 +12283,19 @@ void GSGridStoreTag::importIndexInfo(
 
 	int32_t columnCount;
 	in >> columnCount;
-	for (int32_t i = 0; i < columnCount; i++) {
-		int32_t column;
-		in >> column;
-		if (i == 0) {
-			indexInfo.column = column;
-		}
+	if (columnCount < 0 ||
+			static_cast<size_t>(columnCount) > in.base().remaining()) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+				"Protocol error by illegal index column count");
 	}
+
+	int32_t *columnList = static_cast<int32_t*>(varDataPool.allocate(
+			sizeof(int32_t) * static_cast<size_t>(columnCount)));
+	for (int32_t i = 0; i < columnCount; i++) {
+		in >> columnList[i];
+	}
+	indexInfo.columnCount = static_cast<size_t>(columnCount);
+	indexInfo.columnList = columnList;
 
 	int8_t rawType;
 	in >> rawType;
@@ -11126,11 +12326,13 @@ void GSGridStoreTag::exportIndexInfo(
 	const GSChar *name = indexInfo.name;
 	out << (name == NULL ? "" : name);
 
-	const int32_t column = indexInfo.column;
-	const int32_t columnCount = (column < 0 ? 0 : 1);
-	out << columnCount;
-	if (columnCount > 0) {
-		out << column;
+	assert(!(indexInfo.column >= 0 && indexInfo.columnCount <= 0));
+	const int32_t *columnList = indexInfo.columnList;
+	const size_t columnCount = indexInfo.columnCount;
+
+	out << ClientUtil::sizeValueToInt32(columnCount);
+	for (size_t i = 0; i < columnCount; i++) {
+		out << columnList[i];
 	}
 
 	out << static_cast<int8_t>(getIndexTypeOrdinal(indexInfo.type, true));
@@ -11710,16 +12912,28 @@ void GSGridStoreTag::importSchemaProperty(
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED, "");
 	}
 
-	int32_t keyColumnId =
-			RowMapper::importKeyListBegin(in, config, columnCount);
+	std::vector<int32_t> keyColumnList;
+	RowMapper::importKeyListBegin(in, config, columnCount, keyColumnList);
 
 	for (size_t i = 0; i < columnCount; i++) {
 		columnInfoList.push_back(
 				RowMapper::importColumnSchema(in, config, varDataPool));
 	}
 
-	RowMapper::importKeyListEnd(in, config, columnCount, keyColumnId);
-	containerInfo.rowKeyAssigned = ClientUtil::toGSBool(keyColumnId >= 0);
+	RowMapper::importKeyListEnd(in, config, columnCount, keyColumnList);
+	containerInfo.rowKeyAssigned =
+			ClientUtil::toGSBool(!keyColumnList.empty());
+
+	if (!keyColumnList.empty()) {
+		const size_t listBytesSize = sizeof(int32_t) * keyColumnList.size();
+
+		int32_t *destList = static_cast<int32_t*>(
+				varDataPool.allocate(listBytesSize));
+		memcpy(destList, &keyColumnList[0], listBytesSize);
+
+		containerInfo.rowKeyColumnList = destList;
+		containerInfo.rowKeyColumnCount = keyColumnList.size();
+	}
 }
 
 void GSGridStoreTag::importIndexProperty(
@@ -11873,15 +13087,13 @@ void GSGridStoreTag::applyIndexInfoList(
 		const std::vector<GSIndexInfo> &indexInfoList,
 		const std::vector<GSColumnInfo> &columnInfoList,
 		bool indexFlagsSpecified, RowMapper::VarDataPool &varDataPool,
-		GSContainerInfo &containerInfo) {
+		RowMapper::ContainerInfoRef<> &infoRef) {
 
 	const size_t infoCount = indexInfoList.size();
-	GSIndexInfo *dest = static_cast<GSIndexInfo*>(varDataPool.allocate(
-			sizeof(GSIndexInfo) * infoCount));
-	GSIndexInfo *destIt = dest;
+	infoRef.createIndexInfoList(infoCount, varDataPool);
 
 	for (std::vector<GSIndexInfo>::const_iterator it = indexInfoList.begin();
-			it != indexInfoList.end(); ++it, ++destIt) {
+			it != indexInfoList.end(); ++it) {
 		const int32_t column = it->column;
 		const GSChar *columnName = NULL;
 		if (column >= 0) {
@@ -11899,12 +13111,43 @@ void GSGridStoreTag::applyIndexInfoList(
 			}
 		}
 
-		*destIt = *it;
-		destIt->columnName = columnName;
-	}
+		const size_t indexColumnCount = it->columnCount;
+		const GSChar **columnNameList = NULL;
+		if (indexColumnCount > 0) {
+			columnNameList = static_cast<const GSChar**>(varDataPool.allocate(
+					sizeof(const GSChar*) * indexColumnCount));
+		}
 
-	containerInfo.indexInfoCount = infoCount;
-	containerInfo.indexInfoList = dest;
+		for (size_t i = 0; i < indexColumnCount; i++) {
+			const int32_t column = it->columnList[i];
+			if (static_cast<size_t>(column) >= columnInfoList.size()) {
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+						"Protocol error by illegal index column");
+			}
+			const GSColumnInfo &columnInfo = columnInfoList[column];
+			columnNameList[i] = columnInfo.name;
+
+			if (indexColumnCount == 1 && indexFlagsSpecified &&
+					((columnInfo.indexTypeFlags & it->type) == 0)) {
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_MESSAGE_CORRUPTED,
+						"Protocol error by inconsistent index type");
+			}
+		}
+
+		GSIndexInfo info = *it;
+		if (indexColumnCount == 1) {
+			info.column = it->columnList[0];
+			info.columnName = columnNameList[0];
+		}
+		else {
+			assert(info.column == -1);
+			assert(info.columnName == NULL);
+		}
+		info.columnNameCount = indexColumnCount;
+		info.columnNameList = columnNameList;
+		infoRef.setIndexInfo(
+				static_cast<size_t>(it - indexInfoList.begin()), info);
+	}
 }
 
 const GSChar* GSGridStoreTag::resolveContainerName(
@@ -12418,7 +13661,8 @@ void GSGridStoreTag::MultiPutStatement::add(
 			}
 		}
 		else {
-			mapper->checkSchemaMatched(GSRow::resolve(row).getRowMapper());
+			mapper->checkSchemaMatched(
+					GSRow::resolve(row).getRowMapper(), true);
 		}
 	}
 
@@ -12590,7 +13834,7 @@ bool GSGridStoreTag::MultiPutStatement::makeMainRequest(
 				ClientUtil::sizeValueToInt32(entry.rowList_.size()), false);
 		for (std::vector<GSRow*>::const_iterator listIt = entry.rowList_.begin();
 				listIt != entry.rowList_.end(); ++listIt) {
-			mapper.encode(cursor, NULL, NULL, *listIt);
+			mapper.encode(cursor, false, NULL, NULL, false, *listIt);
 		}
 
 		const size_t listEndPos = req.base().position();
@@ -12684,41 +13928,66 @@ bool GSGridStoreTag::MultiGetRequest::makeRequest(
 	}
 	NodeConnection::tryPutEmptyOptionalRequest(req);
 
+	const RowMapper::MappingMode mappingMode =
+			GSContainer::getRowMappingMode();
+
 	req << ClientUtil::sizeValueToInt32(predicateList_.size());
 	for (PredicateList::iterator it = predicateList_.begin();
 			it != predicateList_.end(); ++it) {
 		const GSRowKeyPredicate &predicate = **it;
-		const GSType keyType = predicate.getKeyType();
-		req << static_cast<int8_t>(keyType);
 
-		if (predicate.distinctKeys_.get() == NULL) {
+		const RowMapper &mapper = predicate.getRowMapper();
+		const bool composite =
+				(mapper.getKeyCategory() == RowMapper::KEY_CATEGORY_COMPOSITE);
+
+		mapper.exportKeySchemaSingle(req);
+
+		const bool keyGeneral = true;
+		GSRowKeyPredicate::KeyIterator keyIt = predicate.keyBegin();
+
+		size_t keyCount;
+		const size_t distinctKeyCount = predicate.getDistinctKeyCount();
+		if (distinctKeyCount <= 0) {
+			keyCount = 0;
+
 			req << static_cast<int8_t>(PREDICATE_RANGE);
+			mapper.exportKeySchemaComposite(req);
 
 			for (size_t i = 0; i < GSRowKeyPredicate::RANGE_COUNT; i++) {
-				const GSRowKeyPredicate::RangeKeyEntry &keyEntry =
-						predicate.rangeKeyEntries_[i];
-				const bool keySpecified = keyEntry.second;
+				const bool keySpecified = predicate.hasRangeKey(
+						static_cast<GSRowKeyPredicate::RangeElementType>(i));
 				req << ClientUtil::toGSBool(keySpecified);
 
+				if (keySpecified && !composite) {
+					assert(keyIt != predicate.keyEnd());
+					mapper.encodeKeyGeneral(
+							req, mappingMode, keyGeneral, NULL, *keyIt);
+					++keyIt;
+				}
 				if (keySpecified) {
-					RowMapper::encodeKeyGeneral(
-							req, GSContainer::getRowMappingMode(),
-							keyType, keyEntry.first);
+					++keyCount;
 				}
 			}
 		}
 		else {
-			typedef GSRowKeyPredicate::DistinctKeySet DistinctKeySet;
-			const DistinctKeySet &keySet = *predicate.distinctKeys_;
+			keyCount = distinctKeyCount;
 
 			req << static_cast<int8_t>(PREDICATE_DISTINCT);
-			req << ClientUtil::sizeValueToInt32(keySet.size());
-			for (DistinctKeySet::const_iterator it = keySet.begin();
-					it != keySet.end(); ++it) {
-				RowMapper::encodeKeyGeneral(
-						req, GSContainer::getRowMappingMode(),
-						keyType, *it);
+			mapper.exportKeySchemaComposite(req);
+
+			if (!composite) {
+				req << ClientUtil::sizeValueToInt32(distinctKeyCount);
+				for (; keyIt != predicate.keyEnd(); ++keyIt) {
+					mapper.encodeKeyGeneral(
+							req, mappingMode, keyGeneral, NULL, *keyIt);
+				}
 			}
+		}
+
+		if (composite) {
+			mapper.encodeKeyGeneral(
+					req, mappingMode, keyGeneral, NULL,
+					keyIt, predicate.keyEnd(), keyCount, true, true);
 		}
 	}
 
@@ -13109,7 +14378,8 @@ void GSContainerTag::createOrDropIndex(
 	}
 	else if (flags == 0) {
 		GSIndexInfo filteredInfo;
-		filterIndexInfo(info, forCreation, filteredInfo);
+		std::vector<int32_t> columnListStorage;
+		filterIndexInfo(info, forCreation, filteredInfo, columnListStorage);
 		commitForDDL();
 	}
 	else {
@@ -13131,7 +14401,9 @@ void GSContainerTag::createOrDropIndex(
 void GSContainerTag::createOrDropIndex(
 		const GSIndexInfo &info, bool forCreation) {
 	GSIndexInfo filteredInfo;
-	if (!filterIndexInfo(info, forCreation, filteredInfo) && !forCreation) {
+	std::vector<int32_t> columnListStorage;
+	if (!filterIndexInfo(info, forCreation, filteredInfo, columnListStorage) &&
+			!forCreation) {
 		return;
 	}
 
@@ -13146,7 +14418,13 @@ void GSContainerTag::createOrDropIndex(
 		putSessionInfo(reqOut, sessionId_);
 	}
 	reqOut << getSchemaVersionId();
-	tryPutOptionalRequest(reqOut, false, true, forCreation);
+
+	int32_t featureVersion = -1;
+	if (filteredInfo.columnCount > 1) {
+		featureVersion = NodeConnection::OptionalRequest::FEATURE_V4_3;
+	}
+	tryPutOptionalRequest(
+			reqOut, false, true, forCreation, NULL, featureVersion);
 
 	Statement::Id statement;
 	if (GSGridStore::isIndexDetailEnabled()) {
@@ -13182,6 +14460,31 @@ void GSContainerTag::createOrDropIndex(
 	executeStatement(statement, family);
 }
 
+template<bool ForCreation>
+GSResult GSContainerTag::createOrDropIndex(
+		GSContainer *container, const GSIndexInfo *info,
+		const ClientVersion &version,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
+	GSResourceHeader::clearLastError(container);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, container, info);
+
+	try {
+		GS_CLIENT_CHECK_NOT_NULL(container);
+		GS_CLIENT_CHECK_NOT_NULL(info);
+
+		GSIndexInfo fullInfo = GS_INDEX_INFO_INITIALIZER;
+		RowMapper::ContainerInfoRef<>::copyVersionedIndexInfo(
+				version, *info, fullInfo);
+
+		container->createOrDropIndex(fullInfo, ForCreation);
+	}
+	catch (...) {
+		return GSResourceHeader::setCurrentException(container);
+	}
+	return GS_RESULT_OK;
+}
+
 void GSContainerTag::flush() {
 	XArrayByteOutStream reqOut = getRequestOutStream();
 	reqOut << getContainerId();
@@ -13190,8 +14493,32 @@ void GSContainerTag::flush() {
 }
 
 bool GSContainerTag::getRow(
-		const GSType *keyType, const void *key,
-		void *rowObj, bool forUpdate, bool keyFormatted) {
+		const GSType *keyType, const void *key, void *rowObj,
+		bool forUpdate, bool keyFormatted) {
+	const bool keyGeneral = false;
+	const bool rowGeneral = false;
+	return getRow(
+			keyGeneral, keyType, key, rowGeneral, rowObj, forUpdate,
+			keyFormatted);
+}
+
+bool GSContainerTag::putRow(
+		const GSType *keyType, const void *key, const void *rowObj,
+		bool keyFormatted) {
+	const bool keyGeneral = false;
+	const bool rowGeneral = false;
+	return putRow(keyGeneral, keyType, key, rowGeneral, rowObj, keyFormatted);
+}
+
+bool GSContainerTag::removeRow(
+		const GSType *keyType, const void *key, bool keyFormatted) {
+	const bool keyGeneral = false;
+	return removeRow(keyGeneral, keyType, key, keyFormatted);
+}
+
+bool GSContainerTag::getRow(
+		bool keyGeneral, const GSType *keyType, const void *key,
+		bool rowGeneral, void *rowObj, bool forUpdate, bool keyFormatted) {
 	if (partitionId_ < 0) {
 		return getRowForInternalController(keyType, key, rowObj);
 	}
@@ -13214,7 +14541,8 @@ bool GSContainerTag::getRow(
 				*static_cast<const GSChar *const*>(key), NULL);
 	}
 	else {
-		mapper_->encodeKeyByObj(reqOut, getRowMappingMode(), keyType, key);
+		mapper_->encodeKeyGeneral(
+				reqOut, getRowMappingMode(), keyGeneral, keyType, key);
 	}
 
 	const bool timeSeriesMode =
@@ -13227,15 +14555,15 @@ bool GSContainerTag::getRow(
 		RowMapper::InputCursor cursor(
 			respIn, *mapper_, getRowMappingMode(), 1,
 			!timeSeriesMode, &getVarDataPool());
-		mapper_->decode(cursor, rowObj);
+		mapper_->decode(cursor, rowGeneral, rowObj);
 	}
 
 	return ClientUtil::toBool(found);
 }
 
 bool GSContainerTag::putRow(
-		const GSType *keyType, const void *key, const void *rowObj,
-		bool keyFormatted) {
+		bool keyGeneral, const GSType *keyType, const void *key,
+		bool rowGeneral, const void *rowObj, bool keyFormatted) {
 	if (partitionId_ < 0) {
 		return putRowForInternalController(keyType, key, rowObj);
 	}
@@ -13249,11 +14577,12 @@ bool GSContainerTag::putRow(
 	if (keyFormatted) {
 		mapper_->encodeWithKeyString(
 				reqOut, getRowMappingMode(),
-				*static_cast<const GSChar *const*>(key), rowObj);
+				*static_cast<const GSChar *const*>(key), rowGeneral, rowObj);
 	}
 	else {
 		mapper_->encode(
-				reqOut, getRowMappingMode(), keyType, key, rowObj);
+				reqOut, getRowMappingMode(), keyGeneral, keyType, key,
+				rowGeneral, rowObj);
 	}
 
 	ArrayByteInStream respIn = executeStatement(Statement::PUT_ROW, family);
@@ -13287,7 +14616,7 @@ bool GSContainerTag::putMultipleRows(
 		if (*i == NULL) {
 			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
 		}
-		mapper_->encode(cursor, NULL, NULL, *i);
+		mapper_->encode(cursor, false, NULL, NULL, false, *i);
 	}
 
 	ArrayByteInStream respIn = executeMultiStepStatement(
@@ -13299,7 +14628,8 @@ bool GSContainerTag::putMultipleRows(
 }
 
 bool GSContainerTag::removeRow(
-		const GSType *keyType, const void *key, bool keyFormatted) {
+		bool keyGeneral, const GSType *keyType, const void *key,
+		bool keyFormatted) {
 	const StatementFamily family = prepareSession(STATEMENT_FAMILY_UPDATE);
 
 	XArrayByteOutStream reqOut = getRequestOutStream();
@@ -13312,7 +14642,8 @@ bool GSContainerTag::removeRow(
 				*static_cast<const GSChar *const*>(key), NULL);
 	}
 	else {
-		mapper_->encodeKeyByObj(reqOut, getRowMappingMode(), keyType, key);
+		mapper_->encodeKeyGeneral(
+				reqOut, getRowMappingMode(), keyGeneral, keyType, key);
 	}
 
 	ArrayByteInStream respIn = executeStatement(Statement::DELETE_ROW, family);
@@ -13630,8 +14961,10 @@ void GSContainerTag::fetchRowSet(
 
 void GSContainerTag::removeRow(
 		const RowMapper &resolvedMapper, int64_t transactionId,
-		const bool *transactionStarted, int64_t rowId, const void *key) {
-	checkTransactionPreserved(true, transactionId, transactionStarted, true);
+		const bool *transactionStarted, bool updatable, int64_t rowId,
+		bool keyGeneral, const void *key) {
+	checkTransactionPreserved(
+			true, transactionId, transactionStarted, updatable);
 
 	if (&resolvedMapper != mapper_.get()) {
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
@@ -13644,7 +14977,8 @@ void GSContainerTag::removeRow(
 	if (resolvedMapper.getCategory() == RowMapper::CATEGORY_TIME_SERIES) {
 		putTransactionInfo(reqOut, family);
 
-		resolvedMapper.encodeKeyByObj(reqOut, getRowMappingMode(), NULL, key);
+		resolvedMapper.encodeKeyGeneral(
+				reqOut, getRowMappingMode(), keyGeneral, NULL, key);
 		executeStatement(Statement::DELETE_ROW, family);
 	}
 	else {
@@ -13657,14 +14991,15 @@ void GSContainerTag::removeRow(
 
 void GSContainerTag::updateRow(
 		const RowMapper &resolvedMapper, int64_t transactionId,
-		const bool *transactionStarted, int64_t rowId, const void *key,
-		const void *rowObj) {
+		const bool *transactionStarted, bool updatable, int64_t rowId,
+		bool keyGeneral, const void *key, const void *rowObj) {
 	if (resolvedMapper.getCategory() == RowMapper::CATEGORY_TIME_SERIES &&
 			!TIME_SERIES_UPDATE_ENABLED) {
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
-	checkTransactionPreserved(true, transactionId, transactionStarted, true);
+	checkTransactionPreserved(
+			true, transactionId, transactionStarted, updatable);
 
 	if (&resolvedMapper != mapper_.get()) {
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
@@ -13687,8 +15022,10 @@ void GSContainerTag::updateRow(
 		statement = Statement::UPDATE_ROW_BY_ID;
 	}
 
+	const bool rowGeneral = false;
 	resolvedMapper.encode(
-			reqOut, getRowMappingMode(), NULL, key, rowObj);
+			reqOut, getRowMappingMode(), keyGeneral, NULL, key,
+			rowGeneral, rowObj);
 	executeStatement(statement, family);
 }
 
@@ -13861,8 +15198,10 @@ GSAggregationResult* GSContainerTag::aggregateTimeSeries(
 
 	std::auto_ptr<GSAggregationResult> aggregationResult(
 			new GSAggregationResult(*this));
+	const bool rowGeneral = false;
 	RowMapper::getAggregationResultMapper().decode(
-			respIn, RowMapper::MODE_AGGREGATED, NULL, aggregationResult.get());
+			respIn, RowMapper::MODE_AGGREGATED, NULL,
+			rowGeneral, aggregationResult.get());
 	return aggregationResult.release();
 }
 
@@ -13878,8 +15217,10 @@ bool GSContainerTag::appendTimeSeriesRow(const void *rowObj) {
 	putTransactionInfo(reqOut, family);
 
 	GSTimestamp dummyKey = 0;
+	const bool rowGeneral = false;
 	mapper_->encode(
-			reqOut, getRowMappingMode(), NULL, &dummyKey, rowObj);
+			reqOut, getRowMappingMode(), false, NULL, &dummyKey,
+			rowGeneral, rowObj);
 	ArrayByteInStream respIn =
 			executeStatement(Statement::APPEND_TIME_SERIES_ROW, family);
 
@@ -13920,8 +15261,10 @@ bool GSContainerTag::getTimeSeriesRow(
 	GSBool found;
 	respIn >> found;
 	if (found) {
-		mapper_->decode(respIn, getRowMappingMode(),
-				&getVarDataPool(), rowObj);
+		const bool rowGeneral = false;
+		mapper_->decode(
+				respIn, getRowMappingMode(),
+				&getVarDataPool(), rowGeneral, rowObj);
 	}
 
 	return ClientUtil::toBool(found);
@@ -13949,8 +15292,10 @@ bool GSContainerTag::interpolateTimeSeriesRow(
 	GSBool found;
 	respIn >> found;
 	if (found) {
-		mapper_->decode(respIn, getRowMappingMode(),
-				&getVarDataPool(), rowObj);
+		const bool rowGeneral = false;
+		mapper_->decode(
+				respIn, getRowMappingMode(),
+				&getVarDataPool(), rowGeneral, rowObj);
 	}
 
 	return ClientUtil::toBool(found);
@@ -14027,7 +15372,7 @@ GSQuery* GSContainerTag::queryByTime(
 	return queryPtr.release();
 }
 
-template<typename Traits>
+template<typename Traits, bool RowGeneral>
 GSResult GSContainerTag::getRowChecked(
 		GSContainer *container, const typename Traits::Object *key,
 		void *rowObj, GSBool forUpdate, GSBool *exists,
@@ -14048,8 +15393,8 @@ GSResult GSContainerTag::getRowChecked(
 		GS_CLIENT_CHECK_NOT_NULL(rowObj);
 
 		*exists = container->getRow(
-				Traits::resolveKeyType(), key,
-				rowObj, ClientUtil::toBool(forUpdate), false);
+				Traits::GENERAL_KEY, Traits::resolveKeyType(), key,
+				RowGeneral, rowObj, ClientUtil::toBool(forUpdate), false);
 	}
 	catch (...) {
 		*exists = GS_FALSE;
@@ -14058,7 +15403,7 @@ GSResult GSContainerTag::getRowChecked(
 	return GS_RESULT_OK;
 }
 
-template<typename Traits>
+template<typename Traits, bool RowGeneral>
 GSResult GSContainerTag::putRowChecked(
 		GSContainer *container, const typename Traits::Object *key,
 		const void *rowObj, GSBool *exists,
@@ -14078,7 +15423,8 @@ GSResult GSContainerTag::putRowChecked(
 		GS_CLIENT_CHECK_NOT_NULL(rowObj);
 
 		*exists = container->putRow(
-				Traits::resolveKeyType(), key, rowObj, false);
+				Traits::GENERAL_KEY, Traits::resolveKeyType(), key,
+				RowGeneral, rowObj, false);
 	}
 	catch (...) {
 		*exists = GS_FALSE;
@@ -14104,7 +15450,8 @@ GSResult GSContainerTag::removeRowChecked(
 		GS_CLIENT_CHECK_NOT_NULL(container);
 		GS_CLIENT_CHECK_NOT_NULL(key);
 
-		*exists = container->removeRow(Traits::resolveKeyType(), key, false);
+		*exists = container->removeRow(
+				Traits::GENERAL_KEY, Traits::resolveKeyType(), key, false);
 	}
 	catch (...) {
 		*exists = GS_FALSE;
@@ -14583,7 +15930,8 @@ void GSContainerTag::putTransactionInfo(
 void GSContainerTag::tryPutOptionalRequest(
 		XArrayByteOutStream &reqOut,
 		bool forUpdate, bool containerLockAware, bool forCreationDDL,
-		const OptionalRequestSource *source) {
+		const OptionalRequestSource *source,
+		int32_t featureVersion) {
 	if (!NodeConnection::isOptionalRequestEnabled()) {
 		return;
 	}
@@ -14594,10 +15942,11 @@ void GSContainerTag::tryPutOptionalRequest(
 			forCreationDDL && GSGridStore::isClientIdEnabled();
 
 	if (forUpdate || containerLockRequired || clientIdRequired ||
-			(source != NULL && source->hasOptions())) {
+			(source != NULL && source->hasOptions()) || featureVersion >= 0) {
 		NodeConnection::OptionalRequest optionalRequest;
 		optionalRequest.forUpdate_ = forUpdate;
 		optionalRequest.containerLockRequired_ = containerLockRequired;
+		optionalRequest.featureVersion_ = featureVersion;
 		if (clientIdRequired) {
 			optionalRequest.clientId_ = getContext().generateClientId();
 		}
@@ -14955,35 +16304,101 @@ void GSContainerTag::checkTransactionPreserved(
 }
 
 bool GSContainerTag::filterIndexInfo(
-		const GSIndexInfo &info, bool forCreation,
-		GSIndexInfo &filteredInfo) const {
+		const GSIndexInfo &info, bool forCreation, GSIndexInfo &filteredInfo,
+		std::vector<int32_t> &columnListStorage) const {
 	filteredInfo = info;
 
 	if (filteredInfo.name != NULL) {
 		ClientUtil::checkSymbol(filteredInfo.name, "index name");
 	}
 
-	const int32_t column = filteredInfo.column;
-	const GSChar *columnNameById = NULL;
-	if (column >= 0) {
-		const GSBinding &binding = mapper_->getBinding();
-		if (static_cast<size_t>(column) >= binding.entryCount) {
+	if (filteredInfo.column >= 0) {
+		if (filteredInfo.columnCount == 0) {
+			filteredInfo.columnCount = 1;
+			filteredInfo.columnList = &filteredInfo.column;
+		}
+		else if (filteredInfo.columnCount == 1) {
+			if (filteredInfo.columnList == NULL ||
+					filteredInfo.columnList[0] != filteredInfo.column) {
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+						"Inconsistent column number between single and composite");
+			}
+		}
+		else {
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+					"Inconsistent size of column list between single and composite");
+		}
+	}
+
+	if (filteredInfo.columnName != NULL) {
+		if (filteredInfo.columnNameCount == 0) {
+			filteredInfo.columnNameCount = 1;
+			filteredInfo.columnNameList = &filteredInfo.columnName;
+		}
+		else if (filteredInfo.columnNameCount == 1) {
+			if (filteredInfo.columnNameList == NULL ||
+					filteredInfo.columnNameList[0] != NULL ||
+					ClientUtil::normalizeSymbolUnchecked(
+							filteredInfo.columnNameList[0]) !=
+					ClientUtil::normalizeSymbolUnchecked(
+							filteredInfo.columnName)) {
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+						"Inconsistent column name between single and composite");
+			}
+		}
+		else {
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+					"Inconsistent size of column name list between single and composite");
+		}
+	}
+
+	if (filteredInfo.columnCount > 0 && filteredInfo.columnList == NULL) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
+				"Empty column list");
+	}
+
+	if (filteredInfo.columnNameCount > 0 &&
+			filteredInfo.columnNameList == NULL) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
+				"Empty column name list");
+	}
+
+	if (filteredInfo.columnCount > 0 && filteredInfo.columnNameCount > 0) {
+		if (filteredInfo.columnCount != filteredInfo.columnNameCount) {
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
+					"Inconsistent size between column list and column name list");
+		}
+	}
+	else if (filteredInfo.columnCount <= 0 && filteredInfo.columnNameCount <= 0) {
+		if (forCreation) {
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
+					"Column must be specified");
+		}
+	}
+
+	const GSBinding &binding = mapper_->getBinding();
+
+	std::vector<const GSChar*> columnNameListById;
+	for (size_t i = 0; i < filteredInfo.columnCount; i++) {
+		const int32_t &column = filteredInfo.columnList[i];
+		if (column < 0 || static_cast<size_t>(column) >= binding.entryCount) {
 			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 					"Column number out of range (column=" << column << ")");
 		}
-		columnNameById = binding.entries[column].columnName;
+		columnNameListById.push_back(binding.entries[column].columnName);
 	}
 
-	const GSChar *columnName = filteredInfo.columnName;
-	if (columnName == NULL) {
-		columnName = columnNameById;
-	}
-	else {
+	for (size_t i = 0; i < filteredInfo.columnNameCount; i++) {
+		const GSChar *columnName = filteredInfo.columnNameList[i];
 		const int32_t columnByName = mapper_->resolveColumnId(columnName);
-		if (column < 0) {
-			filteredInfo.column = columnByName;
+		if (filteredInfo.columnCount <= 0) {
+			columnListStorage.push_back(columnByName);
+			continue;
 		}
-		else if (column != columnByName) {
+
+		const GSChar *columnNameById = columnNameListById[i];
+		const int32_t column = filteredInfo.columnList[i];
+		if (column != columnByName) {
 			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
 					"Inconsistent column specified ("
 					"specifiedNumber=" << column <<
@@ -14993,25 +16408,47 @@ bool GSContainerTag::filterIndexInfo(
 		}
 	}
 
-	if (forCreation && filteredInfo.column < 0) {
-			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER,
-					"Column must be specified");
+	if (filteredInfo.columnCount <= 0 && !columnListStorage.empty()) {
+		filteredInfo.columnCount = columnListStorage.size();
+		filteredInfo.columnList = &columnListStorage[0];
+	}
+
+	if (filteredInfo.column <= 0 && filteredInfo.columnCount == 1) {
+		filteredInfo.column = filteredInfo.columnList[0];
+	}
+
+	if (filteredInfo.columnName <= 0 && filteredInfo.columnNameCount == 1) {
+		filteredInfo.columnName = filteredInfo.columnNameList[0];
 	}
 
 	const GSIndexTypeFlags type = filteredInfo.type;
 	if (!GSGridStore::isIndexDetailEnabled() &&
 			((forCreation && type == 0) || type == GS_INDEX_FLAG_DEFAULT)) {
-		const int32_t filteredColumn = filteredInfo.column;
-		const GSIndexTypeFlags defaultType = (filteredColumn < 0 ?
-				0 : getDefaultIndexTypeFlag(filteredColumn));
-		if (defaultType == 0) {
-			if (!forCreation) {
-				return false;
+		GSIndexTypeFlags resolvedType = 0;
+		for (size_t i = 0; i < filteredInfo.columnCount; i++) {
+			const int32_t &column = filteredInfo.columnList[i];
+			const GSIndexTypeFlags subType =
+					getDefaultIndexTypeFlag(column);
+			if (subType == 0) {
+				resolvedType = 0;
+				break;
 			}
-			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_DEFAULT_INDEX, "");
+			else if (resolvedType != 0 && subType != resolvedType) {
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_DEFAULT_INDEX,
+						"Multiple default index type found");
+			}
+			resolvedType = subType;
 		}
 
-		filteredInfo.type = type;
+		if (resolvedType == 0) {
+			if (!forCreation && filteredInfo.columnCount <= 1) {
+				return false;
+			}
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_DEFAULT_INDEX,
+					"Default index type can not be assigned");
+		}
+
+		filteredInfo.type = resolvedType;
 	}
 
 	return true;
@@ -15677,7 +17114,6 @@ GSRowSetTag::GSRowSetTag(
 				ClientUtil::sizeValueToInt32(ClientUtil::toSizeValue(rowCount)),
 				rowIdIncluded, &varDataPool_),
 		type_(type),
-		lastKey_(NULL),
 		totalRowCount_(
 				(fetchStatus.isEnabled() ?
 						fetchStatus.totalRowCount_ :
@@ -15692,6 +17128,7 @@ GSRowSetTag::GSRowSetTag(
 		previousFound_(false),
 		followingLost_(false),
 		closed_(false) {
+	initializeLastKey();
 	container_->createReference(this);
 }
 
@@ -15769,6 +17206,35 @@ bool GSRowSetTag::isTransactionStarted() const {
 	return queryParameters_.initialTransactionStarted_;
 }
 
+int64_t GSRowSetTag::getRowIdForUpdate() const {
+	if (!queryParameters_.transactionIdSpecified_ || getTransactionId() == 0) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_NOT_LOCKED, "");
+	}
+
+	switch (mapper_.getCategory()) {
+	case RowMapper::CATEGORY_COLLECTION:
+		return getRowId();
+	case RowMapper::CATEGORY_TIME_SERIES:
+		{
+			const GSRowKey *lastKey = lastKey_.get();
+			if (lastKey == NULL) {
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+			}
+
+			GSType destType;
+			const GSType expectedType = GS_TYPE_TIMESTAMP;
+
+			GSValue value;
+			RowMapper::VarDataPool pool;
+			lastKey->getField(0, value, destType, &expectedType, pool);
+
+			return value.asTimestamp;
+		}
+	default:
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
+	}
+}
+
 int64_t GSRowSetTag::getRowId() const {
 	checkOpened();
 	checkInRange();
@@ -15778,20 +17244,6 @@ int64_t GSRowSetTag::getRowId() const {
 	}
 
 	return cursor_.getLastRowID();
-}
-
-const void* GSRowSetTag::getRowKey() const {
-	checkOpened();
-
-	if (!cursor_.isInRange()) {
-		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_NO_SUCH_ELEMENT, "");
-	}
-
-	if (lastKey_ == NULL) {
-		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
-	}
-
-	return lastKey_;
 }
 
 void GSRowSetTag::closeRemote(bool transactionalOnly) {
@@ -15826,8 +17278,12 @@ void GSRowSetTag::next(void *rowObj) {
 
 	try {
 		varDataPool_.clear();
-		mapper_.decode(cursor_, rowObj);
-		lastKey_ = mapper_.extractKey(rowObj, lastKeyStorage_);
+		const bool rowGeneral = false;
+		mapper_.decode(cursor_, rowGeneral, rowObj);
+
+		if (lastKey_.get() != NULL) {
+			mapper_.resolveKey(rowObj, *lastKey_.get());
+		}
 
 		if (!cursor_.hasNext()) {
 			prepareFollowingDirect();
@@ -15858,7 +17314,8 @@ void GSRowSetTag::nextAggregation(GSAggregationResult **aggregationResult) {
 	try {
 		std::auto_ptr<GSAggregationResult> result(
 				new GSAggregationResult(*container_));
-		mapper_.decode(cursor_, result.get());
+		const bool rowGeneral = false;
+		mapper_.decode(cursor_, rowGeneral, result.get());
 		*aggregationResult = result.release();
 		previousFound_ = true;
 	}
@@ -15885,7 +17342,8 @@ void GSRowSetTag::nextQueryAnalysis(GSQueryAnalysisEntry *queryAnalysis) {
 
 	try {
 		varDataPool_.clear();
-		mapper_.decode(cursor_, queryAnalysis);
+		const bool rowGeneral = false;
+		mapper_.decode(cursor_, rowGeneral, queryAnalysis);
 		previousFound_ = true;
 	}
 	catch (...) {
@@ -15903,9 +17361,10 @@ void GSRowSetTag::remove() {
 	checkInRange();
 
 	const bool &transactionStarted = isTransactionStarted();
+	const bool keyGeneral = true;
 	container_->removeRow(
 			mapper_, getTransactionId(), &transactionStarted,
-			cursor_.getLastRowID(), lastKey_);
+			isUpdatable(), cursor_.getLastRowID(), keyGeneral, lastKey_.get());
 }
 
 void GSRowSetTag::update(const void *rowObj) {
@@ -15913,9 +17372,10 @@ void GSRowSetTag::update(const void *rowObj) {
 	checkInRange();
 
 	const bool &transactionStarted = isTransactionStarted();
+	const bool keyGeneral = true;
 	container_->updateRow(
-			mapper_, getTransactionId(), &transactionStarted,
-			cursor_.getLastRowID(), lastKey_, rowObj);
+			mapper_, getTransactionId(), &transactionStarted, isUpdatable(),
+			cursor_.getLastRowID(), keyGeneral, lastKey_.get(), rowObj);
 }
 
 void GSRowSetTag::getRowFixedPart(const uint8_t *&data, size_t &size) const {
@@ -16066,6 +17526,32 @@ void GSRowSetTag::checkInRange() const {
 	}
 }
 
+void GSRowSetTag::initializeLastKey() {
+	if (queryParameters_.transactionIdSpecified_ &&
+			queryParameters_.initialTransactionStarted_ &&
+			mapper_.hasKey()) {
+		GSContainerInfo info;
+		RowMapper::ContainerInfoRef<> infoRef(&info, ClientVersion());
+		mapper_.getContainerSchema(infoRef, keyVarDataPool_);
+
+		const bool forKey = true;
+		std::vector<GSBindingEntry> entryList;
+		const GSBinding &binding = GSRow::createBinding(
+				infoRef.toConst(), entryList, true, forKey);
+
+		RowMapper::Cache &cache = RowMapper::getDefaultCache();
+		RowMapper::Reference mapperRef(cache, cache.resolve(
+				RowMapper::CATEGORY_COLLECTION, &binding, true,
+				GSGridStore::getRowMapperConfig()));
+
+		lastKey_.reset(GSRow::create(keyVarDataPool_, mapperRef, forKey));
+	}
+}
+
+bool GSRowSetTag::isUpdatable() const {
+	return queryParameters_.isForUpdate(false);
+}
+
 
 GSAggregationResultTag::GSAggregationResultTag(GSContainer &container) :
 		resourceHeader_(GSResourceType::AGGREGATION_RESULT, &container, NULL),
@@ -16204,17 +17690,70 @@ GSAggregationResultTag::GSAggregationResultTag() :
 
 const size_t GSRowTag::DATA_OFFSET = sizeof(GSRow);
 
-GSRow* GSRowTag::create(GSGridStore &store, RowMapper::Reference mapper) {
-	return create(&store, mapper);
+GSRow* GSRowTag::create(
+		GSGridStore &store, RowMapper::Reference mapper, bool forKey) {
+	return create(&store, mapper, forKey);
 }
 
-GSRow* GSRowTag::create(GSContainer &container, RowMapper::Reference mapper) {
-	return create(&container, mapper);
+GSRow* GSRowTag::create(
+		GSContainer &container, RowMapper::Reference mapper, bool forKey) {
+	return create(&container, mapper, forKey);
 }
 
-GSRow* GSRowTag::create(RowMapper::VarDataPool &pool, RowMapper::Reference mapper) {
-	GSRow *row = create(NULL, mapper);
+GSRow* GSRowTag::create(
+		RowMapper::VarDataPool &pool, RowMapper::Reference mapper, bool forKey) {
+	GSRow *row = create(NULL, mapper, forKey);
 	row->varDataPool_ = &pool;
+	return row;
+}
+
+GSRow* GSRowTag::create(bool forKey) const {
+	RowMapper::Cache &cache = RowMapper::getDefaultCache();
+	GSRowKey *row;
+	if (forKey && !forKey_) {
+		RowMapper::VarDataPool pool;
+		GSContainerInfo info;
+		RowMapper::ContainerInfoRef<> infoRef(&info, ClientVersion());
+		mapper_->getContainerSchema(infoRef, pool);
+
+		std::vector<GSBindingEntry> entryList;
+		const GSBinding &binding = GSRow::createBinding(
+				infoRef.toConst(), entryList, true, forKey);
+
+		RowMapper::Reference mapperRef(cache, cache.resolve(
+				RowMapper::CATEGORY_COLLECTION, &binding, true,
+				GSGridStore::getRowMapperConfig()));
+		row = GSRow::create(parentResource_, mapperRef, forKey);
+	}
+	else {
+		RowMapper::Reference mapperRef(cache, cache.duplicate(*mapper_));
+		row = GSRow::create(parentResource_, mapperRef, forKey);
+	}
+
+	try {
+		const GSBinding &binding = getBinding();
+		if (row->varDataPool_ == NULL) {
+			row->varDataPool_ = varDataPool_;
+		}
+		RowMapper::VarDataPool &pool = row->getVarDataPool();
+		int32_t destIndex = 0;
+		for (size_t i = 0; i < binding.entryCount; i++) {
+			if (forKey && !RowMapper::isKeyColumn(binding.entries[i])) {
+				continue;
+			}
+			GSValue value;
+			GSType type;
+			getField(static_cast<int32_t>(i), value, type, NULL, pool);
+			row->setField(destIndex, value, type);
+			destIndex++;
+			pool.clear();
+		}
+	}
+	catch (...) {
+		close(&row);
+		throw;
+	}
+
 	return row;
 }
 
@@ -16253,17 +17792,35 @@ GSRow& GSRowTag::resolve(void *resource) {
 
 GSBinding GSRowTag::createBinding(
 		const RowMapper::ContainerInfoRef<true> &infoRef,
-		std::vector<GSBindingEntry> &entryList, bool anyTypeAllowed) {
+		std::vector<GSBindingEntry> &entryList, bool anyTypeAllowed,
+		bool forKey) {
 	const size_t columnCount = infoRef.getColumnCount();
+	const size_t rowKeyColumnCount = infoRef.getRowKeyColumnCount();
+
+	size_t bindingColumnCount;
+	if (forKey) {
+		if (rowKeyColumnCount > 0) {
+			bindingColumnCount = rowKeyColumnCount;
+		}
+		else if (infoRef.isRowKeyAssigned()) {
+			bindingColumnCount = 1;
+		}
+		else {
+			bindingColumnCount = 0;
+		}
+	}
+	else {
+		bindingColumnCount = columnCount;
+	}
 
 	entryList.clear();
-	entryList.reserve(columnCount);
+	entryList.reserve(bindingColumnCount);
 
-	size_t lastOffset =
-			GSRow::DATA_OFFSET + ClientUtil::calcNullsByteSize(columnCount);
+	size_t lastOffset = GSRow::DATA_OFFSET +
+			ClientUtil::calcNullsByteSize(bindingColumnCount);
 
-	if (columnCount <= 0 || infoRef.getRawColumnInfoList() == NULL) {
-		if (columnCount == 0 && anyTypeAllowed) {
+	if (bindingColumnCount <= 0 || infoRef.getRawColumnInfoList() == NULL) {
+		if (bindingColumnCount == 0 && anyTypeAllowed) {
 			GSBinding dest;
 			dest.entries = NULL;
 			dest.entryCount = 0;
@@ -16272,10 +17829,9 @@ GSBinding GSRowTag::createBinding(
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_SCHEMA, "");
 	}
 
-	for (size_t i = 0; i < columnCount; i++) {
-		GSBindingEntry entry;
-		const GSColumnInfo &columnInfo =
-				infoRef.getColumnInfo(static_cast<int32_t>(i));
+	for (size_t i = 0; i < bindingColumnCount; i++) {
+		GSBindingEntry entry = GS_BINDING_ENTRY_INITIALIZER;
+		const GSColumnInfo &columnInfo = infoRef.getColumnInfo(i);
 
 		bool arrayUsed;
 		const GSType elementType =
@@ -16309,21 +17865,58 @@ GSBinding GSRowTag::createBinding(
 		}
 		entryList.push_back(entry);
 	}
+
+	if (rowKeyColumnCount > 0) {
+		const int32_t *rowKeyColumnList = infoRef.getRowKeyColumnList();
+		if (rowKeyColumnList == NULL) {
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
+		}
+
+		for (size_t i = 0; i < rowKeyColumnCount; i++) {
+			const int32_t column = rowKeyColumnList[i];
+			if (column < 0 || static_cast<size_t>(column) >= entryList.size()) {
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
+						"Out of range for row key column number ("
+						"column=" << column <<
+						", columnCount=" << entryList.size() << ")");
+			}
+
+			const int32_t expectedColumn = static_cast<int32_t>(i);
+			if (column != expectedColumn) {
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
+						"Row key column must be ordered as coulmn schema");
+			}
+
+			entryList[i].options |= GS_TYPE_OPTION_KEY;
+		}
+	}
+
 	GSBinding binding;
 	binding.entries = &entryList[0];
 	binding.entryCount = entryList.size();
+	assert(binding.entryCount == bindingColumnCount);
 
 	return binding;
 }
 
 const RowMapper& GSRowTag::getRowMapper() const {
-	return *mapper_;
+	if (forKey_) {
+		return RowMapper::RowTool::resolveKeyMapper(*mapper_);
+	}
+	else {
+		return *mapper_;
+	}
 }
 
 void GSRowTag::getContainerSchema(RowMapper::ContainerInfoRef<> &infoRef) {
 	RowMapper::VarDataPool &varDataPool = getVarDataPool();
 	varDataPool.clear();
-	mapper_->getContainerSchema(infoRef, varDataPool);
+	if (forKey_) {
+		mapper_->getKeyContainerSchema(infoRef, varDataPool);
+	}
+	else {
+		mapper_->getContainerSchema(infoRef, varDataPool);
+	}
 }
 
 GSResult GSRowTag::getContainerSchema(
@@ -16529,7 +18122,7 @@ void GSRowTag::setField(
 
 void GSRowTag::clear(bool silent) {
 	FieldClearer clearer;
-	const GSBinding &binding = mapper_->getBinding();
+	const GSBinding &binding = getBinding();
 	for (size_t i = 0; i < binding.entryCount; i++) {
 		const GSBindingEntry &entry = binding.entries[i];
 		try {
@@ -16557,19 +18150,25 @@ void GSRowTag::deallocate(void *varData) {
 }
 
 GSRowTag::GSRowTag(
-		void *parentResource, RowMapper::Reference mapper, size_t objectSize) :
+		void *parentResource, RowMapper::Reference mapper, size_t objectSize,
+		bool forKey) :
 		resourceHeader_(GSResourceType::ROW, parentResource, NULL),
 		parentResource_(parentResource),
 		mapper_(mapper),
-		varDataPool_(NULL) {
+		varDataPool_(NULL),
+		forKey_(forKey) {
 	if (!mapper_->isGeneral()) {
 		assert(false);
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
-	assert(objectSize == mapper_->getGeneralRowSize());
-	(void) objectSize;
+	if (forKey_ && !mapper_->hasKey()) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_FOUND,
+				"Row key does not exist");
+	}
+	assert(objectSize == getGeneralRowSize());
+	static_cast<void>(objectSize);
 
-	const GSBinding &binding = mapper_->getBinding();
+	const GSBinding &binding = getBinding();
 	memset(getNulls(), 0, ClientUtil::calcNullsByteSize(binding.entryCount));
 
 	FieldInitializer initializer;
@@ -16639,13 +18238,14 @@ GSRowTag::~GSRowTag() {
 	}
 }
 
-GSRow* GSRow::create(void *parentResource, RowMapper::Reference mapper) {
-	const size_t storageSize = mapper->getGeneralRowSize();
+GSRow* GSRowTag::create(
+		void *parentResource, RowMapper::Reference mapper, bool forKey) {
+	const size_t storageSize = getGeneralRowSize(*mapper, forKey);
 	uint8_t *storage = new uint8_t[storageSize];
 
 	try {
-		GSRow *row =
-				new(storage) GSRow(parentResource, mapper, storageSize);
+		GSRow *row = new(storage) GSRow(
+				parentResource, mapper, storageSize, forKey);
 		assert(static_cast<void*>(row) == static_cast<void*>(storage));
 		return row;
 	}
@@ -16656,7 +18256,7 @@ GSRow* GSRow::create(void *parentResource, RowMapper::Reference mapper) {
 }
 
 const GSBindingEntry& GSRowTag::getBindingEntry(int32_t columnId) const {
-	const GSBinding &binding = mapper_->getBinding();
+	const GSBinding &binding = getBinding();
 	if (columnId < 0 ||
 			binding.entryCount <= static_cast<size_t>(columnId)) {
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER,
@@ -16855,6 +18455,28 @@ const uint8_t* GSRowTag::data() const {
 	return reinterpret_cast<const uint8_t*>(this);
 }
 
+const GSBinding& GSRowTag::getBinding() const {
+	if (forKey_) {
+		return mapper_->getKeyBinding();
+	}
+	else {
+		return mapper_->getBinding();
+	}
+}
+
+size_t GSRowTag::getGeneralRowSize() const {
+	return getGeneralRowSize(*mapper_, forKey_);
+}
+
+size_t GSRowTag::getGeneralRowSize(const RowMapper &mapper, bool forKey) {
+	if (forKey) {
+		return mapper.getGeneralRowKeySize();
+	}
+	else {
+		return mapper.getGeneralRowSize();
+	}
+}
+
 template<typename Traits>
 void GSRowTag::FieldClearer::operator()(
 		GSRow &row, const GSBindingEntry &entry, const Traits&) {
@@ -16956,9 +18578,9 @@ void GSRowTag::FieldDeallocator::operator()(
 template<typename Traits>
 void GSRowTag::FieldInitializer::operator()(
 		GSRow &row, const GSBindingEntry &entry, const Traits&) {
-	assert(entry.offset + row.mapper_->getFieldObjectMainPartSize(
+	assert(entry.offset + RowMapper::getFieldObjectMainPartSize(
 			entry.elementType, RowMapper::isArrayColumn(entry)) <=
-			row.mapper_->getGeneralRowSize());
+			row.getGeneralRowSize());
 
 	ClientUtil::setNonAlignedValue(
 			row.data() + entry.offset, typename Traits::Object());
@@ -16998,9 +18620,9 @@ template<typename Traits>
 struct GSRowTag::DirectFieldSetter<Traits, true> {
 	void operator()(GSRow &row, const GSBindingEntry &entry,
 			const GSValue &value) {
-		assert(entry.offset + row.mapper_->getFieldObjectMainPartSize(
+		assert(entry.offset + RowMapper::getFieldObjectMainPartSize(
 				entry.elementType, RowMapper::isArrayColumn(entry)) <=
-				row.mapper_->getGeneralRowSize());
+				row.getGeneralRowSize());
 
 		ClientUtil::setNonAlignedValue<typename Traits::Object>(
 				row.data() + entry.offset, Traits::as(value));
@@ -17013,9 +18635,9 @@ template<typename Traits>
 struct GSRowTag::DirectFieldSetter<Traits, false> {
 	void operator()(GSRow &row, const GSBindingEntry &entry,
 			const GSValue &value) {
-		assert(entry.offset + row.mapper_->getFieldObjectMainPartSize(
+		assert(entry.offset + RowMapper::getFieldObjectMainPartSize(
 				entry.elementType, RowMapper::isArrayColumn(entry)) <=
-				row.mapper_->getGeneralRowSize());
+				row.getGeneralRowSize());
 
 		ClientUtil::setNonAlignedValue<typename Traits::Object>(
 				row.data() + entry.offset, Traits::as(value));
@@ -17023,14 +18645,16 @@ struct GSRowTag::DirectFieldSetter<Traits, false> {
 };
 
 
+const RowMapper::Config GSRowKeyPredicateTag::KEY_MAPPER_CONFIG(
+		true, true, true, true);
+
 GSRowKeyPredicateTag::GSRowKeyPredicateTag(
-		GSGridStore &store, GSType keyType) :
+		GSGridStore &store, RowMapper::Reference mapper) :
 		resourceHeader_(GSResourceType::ROW_KEY_PREDICATE, &store, NULL),
 		store_(&store),
-		keyType_(keyType) {
-	if (!RowMapper::isKeyType(keyType)) {
-		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
-	}
+		mapper_(mapper) {
+	checkMapper(*mapper_);
+	keyStorage_.reserve(mapper_->getKeyBinding().entryCount);
 	store_->createReference(this);
 }
 
@@ -17056,6 +18680,31 @@ void GSRowKeyPredicateTag::close(GSRowKeyPredicate **predicate) throw() {
 	*predicate = NULL;
 }
 
+GSResult GSRowKeyPredicateTag::getKeySchema(
+		GSRowKeyPredicate *predicate, GSContainerInfo *info,
+		const ClientVersion &version,
+		const GSInterceptor::FunctionInfo &funcInfo) throw() {
+	RowMapper::ContainerInfoRef<>::clear(info, version);
+
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
+	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL_WITH_FUNC(funcInfo, predicate, info);
+
+	try {
+		GS_CLIENT_CHECK_NOT_NULL(predicate);
+		GS_CLIENT_CHECK_NOT_NULL(info);
+
+		RowMapper::ContainerInfoRef<> infoRef(info, version);
+		predicate->getRowMapper().getKeyContainerSchema(
+				infoRef, predicate->store_->getVarDataPool());
+	}
+	catch (...) {
+		RowMapper::ContainerInfoRef<>::clear(info, version);
+		return GSResourceHeader::setCurrentException(predicate);
+	}
+	return GS_RESULT_OK;
+}
+
 template<typename Traits, GSRowKeyPredicate::RangeElementType RangeType>
 GSResult GSRowKeyPredicateTag::getRangeKey(
 		GSRowKeyPredicate *predicate, const typename Traits::Object **key,
@@ -17070,7 +18719,7 @@ GSResult GSRowKeyPredicateTag::getRangeKey(
 
 		UTIL_STATIC_ASSERT(Traits::KEY_TYPE);
 		const GSValue *value;
-		predicate->getRangeKey<RangeType>(value, Traits::resolveKeyType());
+		predicate->getRangeKey(value, Traits::resolveKeyType(), RangeType);
 		if (value == NULL) {
 			*key = NULL;
 		}
@@ -17100,12 +18749,12 @@ GSResult GSRowKeyPredicateTag::setRangeKey(
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
 
 		if (key == NULL) {
-			predicate->setRangeKey<RangeType>(NULL, Traits::ELEMENT_TYPE);
+			predicate->setRangeKey(NULL, Traits::ELEMENT_TYPE, RangeType);
 		}
 		else {
 			GSValue value;
 			Traits::as(value) = *key;
-			predicate->setRangeKey<RangeType>(&value, Traits::ELEMENT_TYPE);
+			predicate->setRangeKey(&value, Traits::ELEMENT_TYPE, RangeType);
 		}
 	}
 	catch (...) {
@@ -17130,9 +18779,9 @@ GSResult GSRowKeyPredicateTag::getDistinctKeys(
 		GS_CLIENT_CHECK_NOT_NULL(size);
 
 		UTIL_STATIC_ASSERT(Traits::KEY_TYPE);
-		TypedDistinctKeyReceiver<Traits> receiver;
 		predicate->getDistinctKeys(
-				*keyList, *size, Traits::resolveKeyType(), receiver);
+				*keyList, *size, Traits::resolveKeyType(), true,
+				SingleTypedKeyReceiver<Traits>());
 	}
 	catch (...) {
 		if (keyList != NULL) {
@@ -17169,55 +18818,208 @@ GSResult GSRowKeyPredicateTag::addDistinctKey(
 	return GS_RESULT_OK;
 }
 
-GSType GSRowKeyPredicateTag::getKeyType() const {
-	return keyType_;
+GSContainerInfo GSRowKeyPredicateTag::createSingleKeySchema(
+		GSType keyType, GSColumnInfo &columnInfoStorage) {
+	if (!RowMapper::isKeyType(keyType)) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_KEY_TYPE, "");
+	}
+
+	GSContainerInfo info = GS_CONTAINER_INFO_INITIALIZER;
+
+	const GSColumnInfo initialColumnInfo = GS_COLUMN_INFO_INITIALIZER;
+	columnInfoStorage = initialColumnInfo;
+	columnInfoStorage.type = keyType;
+
+	info.columnInfoList = &columnInfoStorage;
+	info.columnCount = 1;
+	info.rowKeyAssigned = ClientUtil::toGSBool(true);
+
+	return info;
 }
 
-template<GSRowKeyPredicate::RangeElementType RangeType>
+GSType GSRowKeyPredicateTag::getKeyType() const {
+	const GSBinding &binding = mapper_->getKeyBinding();
+	if (binding.entryCount != 1) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION,
+				"This function cannot be used for composite row key");
+	}
+	return binding.entries[0].elementType;
+}
+
+const RowMapper& GSRowKeyPredicateTag::getRowMapper() const {
+	return *mapper_;
+}
+
+bool GSRowKeyPredicateTag::hasRangeKey(RangeElementType rangeElemType) const {
+	const RangeKeyEntry &rangeKeyEntry = rangeKeyEntries_[rangeElemType];
+	return rangeKeyEntry.second;
+}
+
+size_t GSRowKeyPredicateTag::getDistinctKeyCount() const {
+	return (distinctKeys_.get() == 0 ? 0 : distinctKeys_->size());
+}
+
+GSRowKeyPredicate::KeyIterator GSRowKeyPredicateTag::keyBegin() const {
+	const bool forBegin = true;
+	return KeyIterator(*this, forBegin);
+}
+
+GSRowKeyPredicate::KeyIterator GSRowKeyPredicateTag::keyEnd() const {
+	const bool forBegin = false;
+	return KeyIterator(*this, forBegin);
+}
+
 void GSRowKeyPredicateTag::getRangeKey(
-		const GSValue *&key, const GSType *expectedType) const {
+		GSRowKey *&key, RangeElementType rangeElemType) const {
+	GSRowKey *const *keyPtr;
+	getRangeKey(keyPtr, rangeElemType, GeneralKeyReceiver());
+	key = *keyPtr;
+}
+
+void GSRowKeyPredicateTag::getRangeKey(
+			const GSValue *&key, const GSType *expectedType,
+			RangeElementType rangeElemType) const {
+	checkKeyType(expectedType, true);
+	getRangeKey(key, rangeElemType, SingleUntypedKeyReceiver());
+}
+
+void GSRowKeyPredicateTag::getDistinctKeys(
+		GSRowKey *const *&keyList, size_t &size) const {
+	getDistinctKeys(keyList, size, NULL, false, GeneralKeyReceiver());
+}
+
+void GSRowKeyPredicateTag::getDistinctKeys(
+		const GSValue *&keyList, size_t &size) const {
+	getDistinctKeys(keyList, size, NULL, true, SingleUntypedKeyReceiver());
+}
+
+void GSRowKeyPredicateTag::setRangeKey(
+		const GSRowKey *key, RangeElementType rangeElemType) {
+	RowMapper::VarDataPool pool;
+	TinyRowKey tinyKey;
+	if (key != NULL) {
+		checkKeyType(*key);
+		toTinyKey(*key, tinyKey, pool);
+	}
+	setRangeKey(tinyKey, rangeElemType);
+}
+
+void GSRowKeyPredicateTag::setRangeKey(
+		const GSValue *key, GSType expectedType,
+		RangeElementType rangeElemType) {
+	checkKeyType(&expectedType, true);
+
+	TinyRowKey tinyKey;
+	if (key != NULL) {
+		toTinyKey(*key, tinyKey);
+	}
+	setRangeKey(tinyKey, rangeElemType);
+}
+
+void GSRowKeyPredicateTag::addDistinctKey(const GSRowKey &key) {
+	checkKeyType(key);
+
+	RowMapper::VarDataPool pool;
+	TinyRowKey tinyKey;
+	toTinyKey(key, tinyKey, pool);
+	addDistinctKey(tinyKey);
+}
+
+void GSRowKeyPredicateTag::addDistinctKey(
+		const GSValue &key, GSType expectedType) {
+	checkKeyType(&expectedType, true);
+
+	TinyRowKey tinyKey;
+	toTinyKey(key, tinyKey);
+	addDistinctKey(tinyKey);
+}
+
+void* GSRowKeyPredicateTag::allocate(size_t size) {
+	return new int8_t[size];
+}
+
+void GSRowKeyPredicateTag::deallocate(void *varData) {
+	delete[] static_cast<int8_t*>(varData);
+}
+
+int64_t GSRowKeyPredicateTag::compareKey(
+		const RowMapper &mapper,
+		const TinyRowKey &key1, const  TinyRowKey &key2) {
+	TinyRowKey::const_iterator it1 = key1.begin();
+	TinyRowKey::const_iterator it2 = key2.begin();
+
+	const TinyRowKey::const_iterator end1 = key1.end();
+	const TinyRowKey::const_iterator end2 = key2.end();
+
+	const GSBinding &binding = mapper.getKeyBinding();
+	const GSBindingEntry *entryIt = binding.entries;
+
+	for (; it1 != end1 && it2 != end2; ++entryIt, ++it1, ++it2) {
+		const GSType type = entryIt->elementType;
+		const int64_t comp = compareValue(type, *it1, *it2);
+		if (comp == 0) {
+			continue;
+		}
+		return comp;
+	}
+	return 0;
+}
+
+int64_t GSRowKeyPredicateTag::compareValue(
+		GSType keyType, const GSValue &value1, const  GSValue &value2) {
+	switch (keyType) {
+	case GS_TYPE_STRING:
+		return strcmp(value1.asString, value2.asString);
+	case GS_TYPE_INTEGER:
+		return value1.asInteger - value2.asInteger;
+	case GS_TYPE_LONG:
+		return value1.asLong - value2.asLong;
+	case GS_TYPE_TIMESTAMP:
+		return value1.asTimestamp - value2.asTimestamp;
+	default:
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+}
+
+template<typename T, typename Receiver>
+void GSRowKeyPredicateTag::getRangeKey(
+		const T *&key, RangeElementType rangeElemType,
+		const Receiver &receiver) const {
 	RowMapper::VarDataPool &pool = store_->getVarDataPool();
 	pool.clear();
 
-	checkKeyType(expectedType);
-
-	const RangeKeyEntry &rangeKeyEntry = rangeKeyEntries_[RangeType];
+	const RangeKeyEntry &rangeKeyEntry = rangeKeyEntries_[rangeElemType];
 	if (!rangeKeyEntry.second) {
 		key = NULL;
 		return;
 	}
 
-	GSValue *keyPtr = static_cast<GSValue*>(pool.allocate(sizeof(GSValue)));
-	*keyPtr = RowMapper::copyValue(
-			rangeKeyEntry.first, keyType_, false, &pool, util::FalseType());
+	T *keyPtr = static_cast<T*>(pool.allocate(sizeof(GSValue)));
+	*keyPtr = receiver.receive(*this, rangeKeyEntry.first, pool);
 	key = keyPtr;
 }
 
-template<GSRowKeyPredicate::RangeElementType RangeType>
 void GSRowKeyPredicateTag::setRangeKey(
-		const GSValue *key, GSType expectedType) {
-	checkKeyType(&expectedType);
-
-	RangeKeyEntry &rangeKeyEntry = rangeKeyEntries_[RangeType];
+		TinyRowKey &key, RangeElementType rangeElemType) {
+	RangeKeyEntry &rangeKeyEntry = rangeKeyEntries_[rangeElemType];
 	clearRangeKeyEntry(rangeKeyEntry);
 
-	if (key == NULL) {
+	if (key.empty()) {
 		return;
 	}
 
-	rangeKeyEntry.first = RowMapper::copyValue(
-			*key, keyType_, false, this, util::FalseType());
+	rangeKeyEntry.first.swap(key);
 	rangeKeyEntry.second = true;
 }
 
 template<typename T, typename Receiver>
 void GSRowKeyPredicateTag::getDistinctKeys(
 		const T *&keyList, size_t &size, const GSType *expectedType,
-		Receiver &receiver) const {
+		bool singleOnly, const Receiver &receiver) const {
 	RowMapper::VarDataPool &pool = store_->getVarDataPool();
 	pool.clear();
 
-	checkKeyType(expectedType);
+	checkKeyType(expectedType, singleOnly);
 
 	if (distinctKeys_.get() == NULL || distinctKeys_->empty()) {
 		keyList = NULL;
@@ -17230,10 +19032,18 @@ void GSRowKeyPredicateTag::getDistinctKeys(
 			static_cast<T*>(pool.allocate(sizeof(T) * distinctKeyCount));
 
 	T *destIt = distinctKeyList;
-	for (DistinctKeySet::iterator it = distinctKeys_->begin();
-			it != distinctKeys_->end(); ++it, ++destIt) {
-		*destIt = receiver(RowMapper::copyValue(
-				*it, keyType_, false, &pool, util::FalseType()));
+	try {
+		for (DistinctKeySet::iterator it = distinctKeys_->begin();
+				it != distinctKeys_->end(); ++it, ++destIt) {
+			*destIt = receiver.receive(*this, *it, pool);
+		}
+	}
+	catch (...) {
+		while (destIt != distinctKeyList) {
+			receiver.clear(*(--destIt));
+		}
+		pool.clear();
+		throw;
 	}
 
 	assert(static_cast<size_t>(destIt - distinctKeyList) == distinctKeyCount);
@@ -17241,65 +19051,122 @@ void GSRowKeyPredicateTag::getDistinctKeys(
 	size = distinctKeyCount;
 }
 
-void GSRowKeyPredicateTag::addDistinctKey(
-		const GSValue &key, GSType expectedType) {
-	checkKeyType(&expectedType);
+void GSRowKeyPredicateTag::addDistinctKey(TinyRowKey &key) {
+	assert(!key.empty());
 
-	GSValue destKey = RowMapper::copyValue(
-			key, keyType_, false, this, util::FalseType());
-
+	bool inserted;
 	try {
 		if (distinctKeys_.get() == NULL) {
-			distinctKeys_.reset(new DistinctKeySet(KeyLess(keyType_)));
+			distinctKeys_.reset(new DistinctKeySet(KeyLess(*mapper_)));
 		}
-		distinctKeys_->insert(destKey);
+
+		inserted = distinctKeys_->insert(key).second;
 	}
 	catch (...) {
 		try {
-			clearKey(destKey);
+			clearKey(key);
 		}
 		catch (...) {
 		}
 		throw;
 	}
-}
-
-void* GSRowKeyPredicateTag::allocate(size_t size) {
-	return new int8_t[size];
-}
-
-void GSRowKeyPredicateTag::deallocate(void *varData) {
-	delete[] static_cast<int8_t*>(varData);
-}
-
-GSRowKeyPredicateTag::KeyLess::KeyLess(GSType keyType) :
-		keyType_(keyType) {
-}
-
-bool GSRowKeyPredicateTag::KeyLess::operator()(
-		const GSValue &key1, const GSValue &key2) const {
-	switch (keyType_) {
-	case GS_TYPE_STRING: {
-		return strcmp(key1.asString, key2.asString) < 0;
+	if (!inserted) {
+		clearKey(key);
 	}
-	case GS_TYPE_INTEGER:
-		return key1.asInteger < key2.asInteger;
-	case GS_TYPE_LONG:
-		return key1.asLong < key2.asLong;
-	case GS_TYPE_TIMESTAMP:
-		return key1.asTimestamp < key2.asTimestamp;
-	default:
-		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	key.clear();
+}
+
+void GSRowKeyPredicateTag::toTinyKey(const GSValue &src, TinyRowKey &dest) {
+	dest.clear();
+	dest.reserve(1);
+	dest.push_back(RowMapper::copyValue(
+			src, getKeyType(), false, this, util::FalseType()));
+}
+
+void GSRowKeyPredicateTag::toTinyKey(
+		const GSRowKey &src, TinyRowKey &dest,
+		RowMapper::VarDataPool &pool) {
+	mapper_->checkKeySchemaMatched(src.getRowMapper());
+
+	const GSBinding &binding = mapper_->getKeyBinding();
+
+	dest.clear();
+	dest.reserve(binding.entryCount);
+	pool.clear();
+	try {
+		for (size_t i = 0; i < binding.entryCount; i++) {
+			const GSType type = binding.entries[i].elementType;
+
+			GSType destType;
+			GSValue value;
+			src.getField(
+					static_cast<int32_t>(i), value, destType, &type, pool);
+			assert(type == destType);
+
+			value = RowMapper::copyValue(
+					value, destType, false, this, util::FalseType());
+			pool.clear();
+
+			dest.push_back(value);
+		}
+	}
+	catch (...) {
+		clearKey(dest);
+		throw;
 	}
 }
 
-void GSRowKeyPredicateTag::checkKeyType(const GSType *expectedType) const {
+GSValue GSRowKeyPredicateTag::toSingleKeyValue(
+		const TinyRowKey &src, RowMapper::VarDataPool &pool) const {
+	return RowMapper::copyValue(
+			src.front(), getKeyType(), false, &pool, util::FalseType());
+}
+
+GSRowKey* GSRowKeyPredicateTag::toRowKey(const TinyRowKey &src) const {
+	RowMapper::Cache &cache = RowMapper::getDefaultCache();
+	RowMapper::Reference mapperRef(cache, cache.duplicate(*mapper_));
+
+	const GSBinding &binding = mapper_->getKeyBinding();
+
+	const bool forKey = true;
+	GSRowKey *key = GSRow::create(*store_, mapperRef, forKey);
+	try {
+		for (TinyRowKey::const_iterator it = src.begin(); it != src.end(); ++it) {
+			const int32_t columnId = static_cast<int32_t>(it - src.begin());
+			const GSType type = binding.entries[columnId].elementType;
+			key->setField(columnId, *it, type);
+		}
+	}
+	catch (...) {
+		GSRow::close(&key);
+		throw;
+	}
+
+	return key;
+}
+
+void GSRowKeyPredicateTag::checkKeyType(const GSRowKey &key) const {
+	mapper_->checkKeySchemaMatched(key.getRowMapper());
+}
+
+void GSRowKeyPredicateTag::checkKeyType(
+		const GSType *expectedType, bool singleOnly) const {
 	if (expectedType == NULL) {
+		if (singleOnly) {
+			getKeyType();
+		}
 		return;
 	}
 
-	if (*expectedType != keyType_) {
+	if (*expectedType != getKeyType()) {
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_PARAMETER, "");
+	}
+}
+
+void GSRowKeyPredicateTag::checkMapper(const RowMapper &mapper) {
+	if (!mapper.hasKey()) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_FOUND,
+				"Row key does not exist on predicate for row key");
 	}
 }
 
@@ -17315,9 +19182,9 @@ void GSRowKeyPredicateTag::clear() {
 				break;
 			}
 
-			GSValue value = *it;
+			keyStorage_ = *it; 
 			distinctKeys_->erase(it);
-			clearKey(value);
+			clearKey(keyStorage_);
 		}
 		distinctKeys_.reset();
 	}
@@ -17330,13 +19197,90 @@ void GSRowKeyPredicateTag::clearRangeKeyEntry(RangeKeyEntry &keyEntry) {
 	}
 }
 
-void GSRowKeyPredicateTag::clearKey(GSValue &value) {
-	if (keyType_ != GS_TYPE_STRING) {
+void GSRowKeyPredicateTag::clearKey(TinyRowKey &key) {
+	const GSBinding &binding = mapper_->getKeyBinding();
+	while (!key.empty()) {
+		const size_t columnId = key.size() - 1;
+		clearValue(key.back(), binding.entries[columnId].elementType);
+		key.pop_back();
+	}
+}
+
+void GSRowKeyPredicateTag::clearValue(GSValue &value, GSType type) {
+	if (type != GS_TYPE_STRING) {
 		return;
 	}
 
 	deallocate(const_cast<GSChar*>(value.asString));
 	value.asString = NULL;
+}
+
+
+GSRowKeyPredicateTag::KeyLess::KeyLess(const RowMapper &mapper) :
+		mapper_(mapper) {
+}
+
+bool GSRowKeyPredicateTag::KeyLess::operator()(
+		const TinyRowKey &key1, const TinyRowKey &key2) const {
+	return compareKey(mapper_, key1, key2) < 0;
+}
+
+
+GSRowKeyPredicateTag::KeyIterator::KeyIterator(
+		const GSRowKeyPredicate &predicate, bool forBegin) :
+		predicate_(predicate),
+		rangeElemType_(forBegin ? RANGE_START : RANGE_COUNT),
+		keyIt_(predicate.distinctKeys_.get() == NULL ? DistinctKeyIterator() :
+				(forBegin ?
+						predicate.distinctKeys_->begin() :
+						predicate.distinctKeys_->end())) {
+	if (forBegin) {
+		updateIterator(false);
+	}
+}
+
+bool GSRowKeyPredicateTag::KeyIterator::operator!=(
+		const KeyIterator &another) const {
+	return rangeElemType_ != another.rangeElemType_ ||
+			keyIt_ != another.keyIt_;
+}
+
+const GSRowKey* GSRowKeyPredicateTag::KeyIterator::operator*() const {
+	assert(row_.get() != NULL);
+	return row_.get();
+}
+
+GSRowKeyPredicateTag::KeyIterator&
+GSRowKeyPredicateTag::KeyIterator::operator++() {
+	updateIterator(true);
+	return *this;
+}
+
+void GSRowKeyPredicateTag::KeyIterator::updateIterator(bool nextOnly) {
+	for (bool nextOnlyLocal = nextOnly;; nextOnlyLocal = false) {
+		if (rangeElemType_ == RANGE_COUNT) {
+			if (predicate_.distinctKeys_.get() == NULL ||
+					predicate_.distinctKeys_->empty() ||
+					keyIt_ == predicate_.distinctKeys_->end()) {
+				break;
+			}
+			if (!nextOnlyLocal) {
+				row_.reset(predicate_.toRowKey(*keyIt_));
+				break;
+			}
+			++keyIt_;
+		}
+		else {
+			const RangeKeyEntry &entry =
+					predicate_.rangeKeyEntries_[rangeElemType_];
+			if (entry.second && !nextOnlyLocal) {
+				row_.reset(predicate_.toRowKey(entry.first));
+				break;
+			}
+			rangeElemType_ =
+					static_cast<RangeElementType>(rangeElemType_ + 1);
+		}
+	}
 }
 
 
@@ -17793,25 +19737,17 @@ GSResult GS_API_CALL gsGetRowByPath(
 GSResult GS_API_CALL gsGetCollection(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, GSCollection **collection) {
-	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(collection, NULL);
-	GSResourceHeader::clearLastError(store);
-	GS_CLIENT_INTERCEPT_API_CALL(store, name, binding, collection);
+	return GSGridStore::getCollection(
+			store, name, binding, collection, ClientVersion(1, 0),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
+}
 
-	try {
-		GS_CLIENT_CHECK_NOT_NULL(store);
-		GS_CLIENT_CHECK_NOT_NULL(name);
-		GS_CLIENT_CHECK_NOT_NULL(binding);
-		GS_CLIENT_CHECK_NOT_NULL(collection);
-
-		*collection = store->getCollection(name, *binding);
-	}
-	catch (...) {
-		if (collection != NULL) {
-			*collection = NULL;
-		}
-		return GSResourceHeader::setCurrentException(store);
-	}
-	return GS_RESULT_OK;
+GSResult GS_API_CALL gsGetCollectionV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSCollection **collection) {
+	return GSGridStore::getCollection(
+			store, name, binding, collection, ClientVersion(4, 3),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsGetContainerInfo(
@@ -17846,28 +19782,28 @@ GSResult GS_API_CALL gsGetContainerInfoV3_3(
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
+GSResult GS_API_CALL gsGetContainerInfoV4_3(
+		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
+		GSBool *exists) {
+	return GSGridStore::getContainerInfo(
+			store, name, info, exists, ClientVersion(4, 3),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
+}
+
 GSResult GS_API_CALL gsGetTimeSeries(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, GSTimeSeries **timeSeries) {
-	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(timeSeries, NULL);
-	GSResourceHeader::clearLastError(store);
-	GS_CLIENT_INTERCEPT_API_CALL(store, name, binding, timeSeries);
+	return GSGridStore::getTimeSeries(
+			store, name, binding, timeSeries, ClientVersion(1, 0),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
+}
 
-	try {
-		GS_CLIENT_CHECK_NOT_NULL(store);
-		GS_CLIENT_CHECK_NOT_NULL(name);
-		GS_CLIENT_CHECK_NOT_NULL(binding);
-		GS_CLIENT_CHECK_NOT_NULL(timeSeries);
-
-		*timeSeries = store->getTimeSeries(name, *binding);
-	}
-	catch (...) {
-		if (timeSeries != NULL) {
-			*timeSeries = NULL;
-		}
-		return GSResourceHeader::setCurrentException(store);
-	}
-	return GS_RESULT_OK;
+GSResult GS_API_CALL gsGetTimeSeriesV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSTimeSeries **timeSeries) {
+	return GSGridStore::getTimeSeries(
+			store, name, binding, timeSeries, ClientVersion(4, 3),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsPutRowByPath(
@@ -17905,15 +19841,36 @@ GSResult GS_API_CALL gsPutContainer(
 			ClientVersion(1, 0), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
+GSResult GS_API_CALL gsPutContainerV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container) {
+	return GSGridStore::putContainer(
+			store, name, true, binding, info, modifiable, container, NULL,
+			ClientVersion(4, 3), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
+}
+
 GSResult GS_API_CALL gsPutCollection(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, const GSCollectionProperties *properties,
 		GSBool modifiable, GSCollection **collection) {
 	const GSContainerType containerType = GS_CONTAINER_COLLECTION;
-	(void) properties;
+	static_cast<void>(properties);
 	return GSGridStore::putContainer(
 			store, name, true, binding, NULL, modifiable, collection,
 			&containerType, ClientVersion(1, 0),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
+}
+
+GSResult GS_API_CALL gsPutCollectionV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSCollectionProperties *properties,
+		GSBool modifiable, GSCollection **collection) {
+	const GSContainerType containerType = GS_CONTAINER_COLLECTION;
+	static_cast<void>(properties);
+	return GSGridStore::putContainer(
+			store, name, true, binding, NULL, modifiable, collection,
+			&containerType, ClientVersion(4, 3),
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
@@ -17968,6 +19925,20 @@ GSResult GS_API_CALL gsPutTimeSeriesV2_0(
 	return GSGridStore::putContainer(
 			store, name, true, binding, &info, modifiable, timeSeries,
 			NULL, ClientVersion(2, 0),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
+}
+
+GSResult GS_API_CALL gsPutTimeSeriesV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSTimeSeriesProperties *properties,
+		GSBool modifiable, GSTimeSeries **timeSeries) {
+	GSContainerInfo info = GS_CONTAINER_INFO_INITIALIZER;
+	info.type = GS_CONTAINER_TIME_SERIES;
+	info.timeSeriesProperties = properties;
+
+	return GSGridStore::putContainer(
+			store, name, true, binding, &info, modifiable, timeSeries,
+			NULL, ClientVersion(4, 3),
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
@@ -18055,6 +20026,15 @@ GSResult GS_API_CALL gsPutContainerGeneralV3_3(
 			ClientVersion(3, 5), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
+GSResult GS_API_CALL gsPutContainerGeneralV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container) {
+	return GSGridStore::putContainer(
+			store, name, info, modifiable, container, NULL,
+			ClientVersion(4, 3), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
+}
+
 GSResult GS_API_CALL gsGetContainerGeneral(
 		GSGridStore *store, const GSChar *name, GSContainer **container) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(container, NULL);
@@ -18105,6 +20085,16 @@ GSResult GS_API_CALL gsPutCollectionGeneralV3_3(
 	return GSGridStore::putContainer(
 			store, name, info, modifiable, collection, &containerType,
 			ClientVersion(3, 5), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
+}
+
+GSResult GS_API_CALL gsPutCollectionGeneralV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSCollection **collection) {
+	const GSContainerType containerType = GS_CONTAINER_COLLECTION;
+	return GSGridStore::putContainer(
+			store, name, info, modifiable, collection, &containerType,
+			ClientVersion(4, 3), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
 GSResult GS_API_CALL gsGetCollectionGeneral(
@@ -18170,6 +20160,16 @@ GSResult GS_API_CALL gsPutTimeSeriesGeneralV3_3(
 			ClientVersion(3, 5), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
+GSResult GS_API_CALL gsPutTimeSeriesGeneralV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSTimeSeries **timeSeries) {
+	const GSContainerType containerType = GS_CONTAINER_TIME_SERIES;
+	return GSGridStore::putContainer(
+			store, name, info, modifiable, timeSeries, &containerType,
+			ClientVersion(4, 3), GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
+}
+
 GSResult GS_API_CALL gsGetTimeSeriesGeneral(
 		GSGridStore *store, const GSChar *name, GSTimeSeries **timeSeries) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(timeSeries, NULL);
@@ -18222,6 +20222,20 @@ GSResult GS_API_CALL gsCreateRowByStoreV3_3(
 		GSGridStore *store, const GSContainerInfo *info, GSRow **row) {
 	return GSGridStore::createRow(
 			store, info, row, ClientVersion(3, 5),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
+}
+
+GSResult GS_API_CALL gsCreateRowByStoreV4_3(
+		GSGridStore *store, const GSContainerInfo *info, GSRow **row) {
+	return GSGridStore::createRow(
+			store, info, row, ClientVersion(4, 3),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
+}
+
+GSResult GS_API_CALL gsCreateRowKeyByStore(
+		GSGridStore *store, const GSContainerInfo *info, GSRowKey **key) {
+	return GSGridStore::createRowKey(
+			store, info, key, ClientVersion(4, 3),
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
 }
 
@@ -18333,6 +20347,14 @@ GSResult GS_API_CALL gsCreateRowKeyPredicate(
 	return GS_RESULT_OK;
 }
 
+GSResult GS_API_CALL gsCreateRowKeyPredicateGeneral(
+		GSGridStore *store, const GSContainerInfo *info,
+		GSRowKeyPredicate **predicate) {
+	return GSGridStore::createRowKeyPredicateGeneral(
+			store, info, predicate, ClientVersion(4, 3),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(store));
+}
+
 
 void GS_API_CALL gsCloseContainer(
 		GSContainer **container, GSBool allRelated) {
@@ -18397,20 +20419,18 @@ GSResult GS_API_CALL gsCreateIndex(
 
 GSResult GS_API_CALL gsCreateIndexDetail(
 		GSContainer *container, const GSIndexInfo *info) {
-	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
-	GSResourceHeader::clearLastError(container);
-	GS_CLIENT_INTERCEPT_API_CALL(container, info);
+	const bool forCreation = true;
+	return GSContainer::createOrDropIndex<forCreation>(
+			container, info, ClientVersion(3, 5),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
+}
 
-	try {
-		GS_CLIENT_CHECK_NOT_NULL(container);
-		GS_CLIENT_CHECK_NOT_NULL(info);
-
-		container->createOrDropIndex(*info, true);
-	}
-	catch (...) {
-		return GSResourceHeader::setCurrentException(container);
-	}
-	return GS_RESULT_OK;
+GSResult GS_API_CALL gsCreateIndexDetailV4_3(
+		GSContainer *container, const GSIndexInfo *info) {
+	const bool forCreation = true;
+	return GSContainer::createOrDropIndex<forCreation>(
+			container, info, ClientVersion(4, 3),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsDropEventNotification(
@@ -18470,20 +20490,18 @@ GSResult GS_API_CALL gsDropIndex(
 
 GSResult GS_API_CALL gsDropIndexDetail(
 		GSContainer *container, const GSIndexInfo *info) {
-	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
-	GSResourceHeader::clearLastError(container);
-	GS_CLIENT_INTERCEPT_API_CALL(container, info);
+	const bool forCreation = false;
+	return GSContainer::createOrDropIndex<forCreation>(
+			container, info, ClientVersion(3, 5),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
+}
 
-	try {
-		GS_CLIENT_CHECK_NOT_NULL(container);
-		GS_CLIENT_CHECK_NOT_NULL(info);
-
-		container->createOrDropIndex(*info, false);
-	}
-	catch (...) {
-		return GSResourceHeader::setCurrentException(container);
-	}
-	return GS_RESULT_OK;
+GSResult GS_API_CALL gsDropIndexDetailV4_3(
+		GSContainer *container, const GSIndexInfo *info) {
+	const bool forCreation = false;
+	return GSContainer::createOrDropIndex<forCreation>(
+			container, info, ClientVersion(4, 3),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
 GSResult GS_API_CALL gsFlush(GSContainer *container) {
@@ -18504,7 +20522,7 @@ GSResult GS_API_CALL gsFlush(GSContainer *container) {
 
 GSResult GS_API_CALL gsGetRow(
 		GSContainer *container, const void *key, void *rowObj, GSBool *exists) {
-	return GSContainer::getRowChecked<GSContainer::AnyKeyTraits>(
+	return GSContainer::getRowChecked<GSContainer::AnyKeyTraits, false>(
 			container, key, rowObj, GS_FALSE, exists,
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
@@ -18512,7 +20530,7 @@ GSResult GS_API_CALL gsGetRow(
 GSResult GS_API_CALL gsPutRow(
 		GSContainer *container, const void *key, const void *rowObj,
 		GSBool *exists) {
-	return GSContainer::putRowChecked<GSContainer::AnyKeyTraits>(
+	return GSContainer::putRowChecked<GSContainer::AnyKeyTraits, false>(
 			container, key, rowObj, exists,
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
@@ -18675,7 +20693,7 @@ GSResult GS_API_CALL gsCommit(GSContainer *container) {
 
 GSResult GS_API_CALL gsGetRowForUpdate(GSContainer *container,
 		const void *key, void *rowObj, GSBool *exists) {
-	return GSContainer::getRowChecked<GSContainer::AnyKeyTraits>(
+	return GSContainer::getRowChecked<GSContainer::AnyKeyTraits, false>(
 			container, key, rowObj, GS_TRUE, exists,
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
@@ -18702,7 +20720,7 @@ GSResult GS_API_CALL gsGetRowByInteger(
 		GSContainer *container, int32_t key, void *rowObj,
 		GSBool forUpdate, GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, false> Traits;
-	return GSContainer::getRowChecked<Traits>(
+	return GSContainer::getRowChecked<Traits, false>(
 			container, &key, rowObj, forUpdate, exists,
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
@@ -18711,7 +20729,7 @@ GSResult GS_API_CALL gsGetRowByLong(
 		GSContainer *container, int64_t key, void *rowObj,
 		GSBool forUpdate, GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, false> Traits;
-	return GSContainer::getRowChecked<Traits>(
+	return GSContainer::getRowChecked<Traits, false>(
 			container, &key, rowObj, forUpdate, exists,
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
@@ -18720,7 +20738,7 @@ GSResult GS_API_CALL gsGetRowByTimestamp(
 		GSContainer *container, GSTimestamp key, void *rowObj,
 		GSBool forUpdate, GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, false> Traits;
-	return GSContainer::getRowChecked<Traits>(
+	return GSContainer::getRowChecked<Traits, false>(
 			container, &key, rowObj, forUpdate, exists,
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
@@ -18729,7 +20747,7 @@ GSResult GS_API_CALL gsGetRowByString(
 		GSContainer *container, const GSChar *key, void *rowObj,
 		GSBool forUpdate, GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, false> Traits;
-	return GSContainer::getRowChecked<Traits>(
+	return GSContainer::getRowChecked<Traits, false>(
 			container, &key, rowObj, forUpdate, exists,
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
@@ -18738,7 +20756,7 @@ GSResult GS_API_CALL gsPutRowByInteger(
 		GSContainer *container, int32_t key, const void *rowObj,
 		GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_INTEGER, false> Traits;
-	return GSContainer::putRowChecked<Traits>(
+	return GSContainer::putRowChecked<Traits, false>(
 			container, &key, rowObj, exists,
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
@@ -18747,7 +20765,7 @@ GSResult GS_API_CALL gsPutRowByLong(
 		GSContainer *container, int64_t key, const void *rowObj,
 		GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_LONG, false> Traits;
-	return GSContainer::putRowChecked<Traits>(
+	return GSContainer::putRowChecked<Traits, false>(
 			container, &key, rowObj, exists,
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
@@ -18756,7 +20774,7 @@ GSResult GS_API_CALL gsPutRowByTimestamp(
 		GSContainer *container, GSTimestamp key, const void *rowObj,
 		GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_TIMESTAMP, false> Traits;
-	return GSContainer::putRowChecked<Traits>(
+	return GSContainer::putRowChecked<Traits, false>(
 			container, &key, rowObj, exists,
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
@@ -18765,7 +20783,7 @@ GSResult GS_API_CALL gsPutRowByString(
 		GSContainer *container, const GSChar *key, const void *rowObj,
 		GSBool *exists) {
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, false> Traits;
-	return GSContainer::putRowChecked<Traits>(
+	return GSContainer::putRowChecked<Traits, false>(
 			container, &key, rowObj, exists,
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
@@ -18823,6 +20841,29 @@ GSResult GS_API_CALL gsDeleteRowByString(
 	typedef RowMapper::TypeTraits<GS_TYPE_STRING, false> Traits;
 	return GSContainer::removeRowChecked<Traits>(
 			container, &key, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
+}
+
+GSResult GS_API_CALL gsGetRowGeneral(
+		GSContainer *container, GSRowKey *keyObj, GSRow *rowObj,
+		GSBool forUpdate, GSBool *exists) {
+	return GSContainer::getRowChecked<GSContainer::GeneralKeyTraits, true>(
+			container, keyObj, rowObj, forUpdate, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
+}
+
+GSResult GS_API_CALL gsPutRowGeneral(
+		GSContainer *container, GSRowKey *keyObj, GSRow *rowObj,
+		GSBool *exists) {
+	return GSContainer::putRowChecked<GSContainer::GeneralKeyTraits, true>(
+			container, keyObj, rowObj, exists,
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
+}
+
+GSResult GS_API_CALL gsDeleteRowGeneral(
+		GSContainer *container, GSRowKey *keyObj, GSBool *exists) {
+	return GSContainer::removeRowChecked<GSContainer::GeneralKeyTraits>(
+			container, keyObj, exists,
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(container));
 }
 
@@ -19114,6 +21155,13 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV3_3(
 		GSRow *row, GSContainerInfo *schemaInfo) {
 	return GSRow::getContainerSchema(
 			row, schemaInfo, ClientVersion(3, 5),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
+}
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV4_3(
+		GSRow *row, GSContainerInfo *schemaInfo) {
+	return GSRow::getContainerSchema(
+			row, schemaInfo, ClientVersion(4, 3),
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
@@ -19557,6 +21605,47 @@ GSResult GS_API_CALL gsGetRowFieldAsTimestampArray(
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(row));
 }
 
+GSResult GS_API_CALL gsCreateRowByRow(GSRow *row, GSRow **destRow) {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(destRow, NULL);
+	GSResourceHeader::clearLastError(row);
+	GS_CLIENT_INTERCEPT_API_CALL(row, destRow);
+
+	try {
+		GS_CLIENT_CHECK_NOT_NULL(row);
+		GS_CLIENT_CHECK_NOT_NULL(destRow);
+
+		const bool forKey = false;
+		*destRow = row->create(forKey);
+	}
+	catch (...) {
+		if (destRow != NULL) {
+			*destRow = NULL;
+		}
+		return GSResourceHeader::setCurrentException(row);
+	}
+	return GS_RESULT_OK;
+}
+
+GSResult GS_API_CALL gsCreateRowKeyByRow(GSRow *row, GSRowKey **key) {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(key, NULL);
+	GSResourceHeader::clearLastError(row);
+	GS_CLIENT_INTERCEPT_API_CALL(row, key);
+
+	try {
+		GS_CLIENT_CHECK_NOT_NULL(row);
+		GS_CLIENT_CHECK_NOT_NULL(key);
+
+		const bool forKey = false;
+		*key = row->create(forKey);
+	}
+	catch (...) {
+		if (key != NULL) {
+			*key = NULL;
+		}
+		return GSResourceHeader::setCurrentException(row);
+	}
+	return GS_RESULT_OK;
+}
 
 
 void GS_API_CALL gsCloseQuery(GSQuery **query) {
@@ -19854,6 +21943,34 @@ GSResult GS_API_CALL gsGetPredicateKeyType(
 	return GS_RESULT_OK;
 }
 
+GSResult GS_API_CALL gsGetPredicateKeySchema(
+		GSRowKeyPredicate *predicate, GSContainerInfo *info) {
+	return GSRowKeyPredicateTag::getKeySchema(
+			predicate, info, ClientVersion(4, 3),
+			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
+}
+
+GSResult GS_API_CALL gsGetPredicateStartGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey **keyObj) {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(keyObj, NULL);
+	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL(predicate, keyObj);
+
+	try {
+		GS_CLIENT_CHECK_NOT_NULL(predicate);
+		GS_CLIENT_CHECK_NOT_NULL(keyObj);
+
+		predicate->getRangeKey(*keyObj, GSRowKeyPredicate::RANGE_START);
+	}
+	catch (...) {
+		if (keyObj != NULL) {
+			*keyObj = NULL;
+		}
+		return GSResourceHeader::setCurrentException(predicate);
+	}
+	return GS_RESULT_OK;
+}
+
 GSResult GS_API_CALL gsGetPredicateStartKeyGeneral(
 		GSRowKeyPredicate *predicate, const GSValue **startKey) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(startKey, NULL);
@@ -19864,8 +21981,8 @@ GSResult GS_API_CALL gsGetPredicateStartKeyGeneral(
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
 		GS_CLIENT_CHECK_NOT_NULL(startKey);
 
-		predicate->getRangeKey<GSRowKeyPredicate::RANGE_START>(
-				*startKey, NULL);
+		predicate->getRangeKey(
+				*startKey, NULL, GSRowKeyPredicate::RANGE_START);
 	}
 	catch (...) {
 		if (startKey != NULL) {
@@ -19922,6 +22039,27 @@ GSResult GS_API_CALL gsGetPredicateStartKeyAsTimestamp(
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
+GSResult GS_API_CALL gsGetPredicateFinishGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey **keyObj) {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(keyObj, NULL);
+	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL(predicate, keyObj);
+
+	try {
+		GS_CLIENT_CHECK_NOT_NULL(predicate);
+		GS_CLIENT_CHECK_NOT_NULL(keyObj);
+
+		predicate->getRangeKey(*keyObj, GSRowKeyPredicate::RANGE_FINISH);
+	}
+	catch (...) {
+		if (keyObj != NULL) {
+			*keyObj = NULL;
+		}
+		return GSResourceHeader::setCurrentException(predicate);
+	}
+	return GS_RESULT_OK;
+}
+
 GSResult GS_API_CALL gsGetPredicateFinishKeyGeneral(
 		GSRowKeyPredicate *predicate, const GSValue **finishKey) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT(finishKey, NULL);
@@ -19932,8 +22070,8 @@ GSResult GS_API_CALL gsGetPredicateFinishKeyGeneral(
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
 		GS_CLIENT_CHECK_NOT_NULL(finishKey);
 
-		predicate->getRangeKey<GSRowKeyPredicate::RANGE_FINISH>(
-				*finishKey, NULL);
+		predicate->getRangeKey(
+				*finishKey, NULL, GSRowKeyPredicate::RANGE_FINISH);
 	}
 	catch (...) {
 		if (finishKey != NULL) {
@@ -19990,6 +22128,32 @@ GSResult GS_API_CALL gsGetPredicateFinishKeyAsTimestamp(
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
+GSResult GS_API_CALL gsGetPredicateDistinctGeneralKeys(
+		GSRowKeyPredicate *predicate, GSRowKey *const **keyObjList,
+		size_t *size) {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT2(keyObjList, NULL, size, 0);
+	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL(predicate, keyObjList, size);
+
+	try {
+		GS_CLIENT_CHECK_NOT_NULL(predicate);
+		GS_CLIENT_CHECK_NOT_NULL(keyObjList);
+		GS_CLIENT_CHECK_NOT_NULL(size);
+
+		predicate->getDistinctKeys(*keyObjList, *size);
+	}
+	catch (...) {
+		if (keyObjList != NULL) {
+			*keyObjList = NULL;
+		}
+		if (size != NULL) {
+			*size = 0;
+		}
+		return GSResourceHeader::setCurrentException(predicate);
+	}
+	return GS_RESULT_OK;
+}
+
 GSResult GS_API_CALL gsGetPredicateDistinctKeysGeneral(
 		GSRowKeyPredicate *predicate, const GSValue **keyList, size_t *size) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE_INIT2(keyList, NULL, size, 0);
@@ -20001,8 +22165,7 @@ GSResult GS_API_CALL gsGetPredicateDistinctKeysGeneral(
 		GS_CLIENT_CHECK_NOT_NULL(keyList);
 		GS_CLIENT_CHECK_NOT_NULL(size);
 
-		GSRowKeyPredicate::GeneralDistinctKeyReceiver receiver;
-		predicate->getDistinctKeys(*keyList, *size, NULL, receiver);
+		predicate->getDistinctKeys(*keyList, *size);
 	}
 	catch (...) {
 		if (keyList != NULL) {
@@ -20050,6 +22213,23 @@ GSResult GS_API_CALL gsGetPredicateDistinctKeysAsTimestamp(
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
+GSResult GS_API_CALL gsSetPredicateStartGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey *keyObj) {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
+	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL(predicate, keyObj);
+
+	try {
+		GS_CLIENT_CHECK_NOT_NULL(predicate);
+
+		predicate->setRangeKey(keyObj, GSRowKeyPredicate::RANGE_START);
+	}
+	catch (...) {
+		return GSResourceHeader::setCurrentException(predicate);
+	}
+	return GS_RESULT_OK;
+}
+
 GSResult GS_API_CALL gsSetPredicateStartKeyGeneral(
 		GSRowKeyPredicate *predicate, const GSValue *startKey, GSType keyType) {
 	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
@@ -20059,8 +22239,8 @@ GSResult GS_API_CALL gsSetPredicateStartKeyGeneral(
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
 
-		predicate->setRangeKey<GSRowKeyPredicate::RANGE_START>(
-				startKey, keyType);
+		predicate->setRangeKey(
+				startKey, keyType, GSRowKeyPredicate::RANGE_START);
 	}
 	catch (...) {
 		return GSResourceHeader::setCurrentException(predicate);
@@ -20105,6 +22285,23 @@ GSResult GS_API_CALL gsSetPredicateStartKeyByTimestamp(
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
 }
 
+GSResult GS_API_CALL gsSetPredicateFinishGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey *keyObj) {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
+	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL(predicate, keyObj);
+
+	try {
+		GS_CLIENT_CHECK_NOT_NULL(predicate);
+
+		predicate->setRangeKey(keyObj, GSRowKeyPredicate::RANGE_FINISH);
+	}
+	catch (...) {
+		return GSResourceHeader::setCurrentException(predicate);
+	}
+	return GS_RESULT_OK;
+}
+
 GSResult GS_API_CALL gsSetPredicateFinishKeyGeneral(
 		GSRowKeyPredicate *predicate, const GSValue *finishKey,
 		GSType keyType) {
@@ -20115,8 +22312,8 @@ GSResult GS_API_CALL gsSetPredicateFinishKeyGeneral(
 	try {
 		GS_CLIENT_CHECK_NOT_NULL(predicate);
 
-		predicate->setRangeKey<GSRowKeyPredicate::RANGE_FINISH>(
-				finishKey, keyType);
+		predicate->setRangeKey(
+				finishKey, keyType, GSRowKeyPredicate::RANGE_FINISH);
 	}
 	catch (...) {
 		return GSResourceHeader::setCurrentException(predicate);
@@ -20159,6 +22356,24 @@ GSResult GS_API_CALL gsSetPredicateFinishKeyByTimestamp(
 			Traits, GSRowKeyPredicate::RANGE_FINISH>(
 			predicate, finishKey,
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(predicate));
+}
+
+GSResult GS_API_CALL gsAddPredicateGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey *keyObj) {
+	GS_CLIENT_CHECK_FACTORY_AND_RETURN_CODE();
+	GSResourceHeader::clearLastError(predicate);
+	GS_CLIENT_INTERCEPT_API_CALL(predicate, keyObj);
+
+	try {
+		GS_CLIENT_CHECK_NOT_NULL(predicate);
+		GS_CLIENT_CHECK_NOT_NULL(keyObj);
+
+		predicate->addDistinctKey(*keyObj);
+	}
+	catch (...) {
+		return GSResourceHeader::setCurrentException(predicate);
+	}
+	return GS_RESULT_OK;
 }
 
 GSResult GS_API_CALL gsAddPredicateKeyGeneral(
@@ -20410,27 +22625,122 @@ GSResult GS_API_CALL gsGetPartitionIndexOfContainer(
 
 GSTimestamp GS_API_CALL gsCurrentTime() {
 	try {
-		return TimestampUtil::current();
+		return TimestampUtils::current();
 	}
 	catch (...) {
 	}
 	return -1;
+}
+
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetTimeField(
+		GSTimestamp timestamp, GSTimeUnit timeUnit) {
+	try {
+		return TimestampUtils::getField(timestamp, timeUnit, NULL);
+	}
+	catch (...) {
+	}
+	return -1;
+}
+
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetZonedTimeField(
+		GSTimestamp timestamp, GSTimeUnit timeUnit, const GSTimeZone *zone) {
+	try {
+		return TimestampUtils::getField(timestamp, timeUnit, zone);
+	}
+	catch (...) {
+	}
+	return -1;
+}
+
+GS_DLL_PUBLIC GSBool GS_API_CALL gsSetTimeField(
+		GSTimestamp *timestamp, int64_t field, GSTimeUnit timeUnit) {
+	try {
+		if (timestamp != NULL) {
+			TimestampUtils::setField(*timestamp, field, timeUnit, NULL);
+			return GS_TRUE;
+		}
+	}
+	catch (...) {
+	}
+	if (timestamp != NULL) {
+		*timestamp = -1;
+	}
+	return GS_FALSE;
+}
+
+GS_DLL_PUBLIC GSBool GS_API_CALL gsSetZonedTimeField(
+		GSTimestamp *timestamp, int64_t field, GSTimeUnit timeUnit,
+		const GSTimeZone *zone) {
+	try {
+		if (timestamp != NULL) {
+			TimestampUtils::setField(*timestamp, field, timeUnit, zone);
+			return GS_TRUE;
+		}
+	}
+	catch (...) {
+	}
+	if (timestamp != NULL) {
+		*timestamp = -1;
+	}
+	return GS_FALSE;
 }
 
 GSTimestamp GS_API_CALL gsAddTime(
 		GSTimestamp timestamp, int32_t amount, GSTimeUnit timeUnit) {
 	try {
-		return TimestampUtil::add(timestamp, amount, timeUnit);
+		return TimestampUtils::add(timestamp, amount, timeUnit, NULL);
 	}
 	catch (...) {
 	}
 	return -1;
 }
 
+GSTimestamp GS_API_CALL gsAddTimeV4_3(
+		GSTimestamp timestamp, int64_t amount, GSTimeUnit timeUnit) {
+	try {
+		return TimestampUtils::add(timestamp, amount, timeUnit, NULL);
+	}
+	catch (...) {
+	}
+	return -1;
+}
+
+GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddZonedTime(
+		GSTimestamp timestamp, int64_t amount, GSTimeUnit timeUnit,
+		const GSTimeZone *zone) {
+	try {
+		return TimestampUtils::add(timestamp, amount, timeUnit, zone);
+	}
+	catch (...) {
+	}
+	return -1;
+}
+
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetTimeDiff(
+		GSTimestamp timestamp1, GSTimestamp timestamp2, GSTimeUnit timeUnit) {
+	try {
+		return TimestampUtils::diff(timestamp1, timestamp2, timeUnit, NULL);
+	}
+	catch (...) {
+	}
+	return std::numeric_limits<int64_t>::min();
+}
+
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetZonedTimeDiff(
+		GSTimestamp timestamp1, GSTimestamp timestamp2, GSTimeUnit timeUnit,
+		const GSTimeZone *zone) {
+	try {
+		return TimestampUtils::diff(timestamp1, timestamp2, timeUnit, zone);
+	}
+	catch (...) {
+	}
+	return std::numeric_limits<int64_t>::min();
+}
+
 size_t GS_API_CALL gsFormatTime(
 		GSTimestamp timestamp, GSChar *strBuf, size_t bufSize) {
 	try {
-		return TimestampUtil::format(timestamp, strBuf, bufSize);
+		return TimestampUtils::format(timestamp, strBuf, bufSize, NULL);
 	}
 	catch (...) {
 	}
@@ -20438,11 +22748,24 @@ size_t GS_API_CALL gsFormatTime(
 	return ClientUtil::copyString("", 1, strBuf, bufSize);
 }
 
-GSBool GS_API_CALL gsParseTime(
-		const GSChar *str, GSTimestamp *timestamp) {
+GS_DLL_PUBLIC size_t GS_API_CALL gsFormatZonedTime(
+		GSTimestamp timestamp, GSChar *strBuf, size_t bufSize,
+		const GSTimeZone *zone) {
+	try {
+		return TimestampUtils::format(timestamp, strBuf, bufSize, zone);
+	}
+	catch (...) {
+	}
+
+	return ClientUtil::copyString("", 1, strBuf, bufSize);
+}
+
+GSBool GS_API_CALL gsParseTime(const GSChar *str, GSTimestamp *timestamp) {
 	try {
 		if (str != NULL && timestamp != NULL) {
-			return TimestampUtil::parse(str, *timestamp);
+			if (TimestampUtils::parse(str, *timestamp)) {
+				return GS_TRUE;
+			}
 		}
 	}
 	catch (...) {
@@ -20450,6 +22773,67 @@ GSBool GS_API_CALL gsParseTime(
 
 	if (timestamp != NULL) {
 		*timestamp = -1;
+	}
+	return GS_FALSE;
+}
+
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetTimeZoneOffset(
+		const GSTimeZone *zone, GSTimeUnit timeUnit) {
+	try {
+		if (zone != NULL) {
+			return TimestampUtils::getZoneOffset(*zone, timeUnit);
+		}
+	}
+	catch (...) {
+	}
+	return std::numeric_limits<int64_t>::min();
+}
+
+GS_DLL_PUBLIC GSBool GS_API_CALL gsSetTimeZoneOffset(
+		GSTimeZone *zone, int64_t offset, GSTimeUnit timeUnit) {
+	try {
+		if (zone != NULL) {
+			TimestampUtils::setZoneOffset(*zone, offset, timeUnit);
+		}
+	}
+	catch (...) {
+	}
+
+	if (zone != NULL) {
+		const GSTimeZone initialZone = GS_TIME_ZONE_INITIALIZER;
+		*zone = initialZone;
+	}
+	return GS_FALSE;
+}
+
+GS_DLL_PUBLIC size_t gsFormatTimeZone(
+		const GSTimeZone *zone, GSChar *strBuf, size_t bufSize) {
+	try {
+		if (zone != NULL) {
+			return TimestampUtils::formatZone(*zone, strBuf, bufSize);
+		}
+	}
+	catch (...) {
+	}
+
+	return ClientUtil::copyString("", 1, strBuf, bufSize);
+}
+
+GS_DLL_PUBLIC GSBool GS_API_CALL gsParseTimeZone(
+		const GSChar *str, GSTimeZone *zone) {
+	try {
+		if (str != NULL && zone != NULL) {
+			if (TimestampUtils::parseZone(str, *zone)) {
+				return GS_TRUE;
+			}
+		}
+	}
+	catch (...) {
+	}
+
+	if (zone != NULL) {
+		const GSTimeZone initialZone = GS_TIME_ZONE_INITIALIZER;
+		*zone = initialZone;
 	}
 	return GS_FALSE;
 }
@@ -20661,41 +23045,9 @@ GSResult GS_API_CALL gsExperimentalGetRowIdForUpdate(
 		GS_CLIENT_CHECK_NOT_NULL(rowSet);
 		GS_CLIENT_CHECK_NOT_NULL(rowId);
 
-		GSContainer *container = rowSet->getContainer();
-
-		rowId->internal.container = container;
+		rowId->internal.container = rowSet->getContainer();
 		rowId->internal.transactionId = rowSet->getTransactionId();
-		if (rowId->internal.transactionId == 0) {
-			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_NOT_LOCKED, "");
-		}
-
-		switch (container->getMapper().getCategory()) {
-		case RowMapper::CATEGORY_COLLECTION:
-			rowId->internal.baseId = rowSet->getRowId();
-			break;
-		case RowMapper::CATEGORY_TIME_SERIES:
-			{
-				const GSBinding &binding =
-						container->getMapper().getBinding();
-				const GSBindingEntry *bindingEntry = NULL;
-				for (size_t i = 0; binding.entryCount; i++) {
-					if ((binding.entries[i].options &
-							GS_TYPE_OPTION_KEY) != 0) {
-						bindingEntry = &binding.entries[i];
-						break;
-					}
-				}
-				if (bindingEntry == NULL ||
-						bindingEntry->elementType != GS_TYPE_TIMESTAMP) {
-					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
-				}
-			}
-			rowId->internal.baseId = *static_cast<const GSTimestamp*>(
-					rowSet->getRowKey());
-			break;
-		default:
-			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
-		}
+		rowId->internal.baseId = rowSet->getRowIdForUpdate();
 	}
 	catch (...) {
 		if (rowId != NULL) {
@@ -20729,12 +23081,12 @@ GSResult GS_API_CALL gsExperimentalUpdateRowById(
 		case RowMapper::CATEGORY_COLLECTION:
 			container->updateRow(
 					container->getMapper(), rowId->internal.transactionId,
-					NULL, rowId->internal.baseId, NULL, rowObj);
+					NULL, true, rowId->internal.baseId, false, NULL, rowObj);
 			break;
 		case RowMapper::CATEGORY_TIME_SERIES:
 			container->updateRow(
 					container->getMapper(), rowId->internal.transactionId,
-					NULL, 0,
+					NULL, true, 0, false,
 					&static_cast<const GSTimestamp&>(rowId->internal.baseId),
 					rowObj);
 			break;
@@ -20766,12 +23118,12 @@ GSResult GS_API_CALL gsExperimentalDeleteRowById(
 		case RowMapper::CATEGORY_COLLECTION:
 			container->removeRow(
 					container->getMapper(), rowId->internal.transactionId,
-					NULL, rowId->internal.baseId, NULL);
+					NULL, true, rowId->internal.baseId, false, NULL);
 			break;
 		case RowMapper::CATEGORY_TIME_SERIES:
 			container->removeRow(
 					container->getMapper(), rowId->internal.transactionId,
-					NULL, 0,
+					NULL, true, 0, false,
 					&static_cast<const GSTimestamp&>(rowId->internal.baseId));
 			break;
 		default:
@@ -20790,47 +23142,88 @@ GSResult GS_API_CALL gsExperimentalDeleteRowById(
 } 
 
 
-GSResult GS_API_CALL gsGetContainerInfoV3_3(
+GSResult GS_API_CALL gsGetCollectionV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSCollection **collection) {
+	return -1;
+}
+
+GSResult GS_API_CALL gsGetContainerInfoV4_3(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists) {
 	return -1;
 }
 
-GSResult GS_API_CALL gsPutTimeSeriesV2_0(
+GSResult GS_API_CALL gsGetTimeSeriesV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSTimeSeries **timeSeries) {
+	return -1;
+}
+
+GSResult GS_API_CALL gsPutContainerV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container) {
+	return -1;
+}
+
+GSResult GS_API_CALL gsPutCollectionV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSCollectionProperties *properties,
+		GSBool modifiable, GSCollection **collection) {
+	return -1;
+}
+
+GSResult GS_API_CALL gsPutTimeSeriesV4_3(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, const GSTimeSeriesProperties *properties,
 		GSBool modifiable, GSTimeSeries **timeSeries) {
 	return -1;
 }
 
-GSResult GS_API_CALL gsPutContainerGeneralV3_3(
+GSResult GS_API_CALL gsPutContainerGeneralV4_3(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container) {
 	return -1;
 }
 
-GSResult GS_API_CALL gsPutCollectionGeneralV3_3(
+GSResult GS_API_CALL gsPutCollectionGeneralV4_3(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container) {
 	return -1;
 }
 
-GSResult GS_API_CALL gsPutTimeSeriesGeneralV3_3(
+GSResult GS_API_CALL gsPutTimeSeriesGeneralV4_3(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSTimeSeries **timeSeries) {
 	return -1;
 }
 
-GSResult GS_API_CALL gsCreateRowByStoreV3_3(
+GSResult GS_API_CALL gsCreateRowByStoreV4_3(
 		GSGridStore *store, const GSContainerInfo *info, GSRow **row) {
 	return -1;
 }
 
-GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV3_3(
+GSResult GS_API_CALL gsCreateIndexDetailV4_3(
+		GSContainer *container, const GSIndexInfo *info) {
+	return -1;
+}
+
+GSResult GS_API_CALL gsDropIndexDetailV4_3(
+		GSContainer *container, const GSIndexInfo *info) {
+	return -1;
+}
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV4_3(
 		GSRow *row, GSContainerInfo *schemaInfo) {
+	return -1;
+}
+
+GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddTimeV4_3(
+		GSTimestamp timestamp, int64_t amount, GSTimeUnit timeUnit) {
 	return -1;
 }
 

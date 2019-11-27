@@ -221,3 +221,43 @@ EXPORTS
 	gsGetErrorParameterCount @219
 	gsFormatErrorParameterName @220
 	gsFormatErrorParameterValue @221
+	gsGetCollectionV4_3 @222
+	gsGetContainerInfoV4_3 @223
+	gsGetTimeSeriesV4_3 @224
+	gsPutContainerV4_3 @225
+	gsPutCollectionV4_3 @226
+	gsPutTimeSeriesV4_3 @227
+	gsPutContainerGeneralV4_3 @228
+	gsPutCollectionGeneralV4_3 @229
+	gsPutTimeSeriesGeneralV4_3 @230
+	gsCreateRowByStoreV4_3 @231
+	gsCreateRowKeyByStore @232
+	gsCreateRowKeyPredicateGeneral @233
+	gsCreateIndexDetailV4_3 @234
+	gsDropIndexDetailV4_3 @235
+	gsGetRowGeneral @236
+	gsPutRowGeneral @237
+	gsDeleteRowGeneral @238
+	gsGetRowSchemaV4_3 @239
+	gsCreateRowByRow @240
+	gsCreateRowKeyByRow @241
+	gsGetPredicateKeySchema @242
+	gsGetPredicateStartGeneralKey @243
+	gsGetPredicateFinishGeneralKey @244
+	gsGetPredicateDistinctGeneralKeys @245
+	gsSetPredicateStartGeneralKey @246
+	gsSetPredicateFinishGeneralKey @247
+	gsAddPredicateGeneralKey @248
+	gsGetTimeField @249
+	gsGetZonedTimeField @250
+	gsSetTimeField @251
+	gsSetZonedTimeField @252
+	gsAddTimeV4_3 @253
+	gsAddZonedTime @254
+	gsGetTimeDiff @255
+	gsGetZonedTimeDiff @256
+	gsFormatZonedTime @257
+	gsGetTimeZoneOffset @258
+	gsSetTimeZoneOffset @259
+	gsFormatTimeZone @260
+	gsParseTimeZone @261
