@@ -201,7 +201,7 @@ void main(int argc, char *argv[]){
 			// (3)集計演算の結果を取得する
 			ret = gsGetNextAggregation(rs, &aggregationResult);
 			if ( !GS_SUCCEEDED(ret) ){
-				fprintf(stderr, "ERROR gsGetNextRow\n");
+				fprintf(stderr, "ERROR gsGetNextAggregation\n");
 				goto LABEL_ERROR;
 			}
 

@@ -12,7 +12,7 @@ void main(int argc, char *argv[]){
 
 	// 登録するロウデータ(各コンテナに5つのロウ)
 	const size_t rowCount = 5;
-	const GSChar * nameList[5] = { "notebook PC", "desktop PC", "keybord", "mouse", "printer" };
+	const GSChar * nameList[5] = { "notebook PC", "desktop PC", "keyboard", "mouse", "printer" };
 	const int numberList[2][5] = { { 108, 72, 25, 45, 62 }, { 50, 11, 208, 23, 153 } };
 
 	/* 変数 */
@@ -108,7 +108,7 @@ void main(int argc, char *argv[]){
 		// コレクションを作成する
 		ret = gsPutContainerGeneral(store, containerNameList[i], &info0, GS_FALSE, &container);
 		if ( !GS_SUCCEEDED(ret) ){
-			fprintf(stderr, "ERROR gsPutCollectionGeneral\n");
+			fprintf(stderr, "ERROR gsPutContainerGeneral\n");
 			goto LABEL_ERROR;
 		}
 		printf("Create Collection name=%s\n", containerNameList[i]);

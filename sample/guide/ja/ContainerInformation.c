@@ -5,10 +5,6 @@
 
 void main(int argc, char *argv[]){
 
-	/* 定数 */
-	// コンテナ名
-	const GSChar * containerName = "SampleC_GetRow";
-
 	/* 変数 */
 	GSGridStore *store;
 	GSContainer *container;
