@@ -23,7 +23,7 @@
 
 #ifndef GS_CLIENT_VERSION_MINOR
 
-#define GS_CLIENT_VERSION_MINOR 2
+#define GS_CLIENT_VERSION_MINOR 3
 #endif
 
 
@@ -119,7 +119,7 @@ extern "C" {
 #define GS_COMPATIBILITY_DEPRECATE_FETCH_OPTION_SIZE 1
 #endif
 
-#endif	
+#endif 
 
 #if !defined(GS_COMPATIBILITY_SUPPORT_1_5) && \
 	(GS_CLIENT_VERSION_MAJOR > 1 || \
@@ -177,7 +177,15 @@ extern "C" {
 #define GS_COMPATIBILITY_SUPPORT_4_2 0
 #endif
 
-#endif	
+#if !defined(GS_COMPATIBILITY_SUPPORT_4_3) && \
+	(GS_CLIENT_VERSION_MAJOR > 4 || \
+	(GS_CLIENT_VERSION_MAJOR == 4 && GS_CLIENT_VERSION_MINOR >= 3))
+#define GS_COMPATIBILITY_SUPPORT_4_3 1
+#else
+#define GS_COMPATIBILITY_SUPPORT_4_3 0
+#endif
+
+#endif 
 
 
 typedef char GSChar;
@@ -236,6 +244,13 @@ typedef GSContainer GSTimeSeries;
 
 typedef struct GSRowTag GSRow;
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+typedef GSRow GSRowKey;
+
+#endif 
+
 
 
 typedef struct GSRowKeyPredicateTag GSRowKeyPredicate;
@@ -244,7 +259,7 @@ typedef struct GSRowKeyPredicateTag GSRowKeyPredicate;
 
 typedef struct GSPartitionControllerTag GSPartitionController;
 
-#endif	
+#endif 
 
 
 typedef int32_t GSResult;
@@ -295,9 +310,9 @@ enum GSFetchOptionTag {
 #if GS_COMPATIBILITY_SUPPORT_4_0
 	
 	GS_FETCH_PARTIAL_EXECUTION = (GS_FETCH_LIMIT + 2)
-#endif	
+#endif 
 
-#endif	
+#endif 
 };
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
@@ -580,9 +595,9 @@ enum GSTypeOptionTag {
 	
 	GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL = 1 << 4
 
-#endif	
+#endif 
 
-#endif	
+#endif 
 
 };
 
@@ -686,7 +701,7 @@ typedef struct GSTimeSeriesPropertiesTag {
 	
 	int32_t expirationDivisionCount;
 
-#endif	
+#endif 
 
 } GSTimeSeriesProperties;
 
@@ -722,9 +737,9 @@ typedef struct GSColumnInfoTag {
 
 	
 	GSTypeOption options;
-#endif	
+#endif 
 
-#endif	
+#endif 
 
 } GSColumnInfo;
 
@@ -744,7 +759,7 @@ typedef struct GSColumnInfoTag {
 #define GS_COLUMN_INFO_INITIALIZER \
 	{ NULL, GS_TYPE_STRING }
 
-#endif	
+#endif 
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 
@@ -815,7 +830,7 @@ typedef struct GSTriggerInfoTag {
 	0, NULL, \
 	NULL, NULL, NULL, NULL }
 
-#endif	
+#endif 
 
 #if GS_COMPATIBILITY_SUPPORT_3_5
 
@@ -834,12 +849,38 @@ typedef struct GSIndexInfoTag {
 	
 	const GSChar *columnName;
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+	
+	size_t columnCount;
+
+	
+	const int32_t *columnList;
+
+	
+	size_t columnNameCount;
+
+	
+	const GSChar *const *columnNameList;
+
+#endif 
+
 } GSIndexInfo;
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+#define GS_INDEX_INFO_INITIALIZER \
+	{ NULL, GS_INDEX_FLAG_DEFAULT, -1, NULL, 0, NULL, 0, NULL }
+
+#else
 
 #define GS_INDEX_INFO_INITIALIZER \
 	{ NULL, GS_INDEX_FLAG_DEFAULT, -1, NULL }
 
-#endif	
+#endif 
+
+#endif 
 
 
 typedef struct GSContainerInfoTag {
@@ -885,16 +926,32 @@ typedef struct GSContainerInfoTag {
 	
 	const GSIndexInfo *indexInfoList;
 
-#endif	
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
-#endif	
+	
+	size_t rowKeyColumnCount;
 
-#endif	
+	
+	const int32_t *rowKeyColumnList;
+
+#endif 
+
+#endif 
+
+#endif 
+
+#endif 
 
 } GSContainerInfo;
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
+
+#define GS_CONTAINER_INFO_INITIALIZER \
+	{ NULL, GS_CONTAINER_COLLECTION, 0, NULL, GS_FALSE, \
+	GS_FALSE, NULL, 0, NULL, NULL, 0, NULL, 0, NULL }
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
 
 #define GS_CONTAINER_INFO_INITIALIZER \
 	{ NULL, GS_CONTAINER_COLLECTION, 0, NULL, GS_FALSE, \
@@ -917,15 +974,21 @@ typedef struct GSContainerInfoTag {
 #define GS_CONTAINER_INFO_INITIALIZER \
 	{ NULL, GS_CONTAINER_COLLECTION, 0, NULL, GS_FALSE }
 
-#endif	
+#endif 
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
+struct GSBindingTag;
+typedef const struct GSBindingTag* (*GSBindingGetterFunc)();
 typedef struct GSBindingEntryTag {
 	const GSChar *columnName;
 	GSType elementType;
 	size_t offset;
 	size_t arraySizeOffset;
 	GSTypeOption options;		
+#if GS_COMPATIBILITY_SUPPORT_4_3
+	const struct GSBindingTag *keyBinding;
+	GSBindingGetterFunc keyBindingGetter;
+#endif
 } GSBindingEntry;
 #endif
 
@@ -1137,10 +1200,37 @@ typedef union GSValueTag {
 
 } GSValue;
 
-#endif	
+#endif 
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+typedef struct GSTimeZoneTag {
+#if GS_INTERNAL_DEFINITION_VISIBLE
+	struct {
+		int64_t offsetMillis;
+	} internalData;
+#endif 
+} GSTimeZone;
+
+
+#define GS_TIME_ZONE_INITIALIZER \
+	{ { 0 } }
+
+
+#define GS_TIMESTAMP_DEFAULT 0
+
+#endif 
 
 
 #define GS_TIME_STRING_SIZE_MAX 32
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+#define GS_TIME_ZONE_STRING_SIZE_MAX 8
+
+#endif 
 
 
 
@@ -1174,7 +1264,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 #define gsGetGridStore(factory, properties, propertyCount, store) \
 		gsGetGridStore(factory, properties, propertyCount, store)
 #endif
-#endif	
+#endif 
 
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsSetFactoryProperties(
@@ -1195,7 +1285,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 #define gsSetFactoryProperties(factory, properties, propertyCount) \
 		gsSetFactoryProperties(factory, properties, propertyCount)
 #endif
-#endif	
+#endif 
 
 
 
@@ -1219,19 +1309,49 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL gsGetRowByPath(
 		GSBool *exists));
 #endif
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetCollectionV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSCollection **collection);
+#endif
+
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetCollection(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSCollection **collection) {
+	return gsGetCollectionV4_3(store, name, binding, collection);
+}
+
+#else
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetCollection(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, GSCollection **collection);
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#endif 
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV3_3(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV4_3(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists);
 #endif
 
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetContainerInfo(
+		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
+		GSBool *exists) {
+	return gsGetContainerInfoV4_3(store, name, info, exists);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV3_3(
+		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
+		GSBool *exists);
 
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetContainerInfo(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
@@ -1269,12 +1389,30 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfo(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists);
 
-#endif	
+#endif 
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetTimeSeriesV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSTimeSeries **timeSeries);
+#endif
+
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetTimeSeries(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSTimeSeries **timeSeries) {
+	return gsGetTimeSeriesV4_3(store, name, binding, timeSeries);
+}
+
+#else
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetTimeSeries(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, GSTimeSeries **timeSeries);
+
+#endif 
 
 #if GS_DEPRECATED_FUNC_ENABLED
 GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL gsPutRowByPath(
@@ -1282,29 +1420,83 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL gsPutRowByPath(
 		GSBool *exists));
 #endif
 
-#if GS_COMPATIBILITY_SUPPORT_2_1
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container);
+#endif
+
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutContainer(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container) {
+	return gsPutContainerV4_3(
+			store, name, binding, info, modifiable, container);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_2_1
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainer(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container);
-#endif	
 
+#endif 
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSCollectionProperties *properties,
+		GSBool modifiable, GSCollection **collection);
+#endif
+
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutCollection(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSCollectionProperties *properties,
+		GSBool modifiable, GSCollection **collection) {
+	return gsPutCollectionV4_3(store, name, binding, properties, modifiable, collection);
+}
+
+#else
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollection(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, const GSCollectionProperties *properties,
 		GSBool modifiable, GSCollection **collection);
 
-#if GS_COMPATIBILITY_SUPPORT_2_0
+#endif 
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesV2_0(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesV4_3(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, const GSTimeSeriesProperties *properties,
 		GSBool modifiable, GSTimeSeries **timeSeries);
 #endif
 
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutTimeSeries(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSTimeSeriesProperties *properties,
+		GSBool modifiable, GSTimeSeries **timeSeries) {
+	return gsPutTimeSeriesV4_3(
+			store, name, binding, properties, modifiable, timeSeries);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_2_0
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesV2_0(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSTimeSeriesProperties *properties,
+		GSBool modifiable, GSTimeSeries **timeSeries);
 
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutTimeSeries(
 		GSGridStore *store, const GSChar *name,
@@ -1352,15 +1544,30 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV3_3(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV4_3(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container);
 #endif
 
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutContainerGeneral(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container) {
+	return gsPutContainerGeneralV4_3(
+			store, name, info, modifiable, container);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV3_3(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container);
 
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutContainerGeneral(
 		GSGridStore *store, const GSChar *name,
@@ -1413,15 +1620,30 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneral(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerGeneral(
 		GSGridStore *store, const GSChar *name, GSContainer **container);
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV3_3(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV4_3(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container);
 #endif
 
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutCollectionGeneral(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSCollection **collection) {
+	return gsPutCollectionGeneralV4_3(
+			store, name, info, modifiable, collection);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV3_3(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container);
 
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutCollectionGeneral(
 		GSGridStore *store, const GSChar *name,
@@ -1453,21 +1675,36 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneral(
 		const GSContainerInfo *info,
 		GSBool modifiable, GSCollection **collection);
 
-#endif	
+#endif 
 
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetCollectionGeneral(
 		GSGridStore *store, const GSChar *name, GSCollection **collection);
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV3_3(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV4_3(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSTimeSeries **timeSeries);
 #endif
 
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutTimeSeriesGeneral(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSTimeSeries **timeSeries) {
+	return gsPutTimeSeriesGeneralV4_3(
+			store, name, info, modifiable, timeSeries);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV3_3(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSTimeSeries **timeSeries);
 
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutTimeSeriesGeneral(
 		GSGridStore *store, const GSChar *name,
@@ -1524,13 +1761,23 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetTimeSeriesGeneral(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsDropContainer(
 		GSGridStore *store, const GSChar *name);
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStoreV3_3(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStoreV4_3(
 		GSGridStore *store, const GSContainerInfo *info, GSRow **row);
 #endif
 
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsCreateRowByStore(
+		GSGridStore *store, const GSContainerInfo *info, GSRow **row) {
+	return gsCreateRowByStoreV4_3(store, info, row);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStoreV3_3(
+		GSGridStore *store, const GSContainerInfo *info, GSRow **row);
 
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsCreateRowByStore(
 		GSGridStore *store, const GSContainerInfo *info, GSRow **row) {
@@ -1542,7 +1789,15 @@ GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsCreateRowByStore(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStore(
 		GSGridStore *store, const GSContainerInfo *info, GSRow **row);
 
-#endif
+#endif 
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowKeyByStore(
+		GSGridStore *store, const GSContainerInfo *info, GSRowKey **key);
+
+#endif 
 
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsFetchAll(
@@ -1580,7 +1835,16 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionController(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowKeyPredicate(
 		GSGridStore *store, GSType keyType, GSRowKeyPredicate **predicate);
 
-#endif	
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowKeyPredicateGeneral(
+		GSGridStore *store, const GSContainerInfo *info,
+		GSRowKeyPredicate **predicate);
+
+#endif 
+
+#endif 
 
 
 
@@ -1596,27 +1860,39 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 	GSResult GS_API_CALL gsCreateEventNotification(
 	GSContainer *container, const GSChar *url));
 
-#endif	
+#endif 
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateTrigger(
 		GSContainer *container, const GSTriggerInfo *info);
 
-#endif	
+#endif 
 
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndex(
 		GSContainer *container,
 		const GSChar *columnName, GSIndexTypeFlags flags);
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndexDetailV4_3(
+		GSContainer *container, const GSIndexInfo *info);
+#endif
+
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsCreateIndexDetail(
+		GSContainer *container, const GSIndexInfo *info) {
+	return gsCreateIndexDetailV4_3(container, info);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndexDetail(
 		GSContainer *container, const GSIndexInfo *info);
 
-#endif	
+#endif 
 
 #if GS_DEPRECATED_FUNC_ENABLED
 
@@ -1624,27 +1900,39 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 	GSResult GS_API_CALL gsDropEventNotification(
 	GSContainer *container, const GSChar *url));
 
-#endif	
+#endif 
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsDropTrigger(
 		GSContainer *container, const GSChar *name);
 
-#endif	
+#endif 
 
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsDropIndex(
 		GSContainer *container,
 		const GSChar *columnName, GSIndexTypeFlags flags);
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSResult GS_API_CALL gsDropIndexDetailV4_3(
+		GSContainer *container, const GSIndexInfo *info);
+#endif
+
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsDropIndexDetail(
+		GSContainer *container, const GSIndexInfo *info) {
+	return gsDropIndexDetailV4_3(container, info);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsDropIndexDetail(
 		GSContainer *container, const GSIndexInfo *info);
 
-#endif	
+#endif 
 
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsFlush(GSContainer *container);
@@ -1678,7 +1966,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 #define gsPutMultipleRows(container, rowObjs, rowCount, exists) \
 		gsPutMultipleRows(container, rowObjs, rowCount, exists)
 #endif
-#endif	
+#endif 
 
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsQuery(GSContainer *container,
@@ -1704,7 +1992,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerType(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByContainer(
 		GSContainer *container, GSRow **row);
 
-#endif	
+#endif 
 
 
 
@@ -1800,6 +2088,24 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByTimestamp(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByString(
 		GSContainer *container, const GSChar *key, GSBool *exists);
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowGeneral(
+		GSContainer *container, GSRowKey *keyObj, GSRow *rowObj,
+		GSBool forUpdate, GSBool *exists);
+
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRowGeneral(
+		GSContainer *container, GSRowKey *keyObj, GSRow *rowObj,
+		GSBool *exists);
+
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowGeneral(
+		GSContainer *container, GSRowKey *keyObj, GSBool *exists);
+
+#endif 
+
 
 
 
@@ -1888,7 +2194,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL
 				timeSeries, start, end, columnSet, columnCount, \
 				mode, interval, intervalUnit, query)
 #endif
-#endif	
+#endif 
 
 
 
@@ -1899,14 +2205,24 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL
 
 GS_DLL_PUBLIC void GS_API_CALL gsCloseRow(GSRow **row);
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV3_3(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV4_3(
 		GSRow *row, GSContainerInfo *schemaInfo);
 #endif
 
 
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetRowSchema(
+		GSRow *row, GSContainerInfo *schemaInfo) {
+	return gsGetRowSchemaV4_3(row, schemaInfo);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV3_3(
+		GSRow *row, GSContainerInfo *schemaInfo);
 
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetRowSchema(
 		GSRow *row, GSContainerInfo *schemaInfo) {
@@ -1928,7 +2244,7 @@ GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetRowSchema(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchema(
 		GSRow *row, GSContainerInfo *schemaInfo);
 
-#endif	
+#endif 
 
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldGeneral(
@@ -1949,7 +2265,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldNull(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldNull(
 		GSRow *row, int32_t column, GSBool *nullValue);
 
-#endif	
+#endif 
 
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByString(
@@ -2129,7 +2445,19 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldAsTimestampArray(
 		GSRow *row, int32_t column, const GSTimestamp **fieldValue,
 		size_t *size);
 
-#endif	
+#endif 
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByRow(
+		GSRow *row, GSRow **destRow);
+
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowKeyByRow(
+		GSRow *row, GSRowKey **key);
+
+#endif 
 
 
 
@@ -2153,7 +2481,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetFetchOption(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSet(
 		GSQuery *query, GSRowSet **rowSet);
 
-#endif	
+#endif 
 
 
 
@@ -2221,7 +2549,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsTimestamp(
 		GSAggregationResult *aggregationResult, GSTimestamp *value,
 		GSBool *assigned);
 
-#endif	
+#endif 
 
 
 
@@ -2236,6 +2564,22 @@ GS_DLL_PUBLIC void GS_API_CALL gsCloseRowKeyPredicate(
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateKeyType(
 		GSRowKeyPredicate *predicate, GSType *keyType);
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateKeySchema(
+		GSRowKeyPredicate *predicate, GSContainerInfo *info);
+
+#endif 
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey **keyObj);
+
+#endif 
 
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyGeneral(
@@ -2257,6 +2601,14 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsLong(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp **startKey);
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey **keyObj);
+
+#endif 
+
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyGeneral(
 		GSRowKeyPredicate *predicate, const GSValue **finishKey);
@@ -2276,6 +2628,15 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsLong(
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp **finishKey);
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctGeneralKeys(
+		GSRowKeyPredicate *predicate, GSRowKey *const **keyObjList,
+		size_t *size);
+
+#endif 
 
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysGeneral(
@@ -2299,6 +2660,14 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsTimestamp(
 		GSRowKeyPredicate *predicate,
 		const GSTimestamp **keyList, size_t *size);
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey *keyObj);
+
+#endif 
+
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyGeneral(
 		GSRowKeyPredicate *predicate, const GSValue *startKey, GSType keyType);
@@ -2318,6 +2687,14 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByLong(
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp *startKey);
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey *keyObj);
+
+#endif 
 
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyGeneral(
@@ -2339,6 +2716,14 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByLong(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp *finishKey);
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey *keyObj);
+
+#endif 
+
 
 GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyGeneral(
 		GSRowKeyPredicate *predicate, const GSValue *key, GSType keyType);
@@ -2359,7 +2744,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByLong(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByTimestamp(
 		GSRowKeyPredicate *predicate, GSTimestamp key);
 
-#endif	
+#endif 
 
 
 
@@ -2411,7 +2796,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionIndexOfContainer(
 		GSPartitionController *controller, const GSChar *containerName,
 		int32_t *partitionIndex);
 
-#endif	
+#endif 
 
 
 
@@ -2420,17 +2805,101 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionIndexOfContainer(
 
 GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsCurrentTime();
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetTimeField(
+		GSTimestamp timestamp, GSTimeUnit timeUnit);
+
+
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetZonedTimeField(
+		GSTimestamp timestamp, GSTimeUnit timeUnit, const GSTimeZone *zone);
+
+
+GS_DLL_PUBLIC GSBool GS_API_CALL gsSetTimeField(
+		GSTimestamp *timestamp, int64_t field, GSTimeUnit timeUnit);
+
+
+GS_DLL_PUBLIC GSBool GS_API_CALL gsSetZonedTimeField(
+		GSTimestamp *timestamp, int64_t field, GSTimeUnit timeUnit,
+		const GSTimeZone *zone);
+
+#endif 
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddTimeV4_3(
+		GSTimestamp timestamp, int64_t amount, GSTimeUnit timeUnit);
+#endif
+
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSTimestamp gsAddTime(
+		GSTimestamp timestamp, int64_t amount, GSTimeUnit timeUnit) {
+	return gsAddTimeV4_3(timestamp, amount, timeUnit);
+}
+
+#else
 
 GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddTime(
 		GSTimestamp timestamp, int32_t amount, GSTimeUnit timeUnit);
+
+#endif 
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddZonedTime(
+		GSTimestamp timestamp, int64_t amount, GSTimeUnit timeUnit,
+		const GSTimeZone *zone);
+
+
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetTimeDiff(
+		GSTimestamp timestamp1, GSTimestamp timestamp2, GSTimeUnit timeUnit);
+
+
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetZonedTimeDiff(
+		GSTimestamp timestamp1, GSTimestamp timestamp2, GSTimeUnit timeUnit,
+		const GSTimeZone *zone);
+
+#endif 
 
 
 GS_DLL_PUBLIC size_t GS_API_CALL gsFormatTime(
 		GSTimestamp timestamp, GSChar *strBuf, size_t bufSize);
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC size_t GS_API_CALL gsFormatZonedTime(
+		GSTimestamp timestamp, GSChar *strBuf, size_t bufSize,
+		const GSTimeZone *zone);
+
+#endif 
+
 
 GS_DLL_PUBLIC GSBool GS_API_CALL gsParseTime(
 		const GSChar *str, GSTimestamp *timestamp);
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetTimeZoneOffset(
+		const GSTimeZone *zone, GSTimeUnit timeUnit);
+
+
+GS_DLL_PUBLIC GSBool GS_API_CALL gsSetTimeZoneOffset(
+		GSTimeZone *zone, int64_t offset, GSTimeUnit timeUnit);
+
+
+GS_DLL_PUBLIC size_t gsFormatTimeZone(
+		const GSTimeZone *zone, GSChar *strBuf, size_t bufSize);
+
+
+GS_DLL_PUBLIC GSBool GS_API_CALL gsParseTimeZone(
+		const GSChar *str, GSTimeZone *zone);
+
+#endif 
 
 
 
@@ -2469,7 +2938,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 
 GS_DLL_PUBLIC GSBool GS_API_CALL gsIsTimeoutError(GSResult result);
 
-#endif	
+#endif 
 
 
 #if GS_COMPATIBILITY_SUPPORT_4_2
@@ -2494,7 +2963,7 @@ GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorParameterName(
 GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorParameterValue(
 		void *gsResource, size_t stackIndex, size_t parameterIndex,
 		GSChar *strBuf, size_t bufSize);
-#endif	
+#endif 
 
 
 
@@ -2518,9 +2987,14 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 		GSContainer *container, const GSExperimentalRowId *rowId);
 #endif
 
+#if GS_INTERNAL_DEFINITION_VISIBLE
+#define GS_STRUCT_BINDING_GETTER_NAME(type) \
+	gsSetupStructBindingOf_##type
+#endif
+
 
 #define GS_GET_STRUCT_BINDING(type) \
-	gsSetupStructBindingOf_##type()
+	GS_STRUCT_BINDING_GETTER_NAME(type) ()
 
 
 #define GS_STRUCT_BINDING(type, entries) \
@@ -2544,10 +3018,24 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 		(uintptr_t) ((GSBindingType*) 0) \
 	)
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+#define GS_STRUCT_BINDING_CUSTOM_DETAIL( \
+	name, elementType, offset, arraySizeOffset, options, keyBinding, \
+	keyBindingGetter ) \
+	{ name, elementType, offset, arraySizeOffset, options, keyBinding, \
+	keyBindingGetter },
+#else
+#define GS_STRUCT_BINDING_CUSTOM_DETAIL( \
+	name, elementType, offset, arraySizeOffset, options, keyBinding, \
+	keyBindingGetter ) \
+	{ name, elementType, offset, arraySizeOffset, options },
+#endif 
+
 #define GS_STRUCT_BINDING_CUSTOM_NAMED_ELEMENT( \
 	name, member, memberType, options) \
-	{ name, memberType, GS_STRUCT_OFFSET_OF(member), \
-		(size_t) -1, options },
+	GS_STRUCT_BINDING_CUSTOM_DETAIL( \
+		name, memberType, GS_STRUCT_OFFSET_OF(member), \
+		(size_t) -1, options, NULL, NULL)
 
 #define GS_STRUCT_BINDING_CUSTOM_ELEMENT(member, memberType, options) \
 	GS_STRUCT_BINDING_CUSTOM_NAMED_ELEMENT( \
@@ -2555,14 +3043,15 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 
 #define GS_STRUCT_BINDING_CUSTOM_NAMED_ARRAY( \
 	name, member, sizeMember, elementType, options) \
-	{ name, elementType, GS_STRUCT_OFFSET_OF(member), \
-		GS_STRUCT_OFFSET_OF(sizeMember), options },
+	GS_STRUCT_BINDING_CUSTOM_DETAIL( \
+		name, elementType, GS_STRUCT_OFFSET_OF(member), \
+		GS_STRUCT_OFFSET_OF(sizeMember), options, NULL, NULL)
 
 #define GS_STRUCT_BINDING_CUSTOM_ARRAY( \
 	member, sizeMember, elementType, options) \
 	GS_STRUCT_BINDING_CUSTOM_NAMED_ARRAY( \
 		#member, member, sizeMember, elementType, options)
-#endif	
+#endif 
 
 
 #define GS_STRUCT_BINDING_NAMED_ELEMENT(name, member, memberType) \
@@ -2595,8 +3084,18 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 	GS_STRUCT_BINDING_CUSTOM_NAMED_ARRAY( \
 		#member, member, sizeMember, elementType, 0)
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+
+#define GS_STRUCT_BINDING_COMPOSITE_KEY(member, bindingType) \
+	GS_STRUCT_BINDING_CUSTOM_DETAIL( \
+		#member, -1, GS_STRUCT_OFFSET_OF(member), \
+		(size_t) -1, 0, NULL, GS_STRUCT_BINDING_GETTER_NAME(bindingType))
+
+#endif 
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif	
+#endif 

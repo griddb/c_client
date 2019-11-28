@@ -11,10 +11,10 @@ Please refer to the API(C) section in API Reference for detailed information.
 Library building and program execution are checked in the environment below.
 
     OS: CentOS 7.6(x64) (gcc 4.8.5), Windows 10(x64) (VS2017)
-    GridDB server: V4.2 CE(Community Edition) on CentOS 7.6(x64)
+    GridDB server: V4.3 CE(Community Edition) on CentOS 7.6(x64)
 
     OS: Ubuntu 18.04(x64) (gcc 4.8.5)
-    GridDB server: V4.2 CE(Community Edition), Ubuntu 18.04(x64)
+    GridDB server: V4.3 CE(Community Edition), Ubuntu 18.04(x64)
 
 ## Quick start (CentOS, Ubuntu)
 

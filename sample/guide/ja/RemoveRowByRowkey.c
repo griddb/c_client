@@ -11,7 +11,7 @@ void main(int argc, char *argv[]){
 	
 	// 登録するロウのデータ (コンテナのロウ数 5)
 	const int rowCount = 5;
-	const GSChar * nameList[5] = {"notebook PC", "desktop PC", "keybord", "mouse", "printer"};
+	const GSChar * nameList[5] = {"notebook PC", "desktop PC", "keyboard", "mouse", "printer"};
 	const int numberList[5] = {108, 72, 25, 45, 62};
 	
 	

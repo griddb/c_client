@@ -21,36 +21,57 @@
 #define CLIENT_H_
 
 #ifdef GS_DLL_INSIDE
+#define gsGetCollection gsGetCollection_Static
 #define gsGetContainerInfo gsGetContainerInfo_Static
+#define gsGetTimeSeries gsGetTimeSeries_Static
 #define gsPutTimeSeries gsPutTimeSeries_Static
+#define gsPutContainer gsPutContainer_Static
+#define gsPutCollection gsPutCollection_Static
 #define gsPutContainerGeneral gsPutContainerGeneral_Static
 #define gsPutCollectionGeneral gsPutCollectionGeneral_Static
 #define gsPutTimeSeriesGeneral gsPutTimeSeriesGeneral_Static
 #define gsCreateRowByStore gsCreateRowByStore_Static
+#define gsCreateIndexDetail gsCreateIndexDetail_Static
+#define gsDropIndexDetail gsDropIndexDetail_Static
 #define gsGetRowSchema gsGetRowSchema_Static
+#define gsAddTime gsAddTime_Static
 #endif 
 
 #ifdef GS_CLIENT_UNIT_TEST
+#define gsGetCollectionV4_3 gsGetCollectionV4_3_Stub
 #define gsGetContainerInfoV1_5 gsGetContainerInfoV1_5_Stub
 #define gsGetContainerInfoV2_1 gsGetContainerInfoV2_1_Stub
 #define gsGetContainerInfoV3_3 gsGetContainerInfoV3_3_Stub
+#define gsGetContainerInfoV4_3 gsGetContainerInfoV4_3_Stub
+#define gsGetTimeSeriesV4_3 gsGetTimeSeriesV4_3_Stub
+#define gsPutContainerV4_3 gsPutContainerV4_3_Stub
+#define gsPutCollectionV4_3 gsPutCollectionV4_3_Stub
 #define gsPutTimeSeriesV2_0 gsPutTimeSeriesV2_0_Stub
+#define gsPutTimeSeriesV4_3 gsPutTimeSeriesV4_3_Stub
 #define gsPutContainerGeneralV2_0 gsPutContainerGeneralV2_0_Stub
 #define gsPutContainerGeneralV2_1 gsPutContainerGeneralV2_1_Stub
 #define gsPutContainerGeneralV3_3 gsPutContainerGeneralV3_3_Stub
 #define gsPutCollectionGeneralV2_1 gsPutCollectionGeneralV2_1_Stub
 #define gsPutCollectionGeneralV3_3 gsPutCollectionGeneralV3_3_Stub
+#define gsPutCollectionGeneralV4_3 gsPutCollectionGeneralV4_3_Stub
 #define gsPutTimeSeriesGeneralV2_0 gsPutTimeSeriesGeneralV2_0_Stub
 #define gsPutTimeSeriesGeneralV2_1 gsPutTimeSeriesGeneralV2_1_Stub
 #define gsPutTimeSeriesGeneralV3_3 gsPutTimeSeriesGeneralV3_3_Stub
+#define gsPutTimeSeriesGeneralV4_3 gsPutTimeSeriesGeneralV4_3_Stub
 #define gsCreateRowByStoreV3_3 gsCreateRowByStoreV3_3_Stub
+#define gsCreateRowByStoreV4_3 gsCreateRowByStoreV4_3_Stub
+#define gsCreateIndexDetailV4_3 gsCreateIndexDetailV4_3_Stub
+#define gsDropIndexDetailV4_3 gsDropIndexDetailV4_3_Stub
 #define gsGetRowSchemaV2_1 gsGetRowSchemaV2_1_Stub
 #define gsGetRowSchemaV3_3 gsGetRowSchemaV3_3_Stub
+#define gsGetRowSchemaV4_3 gsGetRowSchemaV4_3_Stub
+#define gsAddTimeV4_3 gsAddTimeV4_3_Stub
 #endif 
 
 #if !defined(GS_DEPRECATION_IGNORABLE) && defined(GS_CLIENT_UNIT_TEST)
 #define GS_DEPRECATION_IGNORABLE 1
 #endif
+
 
 #include "util/container.h"
 #include "util/net.h"
@@ -64,18 +85,28 @@
 
 
 #ifdef GS_DLL_INSIDE
+#undef gsGetCollection
 #undef gsGetContainerInfo
+#undef gsGetTimeSeries
+#undef gsPutContainer
+#undef gsPutCollection
 #undef gsPutTimeSeries
 #undef gsPutContainerGeneral
 #undef gsPutCollectionGeneral
 #undef gsPutTimeSeriesGeneral
 #undef gsCreateRowByStore
+#undef gsCreateIndexDetail
+#undef gsDropIndexDetail
 #undef gsGetRowSchema
+#undef gsAddTime
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetCollection(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSCollection **collection);
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfo(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists);
@@ -85,6 +116,20 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV1_5(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV2_1(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV3_3(
+		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
+		GSBool *exists);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetTimeSeries(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSTimeSeries **timeSeries);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainer(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollection(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSCollectionProperties *properties,
+		GSBool modifiable, GSCollection **collection);
 GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeries(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, const GSTimeSeriesProperties *properties,
@@ -101,11 +146,19 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV2_1(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV3_3(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container);
 GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneral(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSCollection **collection);
 GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV2_1(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSCollection **collection);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV3_3(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSCollection **collection);
@@ -121,12 +174,26 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV2_1(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSTimeSeries **timeSeries);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV3_3(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSTimeSeries **timeSeries);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndexDetail(
+		GSContainer *container, const GSIndexInfo *info);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsDropIndexDetail(
+		GSContainer *container, const GSIndexInfo *info);
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStore(
+		GSGridStore *store, const GSContainerInfo *info, GSRow **row);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStoreV3_3(
 		GSGridStore *store, const GSContainerInfo *info, GSRow **row);
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchema(
 		GSRow *row, GSContainerInfo *schemaInfo);
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV2_1(
 		GSRow *row, GSContainerInfo *schemaInfo);
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV3_3(
+		GSRow *row, GSContainerInfo *schemaInfo);
+GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddTime(
+		GSTimestamp timestamp, int32_t amount, GSTimeUnit timeUnit);
 
 #ifdef __cplusplus
 }
@@ -138,7 +205,6 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV2_1(
 typedef util::ByteStream<util::ArrayInStream> ArrayByteInStream;
 typedef util::XArrayOutStream< std::allocator<uint8_t> > NormalXArrayOutStream;
 typedef util::ByteStream<NormalXArrayOutStream> XArrayByteOutStream;
-
 
 class ClientUtil {
 public:
@@ -223,7 +289,6 @@ struct ClientVersion {
 	int32_t minorVersion_;
 };
 
-
 struct SocketAddressLess :
 		public std::binary_function<util::SocketAddress, util::SocketAddress, bool> {
 	bool operator()(
@@ -231,14 +296,12 @@ struct SocketAddressLess :
 			const util::SocketAddress &right) const;
 };
 
-
 struct SocketAddressEqual :
 		public std::binary_function<util::SocketAddress, util::SocketAddress, bool> {
 	bool operator()(
 			const util::SocketAddress &left,
 			const util::SocketAddress &right) const;
 };
-
 
 template<typename L>
 class DynamicLockGuard {
@@ -253,19 +316,66 @@ private:
 	L *lockObject_;
 };
 
-
-class TimestampUtil {
+class TimestampUtils {
 public:
 	static GSTimestamp current();
+
+	static int64_t getField(
+			GSTimestamp timestamp, GSTimeUnit timeUnit,
+			const GSTimeZone *zone);
+	static void setField(
+			GSTimestamp &timestamp, int64_t amount, GSTimeUnit timeUnit,
+			const GSTimeZone *zone);
+
 	static GSTimestamp add(
-			GSTimestamp timestamp, int32_t amount, GSTimeUnit timeUnit);
-	static size_t format(GSTimestamp timestamp, GSChar *strBuf, size_t bufSize);
+			GSTimestamp timestamp, int64_t amount, GSTimeUnit timeUnit,
+			const GSTimeZone *zone);
+	static int64_t diff(
+			GSTimestamp timestamp1, GSTimestamp timestamp2,
+			GSTimeUnit timeUnit, const GSTimeZone *zone);
+
+	static size_t format(
+			GSTimestamp timestamp, GSChar *strBuf, size_t bufSize,
+			const GSTimeZone *zone);
 	static bool parse(const GSChar *str, GSTimestamp &timestamp);
 
+	static int64_t getZoneOffset(
+			const GSTimeZone &zone, GSTimeUnit timeUnit);
+	static void setZoneOffset(
+			GSTimeZone &zone, int64_t offset, GSTimeUnit timeUnit);
+
+	static size_t formatZone(
+			const GSTimeZone &zone, GSChar *strBuf, size_t bufSize);
+	static bool parseZone(const GSChar *str, GSTimeZone &zone);
+
+	static GSTimestamp add(
+			GSTimestamp timestamp, int64_t amount, GSTimeUnit timeUnit);
+	static size_t format(
+			GSTimestamp timestamp, GSChar *strBuf, size_t bufSize);
+
 private:
-	TimestampUtil();
+	struct ZonedOptionSource {
+		util::DateTime::FieldData fields_;
+	};
+
+	TimestampUtils();
+
+	static util::DateTime::FieldType resolveFieldType(GSTimeUnit timeUnit);
+
+	static util::DateTime::Option resolveOption();
+	static util::DateTime::ZonedOption resolveZonedOption(
+			ZonedOptionSource &optionSrc, const GSTimeZone *zone);
+
+	static util::DateTime::FieldData resolveTimestampMaxFields();
+	static int64_t resolveTimestampMaxUnixTime();
+
+	static GSTimeZone toGSZone(const util::TimeZone &src);
+
+	static util::TimeZone resolveZone(const GSTimeZone &zone);
+	static util::TimeZone resolveZone(const int64_t &offsetMillis);
 };
 
+typedef TimestampUtils TimestampUtil;
 
 struct Properties {
 	Properties(const Properties &properties);
@@ -351,7 +461,6 @@ private:
 		GS_CLIENT_RETHROW_CUSTOM_ERROR( \
 				ClientException, errorCode, cause, message)
 
-
 struct ErrorStack {
 public:
 	size_t getSize() const throw();
@@ -398,13 +507,11 @@ private:
 	BaseException exception_;
 };
 
-
 class RemoteException : public ClientException {
 protected:
 	RemoteException(UTIL_EXCEPTION_CONSTRUCTOR_ARGS_DECL) throw();
 	virtual ~RemoteException() throw();
 };
-
 
 class StatementException : public RemoteException {
 public:
@@ -414,7 +521,6 @@ public:
 
 #define GS_CLIENT_RETHROW_STATEMENT(cause, message) \
 		GS_CLIENT_RETHROW_CUSTOM_ERROR(StatementException, 0, cause, message)
-
 
 class ConnectionException : public RemoteException {
 public:
@@ -430,7 +536,6 @@ public:
 		GS_CLIENT_RETHROW_CUSTOM_ERROR( \
 				ConnectionException, errorCode, cause, message)
 
-
 class WrongNodeException : public ConnectionException {
 public:
 	WrongNodeException(UTIL_EXCEPTION_CONSTRUCTOR_ARGS_DECL) throw();
@@ -441,7 +546,6 @@ public:
 		GS_CLIENT_THROW_CUSTOM_ERROR(WrongNodeException, errorCode, message)
 #define GS_CLIENT_RETHROW_WRONG_NODE(cause, message) \
 		GS_CLIENT_RETHROW_CUSTOM_ERROR(WrongNodeException, 0, cause, message)
-
 
 class ErrorReasonFormatter {
 public:
@@ -455,7 +559,6 @@ private:
 
 std::ostream& operator<<(
 		std::ostream &stream, const ErrorReasonFormatter &formatter);
-
 
 enum ClientErrorCode {
 	GS_ERROR_CC_INTERNAL_ERROR = 140000,
@@ -508,7 +611,6 @@ enum ClientErrorCode {
 };
 
 
-
 class RowMapper {
 	friend class Cache;
 
@@ -517,6 +619,12 @@ public:
 		CATEGORY_COLLECTION,
 		CATEGORY_TIME_SERIES,
 		CATEGORY_AGGREGATION_RESULT
+	};
+
+	enum KeyCategory {
+		KEY_CATEGORY_NONE,
+		KEY_CATEGORY_SINGLE,
+		KEY_CATEGORY_COMPOSITE
 	};
 
 	enum MappingMode {
@@ -545,7 +653,8 @@ public:
 	};
 
 	struct Tool;
-	struct KeyStorage;
+	struct RowTool;
+	struct GeneralRowHolder;
 	struct Config;
 	class InputCursor;
 	class OutputCursor;
@@ -564,7 +673,10 @@ public:
 	};
 	typedef TypeTraits<ANY_NULL_TYPE, false> AnyNullTraits;
 
+	template<int> struct BindingEntryTraits;
 	template<int> struct ColumnInfoTraits;
+	template<int> struct IndexInfoTraits;
+	class BindingRef;
 	template<bool Const = false> class ContainerInfoRef;
 
 public:
@@ -585,7 +697,8 @@ public:
 	static const RowMapper& getAggregationResultMapper();
 	static const RowMapper& getQueryAnalysisMapper();
 
-	void checkSchemaMatched(const RowMapper &mapper) const;
+	void checkSchemaMatched(const RowMapper &mapper, bool full) const;
+	void checkKeySchemaMatched(const RowMapper &mapper) const;
 
 	bool matches(
 			RowTypeCategory rowTypeCategory, const GSBinding *binding,
@@ -602,17 +715,27 @@ public:
 			const Config &config);
 
 	GSContainerType getContainerType() const;
+
 	void getContainerSchema(
 			ContainerInfoRef<> &containerInfoRef,
 			VarDataPool &varDataPool) const;
+	void getKeyContainerSchema(
+			ContainerInfoRef<> &containerInfoRef,
+			VarDataPool &varDataPool) const;
+
 	static GSColumnInfo getColumnSchema(
 			const GSBindingEntry &entry, VarDataPool *varDataPool);
 
 	RowTypeCategory getCategory() const;
 	bool isGeneral() const;
 	bool isNullableAllowed() const;
+
 	const GSBinding& getBinding() const;
+	const GSBinding& getKeyBinding() const;
+	const GSBinding* findKeyBinding() const;
+
 	bool hasKey() const;
+	KeyCategory getKeyCategory() const;
 
 	GSType getElementType(int32_t columnId) const;
 	bool isArray(int32_t columnId) const;
@@ -625,22 +748,26 @@ public:
 			GSContainerType *containerType, bool anyTypeAllowed);
 	void exportSchema(XArrayByteOutStream &out, const Config &config) const;
 
+	void exportKeySchemaSingle(XArrayByteOutStream &out) const;
+	void exportKeySchemaComposite(XArrayByteOutStream &out) const;
+
 	static size_t importColumnCount(ArrayByteInStream &in);
 	static void exportColumnCount(
 			XArrayByteOutStream &out, size_t columnCount);
 
-	static int32_t importKeyListBegin(
-			ArrayByteInStream &in, const Config &config, size_t columnCount);
+	static void importKeyListBegin(
+			ArrayByteInStream &in, const Config &config, size_t columnCount,
+			std::vector<int32_t> &keyColumnList);
 	static void importKeyListEnd(
 			ArrayByteInStream &in, const Config &config, size_t columnCount,
-			int32_t &keyColumnId);
+			std::vector<int32_t> &keyColumnList);
 
 	static void exportKeyListBegin(
 			XArrayByteOutStream &out, const Config &config,
-			const int32_t &keyColumnId);
+			const GSBinding *keyBinding);
 	static void exportKeyListEnd(
 			XArrayByteOutStream &out, const Config &config,
-			const int32_t &keyColumnId);
+			const GSBinding *keyBinding);
 
 	static GSColumnInfo importColumnSchema(
 			ArrayByteInStream &in, const Config &config,
@@ -654,33 +781,63 @@ public:
 
 	int32_t resolveColumnId(const GSChar *name) const;
 
-	static void encodeKeyGeneral(
-			XArrayByteOutStream &out, MappingMode mode,
-			const GSType keyType, const GSValue &value);
-	void encodeKeyByObj(
-			XArrayByteOutStream &out, MappingMode mode,
+	void encodeKeyGeneral(
+			XArrayByteOutStream &out, MappingMode mode, bool keyGeneral,
 			const GSType *keyType, const void *keyObj) const;
+	template<typename It>
+	void encodeKeyGeneral(
+			XArrayByteOutStream &out, MappingMode mode, bool keyGeneral,
+			const GSType *keyType, It begin, It end, size_t keyCount,
+			bool withEncodedSize, bool withKeyCount) const;
+
+	static void encodeKeyField(
+			XArrayByteOutStream &out, MappingMode mode, GSType keyType,
+			const void *keyObj);
+
+	void encodeKeyByObj(
+			XArrayByteOutStream &out, MappingMode mode, const GSType *keyType,
+			const void *keyObj) const;
 	void encodeKeyByString(
 			XArrayByteOutStream &out, MappingMode mode,
 			const GSChar *keyString, OutputCursor *cursor) const;
 
-	void encode(XArrayByteOutStream &out, MappingMode mode,
-			const GSType *keyType, const void *keyObj,
-			const void *rowObj) const;
-	void encode(OutputCursor &cursor,
-			const GSType *keyType, const void *keyObj,
+	void encode(
+			XArrayByteOutStream &out, MappingMode mode, const GSType *keyType,
+			const void *keyObj, const void *rowObj) const;
+	void encode(
+			OutputCursor &cursor, const GSType *keyType, const void *keyObj,
 			const void *rowObj) const;
 
-	void encodeWithKeyString(XArrayByteOutStream &out, MappingMode mode,
+	void encode(
+			XArrayByteOutStream &out, MappingMode mode,
+			bool keyGeneral, const GSType *keyType, const void *keyObj,
+			bool rowGeneral, const void *rowObj) const;
+	void encode(
+			OutputCursor &cursor, bool keyGeneral, const GSType *keyType,
+			const void *keyObj, bool rowGeneral, const void *rowObj) const;
+
+	void encodeWithKeyString(
+			XArrayByteOutStream &out, MappingMode mode,
 			const GSChar *keyString, const void *rowObj) const;
+	void encodeWithKeyString(
+			XArrayByteOutStream &out, MappingMode mode,
+			const GSChar *keyString, bool rowGeneral,
+			const void *rowObj) const;
 
-	void decode(ArrayByteInStream &in, MappingMode mode,
+	void decode(
+			ArrayByteInStream &in, MappingMode mode,
 			VarDataPool *varDataPool, void *rowObj) const;
 	void decode(InputCursor &cursor, void *rowObj) const;
 
-	void* extractKey(void *rowObj, KeyStorage &keyStorage) const;
+	void decode(
+			ArrayByteInStream &in, MappingMode mode,
+			VarDataPool *varDataPool, bool rowGeneral, void *rowObj) const;
+	void decode(InputCursor &cursor, bool rowGeneral, void *rowObj) const;
+
+	void resolveKey(const void *rowObj, GSRowKey &keyObj) const;
 
 	size_t getGeneralRowSize() const;
+	size_t getGeneralRowKeySize() const;
 
 	static void encodeGeometry(XArrayByteOutStream &out, const char8_t *text, MappingMode mode);
 
@@ -711,6 +868,7 @@ public:
 	static GSType toElementType(GSType type, bool &arrayUsed);
 
 	static bool isArrayColumn(const GSBindingEntry &entry);
+	static bool isKeyColumn(const GSBindingEntry &entry);
 
 	static GSBindingEntry getEntryGeneral(
 			const GSBindingEntry &src, const GSType type);
@@ -766,7 +924,9 @@ public:
 			GSTypeOption options, bool nullable,
 			const GSChar *columnName);
 
-	static const ContainerInfoRef<true> toInfoRef(
+	static BindingRef toBindingRef(
+			const GSBinding *binding, const ClientVersion &version) throw();
+	static ContainerInfoRef<true> toInfoRef(
 			const GSContainerInfo *info, const ClientVersion &version) throw();
 
 	struct Initializer {
@@ -834,21 +994,35 @@ private:
 	RowMapper(const RowMapper&);
 	RowMapper& operator=(const RowMapper&);
 
+	void clear();
+
 	static size_t getDigest(const GSBindingEntry &entry);
 	static size_t getDigest(const GSChar *str);
 
 	static GSBinding checkAndCopyBinding(
-			const GSBinding *src, ColumnIdMap &entryIndexMap,
-			RowTypeCategory rowTypeCategory, const Config &config);
+			const GSBinding *src, bool general, ColumnIdMap &entryIndexMap,
+			RowTypeCategory rowTypeCategory, size_t &compositeKeyOffeset,
+			const Config &config);
 	static GSBinding createReorderedBinding(
 			const RowMapper &baseMapper, ColumnIdMap &entryIndexMap,
 			ArrayByteInStream &in, const Config &config,
 			bool columnOrderIgnorable);
 
+	static size_t checkNestedBindingEntryCount(
+			const GSBinding &binding, const GSBinding *&keyBinding);
+	static const GSBindingEntry& getNestedBindingEntry(
+			const GSBinding &binding, const GSBinding *keyBinding,
+			size_t totalPos, size_t &subPos, bool *nested,
+			size_t *upperOffset);
+	static bool isKeyBindingFound(const GSBindingEntry &entry);
+
+	static void makeKeyMapper(
+			const GSBinding &binding, RowTypeCategory rowTypeCategory,
+			size_t compositeKeyOffeset, bool general, const Config &config,
+			std::auto_ptr<RowMapper> &keyMapper);
+
 	template<GSType T, typename M>
 	static const GSChar *maskNullString(const GSChar *src);
-
-	static int32_t findRowKeyId(const GSBinding *binding);
 
 	static void* getField(const GSBindingEntry &entry, void *rowObj);
 	static const void* getField(
@@ -859,8 +1033,17 @@ private:
 	static size_t getArrayFieldSize(
 			const GSBindingEntry &entry, const void *rowObj);
 
-	const RowMapper& resolveCodingMapper(const void *rowObj) const;
-	const GSBindingEntry& resolveKeyEntry() const;
+	size_t toKeyList(
+			const int32_t *&list, VarDataPool &varDataPool) const;
+
+	const RowMapper& resolveCodingMapper(
+			bool rowGeneral, const void *rowObj) const;
+	const RowMapper& resolveKeyCodingMapper(
+			bool keyGeneral, const GSType *keyType, const void *keyObj) const;
+
+	const RowMapper& resolveKeyMapper() const;
+	const RowMapper* findKeyMapper() const;
+
 	const GSBindingEntry& getEntry(int32_t columnId) const;
 
 	bool isNull(const void *rowObj, int32_t columnId) const;
@@ -919,8 +1102,9 @@ private:
 	const bool general_;
 	const bool nullableAllowed_;
 	ColumnIdMap columnIdMap_;
+	size_t compositeKeyOffeset_;
 	GSBinding binding_;
-	int32_t keyColumnId_;
+	std::auto_ptr<RowMapper> keyMapper_;
 
 	uint32_t varColumnCount_;
 	size_t nullsByteSize_;
@@ -931,17 +1115,24 @@ namespace {
 RowMapper::Initializer g_rowMapperInitializer;
 }
 
+struct RowMapper::RowTool {
+private:
+	friend struct GSRowTag;
 
-struct RowMapper::KeyStorage {
-	union {
-		const GSChar *strValue_;
-		int32_t intValue_;
-		int64_t longValue_;
-		GSTimestamp timestampValue_;
-	} value_;
-	std::string strStorage_;
+	static const RowMapper& resolveKeyMapper(const RowMapper &mapper);
 };
 
+struct RowMapper::GeneralRowHolder {
+public:
+	GeneralRowHolder();
+	~GeneralRowHolder();
+
+	void reset(GSRow *row) throw();
+	GSRow* get() const  throw();
+
+private:
+	GSRow *row_;
+};
 
 struct RowMapper::BaseCursor {
 	BaseCursor(const RowMapper &mapper, MappingMode mode, int32_t rowCount,
@@ -973,13 +1164,15 @@ struct RowMapper::BaseCursor {
 };
 
 struct RowMapper::Config {
-	Config(bool anyTypeAllowed, bool nullableAllowed, bool keyExtensible);
+	Config(
+			bool anyTypeAllowed, bool nullableAllowed, bool keyExtensible,
+			bool keyComposable = false);
 
 	bool anyTypeAllowed_;
 	bool nullableAllowed_;
 	bool keyExtensible_;
+	bool keyComposable_;
 };
-
 
 class RowMapper::InputCursor {
 public:
@@ -1024,7 +1217,6 @@ private:
 	int64_t varDataBaseOffset_;
 };
 
-
 class RowMapper::OutputCursor {
 public:
 	friend class RowMapper;
@@ -1046,7 +1238,6 @@ private:
 	BaseCursor base_;
 	XArrayByteOutStream &out_;
 };
-
 
 class RowMapper::VarDataPool {
 public:
@@ -1091,7 +1282,7 @@ public:
 			const Config &config, bool columnOrderIgnorable);
 	const RowMapper* resolve(
 			const RowMapper::ContainerInfoRef<true> &infoRef,
-			const Config &config);
+			const Config &config, bool forKey = false);
 
 	const RowMapper* duplicate(const RowMapper &mapper);
 
@@ -1208,6 +1399,8 @@ struct RowMapper::TypeTraits {
 			STRING_FAMILY ||
 			ELEMENT_TYPE == GS_TYPE_BLOB);
 
+	static const bool GENERAL_KEY = false;
+
 	typedef ObjectTypeTraits<ElemType, ArrayType> ObjectTraits;
 	typedef typename ObjectTraits::Object Object;
 
@@ -1231,6 +1424,20 @@ struct RowMapper::TypeTraits {
 
 };
 
+template<> struct RowMapper::BindingEntryTraits<0> {
+	struct Type {
+		const GSChar *columnName;
+		GSType elementType;
+		size_t offset;
+		size_t arraySizeOffset;
+		GSTypeOption options;
+	};
+};
+
+template<> struct RowMapper::BindingEntryTraits<1> {
+	typedef GSBindingEntry Type;
+};
+
 template<> struct RowMapper::ColumnInfoTraits<0> {
 	struct Type {
 		const GSChar *name;
@@ -1248,6 +1455,39 @@ template<> struct RowMapper::ColumnInfoTraits<1> {
 
 template<> struct RowMapper::ColumnInfoTraits<2> {
 	typedef GSColumnInfo Type;
+};
+
+template<> struct RowMapper::IndexInfoTraits<0> {
+	struct Type {
+		const GSChar *name;
+		GSIndexTypeFlags type;
+		int32_t column;
+		const GSChar *columnName;
+	};
+};
+
+template<> struct RowMapper::IndexInfoTraits<1> {
+	typedef GSIndexInfo Type;
+};
+
+class RowMapper::BindingRef {
+public:
+	typedef const GSBinding *RefType;
+	typedef std::vector<GSBindingEntry> RefStorage;
+
+	BindingRef(RefType ref, const ClientVersion &version) throw();
+
+	GSBinding get(RefStorage &storage) const;
+
+private:
+	typedef const void *RawPtrType;
+	typedef const uint8_t *BytePtrType;
+
+	RawPtrType getEntryRef(size_t index) const;
+	size_t getEntrySize() const;
+
+	RefType ref_;
+	ClientVersion version_;
 };
 
 template<bool Const> class RowMapper::ContainerInfoRef {
@@ -1272,27 +1512,48 @@ public:
 	GSContainerType getType() const;
 	bool isRowKeyAssigned() const;
 
+	size_t getRowKeyColumnCount() const;
+	const int32_t* getRowKeyColumnList() const;
+
 	size_t getColumnCount() const;
-	GSColumnInfo getColumnInfo(int32_t column) const;
-	void setColumnInfo(int32_t column, const GSColumnInfo &columnInfo);
+	GSColumnInfo getColumnInfo(size_t column) const;
+	void setColumnInfo(size_t column, const GSColumnInfo &columnInfo);
 	void createColumnInfoList(size_t columnCount, VarDataPool &pool);
 
 	const void* getRawColumnInfoList() const;
 
+	size_t getIndexCount() const;
+	GSIndexInfo getIndexInfo(size_t pos) const;
+	void setIndexInfo(size_t pos, const GSIndexInfo &indexInfo);
+	void createIndexInfoList(size_t count, VarDataPool &pool);
+
+	static void copyVersionedIndexInfo(
+			const ClientVersion &version, const GSIndexInfo &src,
+			GSIndexInfo &dest);
+
 private:
+	friend class ContainerInfoRef<true>;
+	friend class ContainerInfoRef<false>;
+
 	typedef typename util::Conditional<
 			Const, const GSColumnInfo*, GSColumnInfo*>::Type ColumnInfoRefType;
+
 	typedef typename util::Conditional<
 			Const, const void*, void*>::Type RawPtrType;
+	typedef typename util::Conditional<
+			Const, const uint8_t*, uint8_t*>::Type BytePtrType;
 
 	template<bool RefConst>
-	static typename util::Conditional<
-			RefConst, const void*, void*>::Type getColumnInfoRef(
-			const ContainerInfoRef &infoRef,
-			typename util::Conditional<
-					RefConst, const void*, void*>::Type columnInfoList,
-			int32_t column);
+	static RawPtrType getColumnInfoRef(
+			const ContainerInfoRef<RefConst> &infoRef, RawPtrType columnInfoList,
+			size_t column);
 	size_t getColumnInfoSize() const;
+
+	template<bool RefConst>
+	static RawPtrType getIndexInfoRef(
+			const ContainerInfoRef<RefConst> &infoRef, RawPtrType indexInfoList,
+			size_t pos);
+	size_t getIndexInfoSize() const;
 
 	const GSTimeSeriesProperties* getTimeSeriesProperties() const;
 
@@ -1300,6 +1561,7 @@ private:
 	ClientVersion version_;
 
 	RawPtrType columnInfoList_;
+	RawPtrType indexInfoList_;
 	mutable GSTimeSeriesProperties tsProps_;
 };
 
@@ -1309,7 +1571,7 @@ template<> void RowMapper::ContainerInfoRef<false>::set(
 		const GSContainerInfo &info);
 
 template<> void RowMapper::ContainerInfoRef<false>::setColumnInfo(
-		int32_t column, const GSColumnInfo &columnInfo);
+		size_t column, const GSColumnInfo &columnInfo);
 
 template<> void RowMapper::ContainerInfoRef<false>::createColumnInfoList(
 		size_t columnCount, VarDataPool &pool);
@@ -1362,7 +1624,6 @@ private:
 	bool compatible_;
 	bool internalMode_;
 };
-
 
 
 struct Statement {
@@ -1439,7 +1700,6 @@ struct Statement {
 	};
 };
 
-
 struct StatementResult {
 	enum Id {
 		SUCCESS,
@@ -1448,7 +1708,6 @@ struct StatementResult {
 		DENY
 	};
 };
-
 
 class NodeConnection {
 public:
@@ -1568,7 +1827,6 @@ private:
 	int32_t transactionTimeoutSecs_;
 };
 
-
 struct NodeConnection::ClientId {
 public:
 	ClientId();
@@ -1590,7 +1848,6 @@ private:
 	bool generated_;
 };
 
-
 struct NodeConnection::Config {
 	static const int32_t CONNECT_TIMEOUT_DEFAULT;
 	static const int32_t STATEMENT_TIMEOUT_DEFAULT;
@@ -1608,13 +1865,13 @@ struct NodeConnection::Config {
 	bool alternativeVersionEnabled_;
 };
 
-
 struct NodeConnection::LoginInfo {
 	LoginInfo(
 			const GSChar *user, const GSChar *password, bool ownerMode,
 			const GSChar *clusterName, const GSChar *dbName,
 			int64_t transactionTimeoutMillis, const GSChar *applicationName,
-			double storeMemoryAgingSwapRate);
+			double storeMemoryAgingSwapRate,
+			const util::TimeZone &timeZoneOffset);
 	void setPassword(const GSChar *password);
 
 	std::allocator<uint8_t> alloc_;
@@ -1627,10 +1884,12 @@ struct NodeConnection::LoginInfo {
 	ClientId clientId_;
 	std::string applicationName_;
 	double storeMemoryAgingSwapRate_;
+	util::TimeZone timeZoneOffset_;
 };
 
 struct NodeConnection::OptionalRequest {
 	enum Type {
+		LEGACY_VERSION_BLOCK = 0,
 		TYPE_TRANSACTION_TIMEOUT = 1,
 		FOR_UPDATE = 2,
 		CONTAINER_LOCK_REQUIRED = 3,
@@ -1643,8 +1902,15 @@ struct NodeConnection::OptionalRequest {
 		FETCH_SIZE = 10003,
 		CLIENT_ID = 11001,
 		FETCH_BYTES_SIZE = 11002,
+		FEATURE_VERSION = 11004,
+		ACCEPTABLE_FEATURE_VERSION = 11005,
 		APPLICATION_NAME = 11009,
-		STORE_MEMORY_AGING_SWAP_RATE = 11010
+		STORE_MEMORY_AGING_SWAP_RATE = 11010,
+		TIME_ZONE_OFFSET = 11011
+	};
+
+	enum FeatureVersion {
+		FEATURE_V4_3 = 3
 	};
 
 	typedef std::vector<uint8_t> ExtValue;
@@ -1670,9 +1936,12 @@ struct NodeConnection::OptionalRequest {
 	int64_t fetchSize_;
 	ClientId clientId_;
 	int32_t fetchBytesSize_;
+	int32_t featureVersion_;
+	int32_t acceptableFeatureVersion_;
 	std::auto_ptr<ExtMap> extRequestMap_;
 	std::string applicationName_;
 	double storeMemoryAgingSwapRate_;
+	util::TimeZone timeZoneOffset_;
 
 private:
 	struct Formatter;
@@ -1712,7 +1981,6 @@ struct NodeConnection::Heartbeat {
 	size_t orgRespPos_;
 	size_t orgRespSize_;
 };
-
 
 class NodeConnectionPool {
 public:
@@ -1756,7 +2024,6 @@ private:
 	util::Mutex mutex_;
 };
 
-
 class ContainerHashMode {
 public:
 	enum Id {
@@ -1764,7 +2031,6 @@ public:
 		MD5
 	};
 };
-
 
 class NodeResolver {
 public:
@@ -1988,7 +2254,6 @@ struct NodeResolver::ClusterInfo {
 
 class GSInterceptorManager;
 
-
 class GridStoreChannel {
 public:
 	struct Config {
@@ -2156,7 +2421,6 @@ struct GridStoreChannel::LocalConfig {
 	int32_t containerCacheSize_;
 };
 
-
 struct GridStoreChannel::Source {
 	friend class GridStoreChannel;
 
@@ -2171,6 +2435,7 @@ struct GridStoreChannel::Source {
 
 	static double resolveStoreMemoryAgingSwapRate(
 			const Properties &properties);
+	static util::TimeZone resolveTimeZoneOffset(const Properties &properties);
 
 	Key key_;
 	int32_t partitionCount_;
@@ -2178,7 +2443,6 @@ struct GridStoreChannel::Source {
 	NodeConnection::LoginInfo loginInfo_;
 	GSInterceptorManager *interceptorManager_;
 };
-
 
 struct GridStoreChannel::Context {
 public:
@@ -2377,7 +2641,6 @@ private:
 };
 
 
-
 class GSResourceType {
 public:
 	enum Id {
@@ -2413,7 +2676,6 @@ public:
 				TYPE_ID_MAX;
 	};
 };
-
 
 struct GSResourceHeader {
 public:
@@ -2468,7 +2730,6 @@ private:
 	static int64_t resourceCountList_[];
 #endif
 };
-
 
 class GSInterceptor {
 public:
@@ -2759,7 +3020,6 @@ private:
 	UTIL_UNIQUE_PTR<Data> data_;
 };
 
-
 struct GSGridStoreFactoryTag {
 public:
 	friend struct GSResourceHeader;
@@ -2871,7 +3131,6 @@ namespace {
 GSGridStoreFactory::Initializer g_gridStoreFactoryInitializer;
 }
 
-
 struct GSGridStoreTag {
 public:
 	friend struct GSResourceHeader;
@@ -2953,13 +3212,27 @@ public:
 			GSBool *exists, const ClientVersion &version,
 			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
-	GSContainer* getContainer(const GSChar *name, const GSBinding &binding,
+	GSContainer* getContainer(
+			const GSChar *name, const RowMapper::BindingRef &bindingRef,
 			GSContainerType containerType);
-	GSCollection* getCollection(const GSChar *name, const GSBinding &binding);
-	GSTimeSeries* getTimeSeries(const GSChar *name, const GSBinding &binding);
+	GSCollection* getCollection(
+			const GSChar *name, const GSBinding &binding);
+	GSTimeSeries* getTimeSeries(
+			const GSChar *name, const GSBinding &binding);
+
+	static GSResult getCollection(
+			GSGridStore *store, const GSChar *name,
+			const GSBinding *binding, GSCollection **collection,
+			const ClientVersion &version,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
+	static GSResult getTimeSeries(
+			GSGridStore *store, const GSChar *name,
+			const GSBinding *binding, GSTimeSeries **timeSeries,
+			const ClientVersion &version,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	GSContainer* putContainer(
-			const GSChar *name, const GSBinding &binding,
+			const GSChar *name, const RowMapper::BindingRef &bindingRef,
 			const RowMapper::ContainerInfoRef<true> &containerInfoRef,
 			GSBool modifiable, const GSContainerType *containerType);
 	static GSResult putContainer(
@@ -3001,13 +3274,25 @@ public:
 			size_t predicateCount,
 			const GSContainerRowEntry *&entryList, size_t &entryCount);
 
-	GSRow* createRow(const RowMapper::ContainerInfoRef<true> &infoRef);
+	GSRow* createRow(
+			const RowMapper::ContainerInfoRef<true> &infoRef, bool forKey);
 	static GSResult createRow(
 			GSGridStore *store, const GSContainerInfo *info, GSRow **row,
 			const ClientVersion &version,
 			const GSInterceptor::FunctionInfo &funcInfo) throw();
+	static GSResult createRowKey(
+			GSGridStore *store, const GSContainerInfo *info, GSRow **key,
+			const ClientVersion &version,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	GSRowKeyPredicate* createRowKeyPredicate(GSType keyType);
+
+	GSRowKeyPredicate* createRowKeyPredicateGeneral(
+			const RowMapper::ContainerInfoRef<true> &infoRef);
+	static GSResult createRowKeyPredicateGeneral(
+			GSGridStore *store, const GSContainerInfo *info,
+			GSRowKeyPredicate **predicate, const ClientVersion &version,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	GSPartitionController* getPartitionController();
 
@@ -3204,7 +3489,7 @@ private:
 			const std::vector<GSIndexInfo> &indexInfoList,
 			const std::vector<GSColumnInfo> &columnInfoList,
 			bool indexFlagsSpecified, RowMapper::VarDataPool &varDataPool,
-			GSContainerInfo &containerInfo);
+			RowMapper::ContainerInfoRef<> &infoRef);
 
 	static const GSChar* resolveContainerName(
 			const GSChar *name, const GSContainerInfo *info);
@@ -3236,11 +3521,13 @@ struct GSGridStoreTag::ContainerPropertiesOption {
 	const OptionalRequestSource* get() const;
 };
 
-
 struct GSContainerTag {
 public:
 	friend struct GSResourceHeader;
 	friend struct GSGridStoreTag;
+
+	struct AnyKeyTraits;
+	struct GeneralKeyTraits;
 
 	struct PartialFetchStatus;
 	struct PartialExecutionStatus;
@@ -3287,15 +3574,33 @@ public:
 			bool forCreation);
 	void createOrDropIndex(const GSIndexInfo &info, bool forCreation);
 
+	template<bool ForCreation>
+	static GSResult createOrDropIndex(
+			GSContainer *container, const GSIndexInfo *info,
+			const ClientVersion &version,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
+
 	void flush();
 
-	bool getRow(const GSType *keyType, const void *key,
-			void *rowObj, bool forUpdate, bool keyFormatted);
-	bool putRow(const GSType *keyType, const void *key,
-			const void *rowObj, bool keyFormatted);
-	bool putMultipleRows(size_t rowCount, const void *const *rowObjs);
+	bool getRow(
+			const GSType *keyType, const void *key, void *rowObj,
+			bool forUpdate, bool keyFormatted);
+	bool putRow(
+			const GSType *keyType, const void *key, const void *rowObj,
+			bool keyFormatted);
 	bool removeRow(
 			const GSType *keyType, const void *key, bool keyFormatted);
+
+	bool getRow(
+			bool keyGeneral, const GSType *keyType, const void *key,
+			bool rowGeneral, void *rowObj, bool forUpdate, bool keyFormatted);
+	bool putRow(
+			bool keyGeneral, const GSType *keyType, const void *key,
+			bool rowGeneral, const void *rowObj, bool keyFormatted);
+	bool putMultipleRows(size_t rowCount, const void *const *rowObjs);
+	bool removeRow(
+			bool keyGeneral, const GSType *keyType, const void *key,
+			bool keyFormatted);
 
 	GSQuery* query(const GSChar *queryString);
 	GSRowSet* queryAndFetch(
@@ -3325,11 +3630,12 @@ public:
 
 	void removeRow(
 			const RowMapper &resolvedMapper, int64_t transactionId,
-			const bool *transactionStarted, int64_t rowId, const void *key);
+			const bool *transactionStarted, bool updatable, int64_t rowId,
+			bool keyGeneral, const void *key);
 	void updateRow(
 			const RowMapper &resolvedMapper, int64_t transactionId,
-			const bool *transactionStarted, int64_t rowId, const void *key,
-			const void *rowObj);
+			const bool *transactionStarted, bool updatable, int64_t rowId,
+			bool keyGeneral, const void *key, const void *rowObj);
 
 	void abort();
 	void commit();
@@ -3358,17 +3664,12 @@ public:
 			GSInterpolationMode mode,
 			int32_t interval, GSTimeUnit intervalUnit);
 
-	struct AnyKeyTraits {
-		typedef void Object;
-		static const GSType* resolveKeyType() { return NULL; }
-	};
-
-	template<typename Traits>
+	template<typename Traits, bool RowGeneral>
 	static GSResult getRowChecked(
 			GSContainer *container, const typename Traits::Object *key,
 			void *rowObj, GSBool forUpdate, GSBool *exists,
 			const GSInterceptor::FunctionInfo &funcInfo);
-	template<typename Traits>
+	template<typename Traits, bool RowGeneral>
 	static GSResult putRowChecked(
 			GSContainer *container, const typename Traits::Object *key,
 			const void *rowObj, GSBool *exists,
@@ -3484,7 +3785,8 @@ private:
 	void tryPutOptionalRequest(
 			XArrayByteOutStream &reqOut,
 			bool forUpdate, bool containerLockAware, bool forCreationDDL,
-			const OptionalRequestSource *source = NULL);
+			const OptionalRequestSource *source = NULL,
+			int32_t featureVersion = -1);
 
 	static bool isSessionIdGeneratorEnabled();
 	static bool isDDLSessionEnabled();
@@ -3527,7 +3829,8 @@ private:
 
 	bool filterIndexInfo(
 			const GSIndexInfo &info, bool forCreation,
-			GSIndexInfo &filteredInfo) const;
+			GSIndexInfo &filteredInfo,
+			std::vector<int32_t> &columnListStorage) const;
 	GSIndexTypeFlags getDefaultIndexTypeFlag(int32_t columnId) const;
 
 	static GSTimestamp wrapOptionalTimestamp(const GSTimestamp *timestamp);
@@ -3561,6 +3864,18 @@ private:
 	bool transactionStarted_;
 	bool autoCommit_;
 	bool cacheDisabled_;
+};
+
+struct GSContainerTag::AnyKeyTraits {
+	typedef void Object;
+	static const bool GENERAL_KEY = false;
+	static const GSType* resolveKeyType() { return NULL; }
+};
+
+struct GSContainerTag::GeneralKeyTraits {
+	typedef GSRowKey Object;
+	static const bool GENERAL_KEY = true;
+	static const GSType* resolveKeyType() { return NULL; }
 };
 
 struct GSContainerTag::PartialFetchStatus {
@@ -3680,7 +3995,6 @@ std::ostream& operator<<(
 		std::ostream &os,
 		const GSContainerTag::QueryParameters::StringFormatter &formatter);
 
-
 struct GSQueryTag {
 public:
 	friend struct GSResourceHeader;
@@ -3745,7 +4059,6 @@ private:
 	bool closed_;
 };
 
-
 struct GSRowSetTag {
 public:
 	friend struct GSResourceHeader;
@@ -3780,8 +4093,9 @@ public:
 	GSContainer* getContainer() const;
 	int64_t getTransactionId() const;
 	bool isTransactionStarted() const;
+
+	int64_t getRowIdForUpdate() const;
 	int64_t getRowId() const;
-	const void* getRowKey() const;
 
 	void closeRemote(bool transactionalOnly);
 
@@ -3815,6 +4129,10 @@ private:
 	void checkOpened() const;
 	void checkInRange() const;
 
+	void initializeLastKey();
+
+	bool isUpdatable() const;
+
 	GSResourceHeader resourceHeader_;
 
 	size_t referenceCount_;
@@ -3826,8 +4144,9 @@ private:
 	RowMapper::VarDataPool &varDataPool_;
 	RowMapper::InputCursor cursor_;
 	const GSRowSetType type_;
-	const void *lastKey_;
-	RowMapper::KeyStorage lastKeyStorage_;
+
+	RowMapper::GeneralRowHolder lastKey_;
+	RowMapper::VarDataPool keyVarDataPool_;
 
 	const int64_t totalRowCount_;
 	int64_t remainingRowCount_;
@@ -3838,7 +4157,6 @@ private:
 	bool followingLost_;
 	bool closed_;
 };
-
 
 struct GSAggregationResultTag {
 public:
@@ -3875,14 +4193,21 @@ private:
 	} value_;
 };
 
-
 struct GSRowTag {
 public:
 	friend struct GSResourceHeader;
 
-	static GSRow* create(GSGridStore &store, RowMapper::Reference mapper);
-	static GSRow* create(GSContainer &container, RowMapper::Reference mapper);
-	static GSRow* create(RowMapper::VarDataPool &pool, RowMapper::Reference mapper);
+	static GSRow* create(
+			GSGridStore &store, RowMapper::Reference mapper,
+			bool forKey = false);
+	static GSRow* create(
+			GSContainer &container, RowMapper::Reference mapper,
+			bool forKey = false);
+	static GSRow* create(
+			RowMapper::VarDataPool &pool, RowMapper::Reference mapper,
+			bool forKey = false);
+
+	GSRow* create(bool forKey) const;
 
 	static void close(GSRow **row) throw();
 
@@ -3892,7 +4217,7 @@ public:
 	static GSBinding createBinding(
 			const RowMapper::ContainerInfoRef<true> &infoRef,
 			std::vector<GSBindingEntry> &entryList,
-			bool anyTypeAllowed = false);
+			bool anyTypeAllowed = false, bool forKey = false);
 
 	const RowMapper& getRowMapper() const;
 	void getContainerSchema(RowMapper::ContainerInfoRef<> &infoRef);
@@ -3959,14 +4284,16 @@ private:
 
 	static const size_t DATA_OFFSET;
 
-	GSRowTag(void *parentResource,
-			RowMapper::Reference mapper, size_t objectSize);
+	GSRowTag(
+			void *parentResource, RowMapper::Reference mapper,
+			size_t objectSize, bool forKey);
 	~GSRowTag();
 
 	GSRowTag(const GSRow&);
 	GSRow& operator=(const GSRow&);
 
-	static GSRow* create(void *parentResource, RowMapper::Reference mapper);
+	static GSRow* create(
+			void *parentResource, RowMapper::Reference mapper, bool forKey);
 
 	const GSBindingEntry& getBindingEntry(int32_t columnId) const;
 	RowMapper::VarDataPool& getVarDataPool();
@@ -4049,18 +4376,26 @@ private:
 	uint8_t* data();
 	const uint8_t* data() const;
 
+	const GSBinding& getBinding() const;
+	size_t getGeneralRowSize() const;
+	static size_t getGeneralRowSize(const RowMapper &mapper, bool forKey);
+
 	GSResourceHeader resourceHeader_;
 
 	void *parentResource_;
 	RowMapper::Reference mapper_;
 	RowMapper::VarDataPool *varDataPool_;
+	bool forKey_;
 };
 
-
 struct GSRowKeyPredicateTag {
+private:
+	struct KeyLess;
+
 public:
 	friend struct GSResourceHeader;
-	friend struct GSGridStoreTag;
+
+	class KeyIterator;
 
 	enum RangeElementType {
 		RANGE_START,
@@ -4069,10 +4404,17 @@ public:
 		RANGE_COUNT
 	};
 
-	GSRowKeyPredicateTag(GSGridStore &store, GSType keyType);
+	static const RowMapper::Config KEY_MAPPER_CONFIG;
+
+	GSRowKeyPredicateTag(GSGridStore &store, RowMapper::Reference mapper);
 	~GSRowKeyPredicateTag();
 
 	static void close(GSRowKeyPredicate **predicate) throw();
+
+	static GSResult getKeySchema(
+			GSRowKeyPredicate *predicate, GSContainerInfo *info,
+			const ClientVersion &version,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	template<typename Traits, RangeElementType RangeType>
 	static GSResult getRangeKey(
@@ -4095,64 +4437,162 @@ public:
 			GSRowKeyPredicate *predicate, typename Traits::Object key,
 			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
+	static GSContainerInfo createSingleKeySchema(
+			GSType keyType, GSColumnInfo &columnInfoStorage);
+
 	GSType getKeyType() const;
+	const RowMapper& getRowMapper() const;
 
-	template<RangeElementType RangeType>
-	void getRangeKey(const GSValue *&key, const GSType *expectedType) const;
-	template<RangeElementType RangeType>
-	void setRangeKey(const GSValue *key, GSType expectedType);
+	bool hasRangeKey(RangeElementType rangeElemType) const;
+	size_t getDistinctKeyCount() const;
 
-	template<typename T, typename Receiver>
-	void getDistinctKeys(
-			const T *&keyList, size_t &size,
-			const GSType *expectedType, Receiver &receiver) const;
-	void addDistinctKey(
-			const GSValue &key, GSType expectedType);
+	KeyIterator keyBegin() const;
+	KeyIterator keyEnd() const;
+
+	void getRangeKey(
+			GSRowKey *&key, RangeElementType rangeElemType) const;
+	void getRangeKey(
+			const GSValue *&key, const GSType *expectedType,
+			RangeElementType rangeElemType) const;
+
+	void getDistinctKeys(GSRowKey *const *&keyList, size_t &size) const;
+	void getDistinctKeys(const GSValue *&keyList, size_t &size) const;
+
+	void setRangeKey(const GSRowKey *key, RangeElementType rangeElemType);
+	void setRangeKey(
+			const GSValue *key, GSType expectedType,
+			RangeElementType rangeElemType);
+
+	void addDistinctKey(const GSRowKey &key);
+	void addDistinctKey(const GSValue &key, GSType expectedType);
 
 	void* allocate(size_t size);
 	void deallocate(void *varData);
-
-	struct GeneralDistinctKeyReceiver {
-		GSValue operator()(const GSValue &src) { return src; }
-	};
 
 private:
 	GSRowKeyPredicateTag(const GSRowKeyPredicate&);
 	GSRowKeyPredicate& operator=(const GSRowKeyPredicate&);
 
-	struct KeyLess {
-		explicit KeyLess(GSType keyType);
-
-		bool operator()(const GSValue &key1, const GSValue &key2) const;
-
-		const GSType keyType_;
-	};
-
 	template<typename Traits>
-	struct TypedDistinctKeyReceiver {
-		typename Traits::Object operator()(const GSValue &src) {
-			return Traits::as(src);
-		}
-	};
+	struct SingleTypedKeyReceiver;
+	struct SingleUntypedKeyReceiver;
+	struct GeneralKeyReceiver;
 
-	typedef std::pair<GSValue, bool> RangeKeyEntry;
-	typedef std::set<GSValue, KeyLess> DistinctKeySet;
+	typedef std::vector<GSValue> TinyRowKey;
+	typedef std::pair<TinyRowKey, bool> RangeKeyEntry;
+	typedef std::set<TinyRowKey, KeyLess> DistinctKeySet;
 
-	void checkKeyType(const GSType *expectedType) const;
+	static int64_t compareKey(
+			const RowMapper &mapper,
+			const TinyRowKey &key1, const  TinyRowKey &key2);
+	static int64_t compareValue(
+			GSType keyType, const  GSValue &value1, const  GSValue &value2);
+
+	template<typename T, typename Receiver>
+	void getRangeKey(
+			const T *&key, RangeElementType rangeElemType,
+			const Receiver &receiver) const;
+
+	void setRangeKey(TinyRowKey &key, RangeElementType rangeElemType);
+
+	template<typename T, typename Receiver>
+	void getDistinctKeys(
+			const T *&keyList, size_t &size, const GSType *expectedType,
+			bool singleOnly, const Receiver &receiver) const;
+
+	void addDistinctKey(TinyRowKey &key);
+
+	void toTinyKey(const GSValue &src, TinyRowKey &dest);
+	void toTinyKey(
+			const GSRowKey &src, TinyRowKey &dest,
+			RowMapper::VarDataPool &pool);
+
+	GSValue toSingleKeyValue(
+			const TinyRowKey &src, RowMapper::VarDataPool &pool) const;
+	GSRowKey* toRowKey(const TinyRowKey &src) const;
+
+	void checkKeyType(const GSRowKey &key) const;
+	void checkKeyType(const GSType *expectedType, bool singleOnly) const;
+	static void checkMapper(const RowMapper &mapper);
 
 	void clear();
 	void clearRangeKeyEntry(RangeKeyEntry &keyEntry);
-	void clearKey(GSValue &value);
+	void clearKey(TinyRowKey &key);
+	void clearValue(GSValue &value, GSType type);
 
 	GSResourceHeader resourceHeader_;
 
 	GSGridStore *store_;
-	const GSType keyType_;
+	RowMapper::Reference mapper_;
 
 	RangeKeyEntry rangeKeyEntries_[RANGE_COUNT];
 	std::auto_ptr<DistinctKeySet> distinctKeys_;
+
+	TinyRowKey keyStorage_;
 };
 
+struct GSRowKeyPredicateTag::KeyLess {
+	explicit KeyLess(const RowMapper &mapper);
+
+	bool operator()(const TinyRowKey &key1, const TinyRowKey &key2) const;
+
+	const RowMapper &mapper_;
+};
+
+class GSRowKeyPredicateTag::KeyIterator {
+public:
+	KeyIterator(const GSRowKeyPredicate &predicate, bool forBegin);
+
+	bool operator!=(const KeyIterator &another) const;
+	const GSRowKey* operator*() const;
+
+	KeyIterator& operator++();
+
+private:
+	typedef DistinctKeySet::const_iterator DistinctKeyIterator;
+
+	void updateIterator(bool nextOnly);
+
+	const GSRowKeyPredicate &predicate_;
+	RangeElementType rangeElemType_;
+	DistinctKeyIterator keyIt_;
+	RowMapper::GeneralRowHolder row_;
+};
+
+template<typename Traits>
+struct GSRowKeyPredicateTag::SingleTypedKeyReceiver {
+	typename Traits::Object receive(
+			const GSRowKeyPredicate &predicate,
+			const TinyRowKey &src, RowMapper::VarDataPool &pool) const {
+		return Traits::as(predicate.toSingleKeyValue(src, pool));
+	}
+	void clear(typename Traits::Object &key) const {
+		static_cast<void>(key);
+	}
+};
+
+struct GSRowKeyPredicateTag::SingleUntypedKeyReceiver {
+	GSValue receive(
+			const GSRowKeyPredicate &predicate,
+			const TinyRowKey &src, RowMapper::VarDataPool &pool) const {
+		return src.front();
+	}
+	void clear(GSValue &key) const {
+		static_cast<void>(key);
+	}
+};
+
+struct GSRowKeyPredicateTag::GeneralKeyReceiver {
+	GSRowKey* receive(
+			const GSRowKeyPredicate &predicate,
+			const TinyRowKey &src, RowMapper::VarDataPool &pool) const {
+		static_cast<void>(pool);
+		return predicate.toRowKey(src);
+	}
+	void clear(GSRowKey *&key) const {
+		GSRow::close(&key);
+	}
+};
 
 struct GSPartitionControllerTag {
 public:

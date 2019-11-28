@@ -12,7 +12,10 @@ void main(int argc, char *argv[]){
 	GSColumnInfo columnInfo = GS_COLUMN_INFO_INITIALIZER;
 	GSColumnInfo columnInfoList[3];
 	GSResult ret;
-	GSIndexInfo info;
+	GSIndexInfo info = GS_INDEX_INFO_INITIALIZER;
+	GSIndexInfo compositeInfo = GS_INDEX_INFO_INITIALIZER;
+	const GSChar* indexColumnNameList[] = { "count", "productName" };
+	const size_t indexColumnNameCount = sizeof(indexColumnNameList) / sizeof(*indexColumnNameList);
 	size_t stackSize;
 	GSResult errorCode;
 	GSChar errMsgBuf1[1024], errMsgBuf2[1024];	// エラーメッセージを格納するバッファ
@@ -111,8 +114,8 @@ void main(int argc, char *argv[]){
 	}
 
 	// (1)索引情報を設定する
-	info.name = "indexName";
-	info.type = GS_INDEX_FLAG_TREE;
+	info.name = "hash_index";
+	info.type = GS_INDEX_FLAG_HASH;
 	info.columnName = "count";
 	info.column = 2;
 
@@ -124,6 +127,21 @@ void main(int argc, char *argv[]){
 	}
 
 	printf("Create Index\n");
+
+	// (3)複合索引の索引情報を設定する
+	compositeInfo.name = "composite_index";
+	compositeInfo.type = GS_INDEX_FLAG_TREE;
+	compositeInfo.columnNameList = indexColumnNameList;
+	compositeInfo.columnNameCount = indexColumnNameCount;
+
+	// (4)複合索引を作成する
+	ret = gsCreateIndexDetail(container, &compositeInfo);
+	if (!GS_SUCCEEDED(ret)) {
+		fprintf(stderr, "ERROR gsCreateIndexDetail\n");
+		goto LABEL_ERROR;
+	}
+	
+	printf("Create Composite Index\n");
 
 	//===============================================
 	// 終了処理

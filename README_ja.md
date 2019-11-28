@@ -11,10 +11,10 @@ GridDB CクライアントはC言語用のインタフェースを提供します。
 以下の環境でCクライアントのビルドとサンプルプログラムの実行を確認しています。
 
     OS: CentOS 7.6(x64) (gcc 4.8.5), Windows 10(x64) (VS2017)
-    GridDB server: V4.2 CE(Community Edition), CentOS 7.6(x64)
+    GridDB server: V4.3 CE(Community Edition), CentOS 7.6(x64)
 
     OS: Ubuntu 18.04(x64) (gcc 4.8.5)
-    GridDB server: V4.2 CE(Community Edition), Ubuntu 18.04(x64)
+    GridDB server: V4.3 CE(Community Edition), Ubuntu 18.04(x64)
 
 ## クイックスタート(CentOS, Ubuntu)
 
