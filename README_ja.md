@@ -10,7 +10,7 @@ GridDB CクライアントはC言語用のインタフェースを提供します。
 
 以下の環境でCクライアントのビルドとサンプルプログラムの実行を確認しています。
 
-    OS: CentOS 7.6(x64) (gcc 4.8.5), Windows 10(x64) (VS2017)
+    OS: CentOS 7.6(x64) (gcc 4.8.5), Windows 10(x64) (VS2017, CMake 3.15.2)
     GridDB server: V4.3 CE(Community Edition), CentOS 7.6(x64)
 
     OS: Ubuntu 18.04(x64) (gcc 4.8.5)
@@ -18,7 +18,9 @@ GridDB CクライアントはC言語用のインタフェースを提供します。
 
 ## クイックスタート(CentOS, Ubuntu)
 
-### Cクライアントのビルド
+### ソースコードの利用
+
+#### Cクライアントのビルド
 
     $ cd client/c
     $ ./bootstrap.sh
@@ -31,7 +33,7 @@ GridDB CクライアントはC言語用のインタフェースを提供します。
 	libgridstore.so.0
 	libgridstore.so.0.0.0
 
-### サンプルプログラムの実行
+#### サンプルプログラムの実行
 事前にGridDBサーバを起動しておく必要があります。
 
     $ cp client/c/sample/sample1.c .
@@ -41,13 +43,74 @@ GridDB CクライアントはC言語用のインタフェースを提供します。
       <GridDB cluster name> <GridDB user> <GridDB password>
       -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
 
+(追加情報)
+- client/c/includeフォルダの下に、ビルドに使われるgridstore.hファイルがあります。  
+- client/c/sampleフォルダの下に、サンプルプログラムがあります。
+
+### RPM/DEBファイルの利用
+
+#### インストール
+
+[CentOS]
+
+(C1) yumコマンドの利用
+
+	$ sudo yum-config-manager --add-repo https://download.opensuse.org/repositories/home:knonomura/CentOS_7/home:knonomura.repo
+	$ sudo yum install griddb_c_client
+
+(C2) rpmコマンドの利用  
+RPMファイル(https://github.com/griddb/c_client/releases) をダウンロード後に、次のコマンドを実行してください。
+
+    $ sudo rpm -ivh griddb_c_client-X.X.X-linux.x86_64.rpm
+
+[Ubuntu]
+
+(U1) apt-getコマンドの利用
+
+    $ sudo sh -c "echo 'deb http://download.opensuse.org/repositories/home:/oanhltk/xUbuntu_18.04/ /' > /etc/apt/sources.list.d/home:oanhltk.list"
+    $ wget -nv https://download.opensuse.org/repositories/home:oanhltk/xUbuntu_18.04/Release.key -O Release.key
+    $ sudo apt-key add - < Release.key
+    $ sudo apt-get update
+    $ sudo apt-get install griddb-c-client
+
+  About installation information: 
+  https://software.opensuse.org/download/package?project=home:oanhltk&package=griddb-c-client
+
+(U2) dpkgコマンドの利用  
+DEBファイル(https://github.com/griddb/c_client/releases) をダウンロード後に、次のコマンドを実行してください。
+
+    $ sudo dpkg -i griddb-c-client-X.X.X_amd64.deb
+
+#### サンプルプログラムの実行
+事前にGridDBサーバを起動しておく必要があります。
+
+    $ cp /usr/griddb_c_client-X.X.X/sample/sample1.c .
+    $ gcc sample1.c -lgridstore
+    $ ./a.out <GridDB notification address(default is 239.0.0.1)> <GridDB notification port(default is 31999)>
+      <GridDB cluster name> <GridDB user> <GridDB password>
+      -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
+
+(追加情報)
+- /usr/includeフォルダの下に、ビルドに使われるgridstore.hファイルがあります。  
+- /usr/lib64(CentOS)、/usr/lib/x86_64-linux-gnu(Ubuntu)フォルダの下に、ビルドおよび実行に使われるlibgridstore.soファイルがあります。  
+
 ## クイックスタート(Windows)
 
-### Cクライアントのビルド
+### ソースコードの利用
 
-client.slnファイルをクリックしてVSを起動後、clientプロジェクトをビルドしてください。
+#### CMakeによるVSソリューションファイルの生成
 
-bin/x64フォルダの下に以下のファイルが作成されます。
+* <CMAKE_PATH>\bin\cmake-gui.exeをオープンします。
+* "Where is the source code"に <C_CLIENT_SRC_PATH>\client\c\sample フォルダを指定します。
+* "Where to build the binaries"にソリューションファイル(*.sln , *.vcxproj)の生成先フォルダを指定します。
+* Configureボタンをクリック後、 "Specify the generator for this project"に"Visual Studio 15 2017 Win64"を指定します。
+* Generateボタンをクリックするとファイルが生成されます。
+
+#### VS2017によるビルド
+
+ソリューションファイルの生成先フォルダのclient.slnファイルをクリックしてVSを起動後、clientソリューションをビルドしてください。
+
+<C_CLIENT_SRC_PATH>\bin\x64\Releaseフォルダ(リリースモード時)、<C_CLIENT_SRC_PATH>\bin\x64\Debugフォルダ(デバッグモード時)の下に以下のファイルが作成されます。
 
     gridstore_c.dll
     gridstore_c.lib
@@ -55,16 +118,37 @@ bin/x64フォルダの下に以下のファイルが作成されます。
 ### サンプルプログラムの実行
 事前にGridDBサーバを起動しておく必要があります。
 
-client.slnファイルをクリックしてVSを起動後、sampleプロジェクトをビルドすると、bin/x64フォルダの下にsample.exeファイルが作成されます。
+ソリューションファイルの生成先フォルダのsample.slnファイルをクリックしてVSを起動後、sampleプロジェクトをビルドすると、<C_CLIENT_SRC_PATH>\bin\x64\Releaseフォルダ(リリースモード時)、<C_CLIENT_SRC_PATH>\bin\x64\Debugフォルダ(デバッグモード時)の下にsample.exeファイルが生成されます。
 
     > sample.exe sample1 en <GridDB notification address(default is 239.0.0.1)> <GridDB notification port(default is 31999)>
       <GridDB cluster name> <GridDB user> <GridDB password>
       -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
 
-
 (追加情報)
 - client/c/includeフォルダの下に、ビルドに使われるgridstore.hファイルがあります。  
 - client/c/sampleフォルダの下に、サンプルプログラムがあります。
+
+### MSIファイルの利用
+
+#### インストール
+
+MSIパッケージ(https://github.com/griddb/c_client/releases) をダウンロードして実行してください。C:/Program Files/GridDB/C Client/X.X.Xフォルダの下にインストールされます。
+
+#### サンプルプログラムの作成、ビルド
+
+以下は、VS2017の場合の手順です。
+* x64のプロジェクトを作成。[構成マネージャ] - [アクティブソリューションプラットフォーム] - [新規作成]で "x64"を選択します。
+* プロジェクトのソース ファイルにsample1.cファイルを追加します。
+* Includeディレクトリの設定。[構成プロパティ] - [C/C++] - [全般] - [追加のインクルードディレクトリ]に gridstore.h が存在するディレクトリを指定します。
+* インポートライブラリ(gridstore_c.lib)の設定。[リンカー] - [入力] - [追加の依存ファイル] に追加します。
+* プロジェクトをビルドします。
+
+#### サンプルプログラムの実行
+事前にGridDBサーバを起動しておく必要があります。
+
+    > sample.exe <GridDB notification address(default is 239.0.0.1)> <GridDB notification port(default is 31999)>
+      <GridDB cluster name> <GridDB user> <GridDB password>
+      -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
 
 ## ドキュメント
   詳細は以下のドキュメントを参照してください。
