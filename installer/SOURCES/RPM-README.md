@@ -11,7 +11,7 @@ Please refer to the API(C) section in API Reference for detailed information.
 Program execution are checked in the environment below.
 
     OS: CentOS 7.6(x64)  
-    GridDB server: V4.2 CE(Community Edition) on CentOS 7.6(x64)
+    GridDB server: V4.3 CE(Community Edition) on CentOS 7.6(x64)
 
 ## Quick start (CentOS)
 
