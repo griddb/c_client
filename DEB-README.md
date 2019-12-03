@@ -11,7 +11,7 @@ Please refer to the API(C) section in API Reference for detailed information.
 Program execution are checked in the environment below.
 
     OS: Ubuntu 18.04(x64)  
-    GridDB server: V4.2 CE(Community Edition) on Ubuntu 18.04(x64)
+    GridDB server: V4.3 CE(Community Edition) on Ubuntu 18.04(x64)
     gcc/g++: 4.8.5
 
 ## Quick start (Ubuntu)

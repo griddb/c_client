@@ -11,13 +11,13 @@ Please refer to the API(C) section in API Reference for detailed information.
 Library building and program execution are checked in the environment below.
 
     OS: Windows 10(x64) (VS2017)
-    GridDB server: V4.2 CE(Community Edition) on CentOS 7.6(x64)
+    GridDB server: V4.3 CE(Community Edition) on CentOS 7.6(x64)
 
 ## Quick start
 
 ### Install C client
 
-Install the MSI package, the package is extracted into C:/Program Files/GridDB/C Client/4.2.0 folder.
+Install the MSI package, the package is extracted into C:/Program Files/GridDB/C Client/4.3.0 folder.
 
 ### How to create and build a sample program
 
