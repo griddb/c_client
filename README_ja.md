@@ -67,14 +67,14 @@ RPMƒtƒ@ƒCƒ‹(https://github.com/griddb/c_client/releases) ‚ðƒ_ƒEƒ“ƒ[ƒhŒã‚ÉAŽŸ‚
 
 (U1) apt-getƒRƒ}ƒ“ƒh‚Ì—˜—p
 
-    $ sudo sh -c "echo 'deb http://download.opensuse.org/repositories/home:/oanhltk/xUbuntu_18.04/ /' > /etc/apt/sources.list.d/home:oanhltk.list"
-    $ wget -nv https://download.opensuse.org/repositories/home:oanhltk/xUbuntu_18.04/Release.key -O Release.key
+    $ sudo sh -c "echo 'deb http://download.opensuse.org/repositories/home:/knonomura/xUbuntu_18.04/ /' > /etc/apt/sources.list.d/home:knonomura.list"
+    $ wget -nv https://download.opensuse.org/repositories/home:knonomura/xUbuntu_18.04/Release.key -O Release.key
     $ sudo apt-key add - < Release.key
     $ sudo apt-get update
     $ sudo apt-get install griddb-c-client
 
   About installation information: 
-  https://software.opensuse.org/download/package?project=home:oanhltk&package=griddb-c-client
+  https://software.opensuse.org/download/package?project=home:knonomura&package=griddb-c-client
 
 (U2) dpkgƒRƒ}ƒ“ƒh‚Ì—˜—p  
 DEBƒtƒ@ƒCƒ‹(https://github.com/griddb/c_client/releases) ‚ðƒ_ƒEƒ“ƒ[ƒhŒã‚ÉAŽŸ‚ÌƒRƒ}ƒ“ƒh‚ðŽÀs‚µ‚Ä‚­‚¾‚³‚¢B
