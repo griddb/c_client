@@ -1535,6 +1535,10 @@ private:
 	friend class ContainerInfoRef<true>;
 	friend class ContainerInfoRef<false>;
 
+	struct Constants {
+		static const int32_t SINGLE_ROW_KEY_COLUMN_LIST[1];
+	};
+
 	typedef typename util::Conditional<
 			Const, const GSColumnInfo*, GSColumnInfo*>::Type ColumnInfoRefType;
 
@@ -1554,6 +1558,9 @@ private:
 			const ContainerInfoRef<RefConst> &infoRef, RawPtrType indexInfoList,
 			size_t pos);
 	size_t getIndexInfoSize() const;
+
+	void clearColumnInfoList() throw();
+	void clearIndexInfoList() throw();
 
 	const GSTimeSeriesProperties* getTimeSeriesProperties() const;
 
@@ -1576,6 +1583,11 @@ template<> void RowMapper::ContainerInfoRef<false>::setColumnInfo(
 template<> void RowMapper::ContainerInfoRef<false>::createColumnInfoList(
 		size_t columnCount, VarDataPool &pool);
 
+template<>
+void RowMapper::ContainerInfoRef<false>::clearColumnInfoList() throw();
+
+template<>
+void RowMapper::ContainerInfoRef<false>::clearIndexInfoList() throw();
 
 struct ContainerKey {
 	ContainerKey();

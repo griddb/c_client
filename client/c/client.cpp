@@ -5424,7 +5424,8 @@ RowMapper::ContainerInfoRef<Const>::ContainerInfoRef(
 		RefType ref, const ClientVersion &version) throw() :
 		ref_(ref),
 		version_(version),
-		columnInfoList_(NULL) {
+		columnInfoList_(NULL),
+		indexInfoList_(NULL) {
 }
 
 template<bool Const>
@@ -5432,7 +5433,8 @@ RowMapper::ContainerInfoRef<Const>::ContainerInfoRef(
 		const ContainerInfoRef &another) throw() :
 		ref_(another.ref_),
 		version_(another.version_),
-		columnInfoList_(NULL) {
+		columnInfoList_(NULL),
+		indexInfoList_(NULL) {
 }
 
 template<bool Const>
@@ -5443,6 +5445,7 @@ RowMapper::ContainerInfoRef<Const>::operator=(
 		ref_ = another.ref_;
 		version_ = another.version_;
 		columnInfoList_ = NULL;
+		indexInfoList_ = NULL;
 	}
 
 	return *this;
@@ -5464,11 +5467,8 @@ void RowMapper::ContainerInfoRef<false>::clear() throw() {
 	const GSContainerInfo initialInfo = GS_CONTAINER_INFO_INITIALIZER;
 	set(initialInfo);
 
-	ref_->columnCount = 0;
-	ref_->columnInfoList = NULL;
-
-	ref_->indexInfoCount = 0;
-	ref_->indexInfoList = NULL;
+	clearColumnInfoList();
+	clearIndexInfoList();
 }
 
 template<bool Const>
@@ -5525,6 +5525,14 @@ void RowMapper::ContainerInfoRef<false>::set(const GSContainerInfo &info) {
 	ref_->type = info.type;
 	ref_->rowKeyAssigned = info.rowKeyAssigned;
 
+	if (columnInfoList_ == NULL) {
+		clearColumnInfoList();
+	}
+
+	if (indexInfoList_ == NULL) {
+		clearIndexInfoList();
+	}
+
 	if (version_.since(1, 5)) {
 		ref_->columnOrderIgnorable = info.columnOrderIgnorable;
 		ref_->timeSeriesProperties = info.timeSeriesProperties;
@@ -5539,6 +5547,13 @@ void RowMapper::ContainerInfoRef<false>::set(const GSContainerInfo &info) {
 	if (version_.since(4, 3)) {
 		ref_->rowKeyColumnCount = info.rowKeyColumnCount;
 		ref_->rowKeyColumnList = info.rowKeyColumnList;
+	}
+	else {
+		if (info.rowKeyColumnCount > 1) {
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION,
+					"Container with composite row key cannot be accessible at"
+					" requested API version");
+		}
 	}
 }
 
@@ -5556,21 +5571,42 @@ GSContainerType RowMapper::ContainerInfoRef<Const>::getType() const {
 
 template<bool Const>
 bool RowMapper::ContainerInfoRef<Const>::isRowKeyAssigned() const {
-	assert(ref_ != NULL);
-	return ClientUtil::toBool(ref_->rowKeyAssigned);
+	return getRowKeyColumnCount() > 0;
 }
 
 template<bool Const>
 size_t RowMapper::ContainerInfoRef<Const>::getRowKeyColumnCount() const {
 	assert(ref_ != NULL);
-	return ref_->rowKeyColumnCount;
+
+	if (version_.since(4, 3)) {
+		if (ref_->rowKeyColumnCount > 0) {
+			return ref_->rowKeyColumnCount;
+		}
+	}
+
+	if (ClientUtil::toBool(ref_->rowKeyAssigned)) {
+		return 1;
+	}
+
+	return 0;
 }
 
 template<bool Const>
 const int32_t*
 RowMapper::ContainerInfoRef<Const>::getRowKeyColumnList() const {
 	assert(ref_ != NULL);
-	return ref_->rowKeyColumnList;
+
+	if (version_.since(4, 3)) {
+		if (ref_->rowKeyColumnCount > 0) {
+			return ref_->rowKeyColumnList;
+		}
+	}
+
+	if (ClientUtil::toBool(ref_->rowKeyAssigned)) {
+		return Constants::SINGLE_ROW_KEY_COLUMN_LIST;
+	}
+
+	return NULL;
 }
 
 template<bool Const>
@@ -5600,13 +5636,6 @@ GSColumnInfo RowMapper::ContainerInfoRef<Const>::getColumnInfo(
 		columnInfo.options = columnInfoRef->options;
 	}
 
-	if (!version_.since(4, 3) &&
-			((columnInfoRef->options & GS_TYPE_OPTION_KEY) != 0)) {
-		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION,
-				"Row key option for column info cannot be specified at"
-				" requested API version");
-	}
-
 	return columnInfo;
 }
 
@@ -5628,17 +5657,6 @@ void RowMapper::ContainerInfoRef<false>::setColumnInfo(
 
 	if (version_.since(3, 5)) {
 		columnInfoRef->options = columnInfo.options;
-	}
-
-	if (!version_.since(4, 3) &&
-			((columnInfoRef->options & GS_TYPE_OPTION_KEY) != 0)) {
-		if (column > 0) {
-			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION,
-					"Container with composite row key cannot be accessible at"
-					" requested API version");
-		}
-		columnInfoRef->options &=
-				~static_cast<GSTypeOption>(GS_TYPE_OPTION_KEY);
 	}
 }
 
@@ -5829,6 +5847,30 @@ size_t RowMapper::ContainerInfoRef<Const>::getIndexInfoSize() const {
 	}
 }
 
+template<>
+void RowMapper::ContainerInfoRef<false>::clearColumnInfoList() throw() {
+	ref_->columnCount = 0;
+	ref_->columnInfoList = NULL;
+}
+
+template<bool Const>
+void RowMapper::ContainerInfoRef<Const>::clearColumnInfoList() throw() {
+	assert(false);
+}
+
+template<>
+void RowMapper::ContainerInfoRef<false>::clearIndexInfoList() throw() {
+	if (version_.since(3, 5)) {
+		ref_->indexInfoCount = 0;
+		ref_->indexInfoList = NULL;
+	}
+}
+
+template<bool Const>
+void RowMapper::ContainerInfoRef<Const>::clearIndexInfoList() throw() {
+	assert(false);
+}
+
 template<bool Const>
 const GSTimeSeriesProperties*
 RowMapper::ContainerInfoRef<Const>::getTimeSeriesProperties() const {
@@ -5849,6 +5891,9 @@ RowMapper::ContainerInfoRef<Const>::getTimeSeriesProperties() const {
 
 	return &tsProps_;
 }
+
+template<bool Const> const int32_t RowMapper::ContainerInfoRef<
+		Const>::Constants::SINGLE_ROW_KEY_COLUMN_LIST[] = { 0 };
 
 template class RowMapper::ContainerInfoRef<true>;
 template class RowMapper::ContainerInfoRef<false>;
@@ -17847,9 +17892,6 @@ GSBinding GSRowTag::createBinding(
 		}
 
 		entry.options = columnInfo.options;
-		if (i == 0 && infoRef.isRowKeyAssigned()) {
-			entry.options |= GS_TYPE_OPTION_KEY;
-		}
 
 		if (arrayUsed) {
 			entry.offset = lastOffset;
