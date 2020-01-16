@@ -56,12 +56,12 @@ GridDB CクライアントはC言語用のインタフェースを提供します。
 (C1) yumコマンドの利用
 
 	$ sudo yum-config-manager --add-repo https://download.opensuse.org/repositories/home:knonomura/CentOS_7/home:knonomura.repo
-	$ sudo yum install griddb_c_client
+	$ sudo yum install griddb-c-client
 
 (C2) rpmコマンドの利用  
 RPMファイル(https://github.com/griddb/c_client/releases) をダウンロード後に、次のコマンドを実行してください。
 
-    $ sudo rpm -ivh griddb_c_client-X.X.X-linux.x86_64.rpm
+    $ sudo rpm -ivh griddb-c-client-X.X.X-linux.x86_64.rpm
 
 [Ubuntu]
 

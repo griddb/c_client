@@ -58,12 +58,12 @@ GridDB server need to be started in advance.
 (C1) Using yum command
 
 	$ sudo yum-config-manager --add-repo https://download.opensuse.org/repositories/home:knonomura/CentOS_7/home:knonomura.repo
-	$ sudo yum install griddb_c_client
+	$ sudo yum install griddb-c-client
 
 (C2) Using rpm command  
 After downloading RPM file (https://github.com/griddb/c_client/releases), please run the following:
 
-    $ sudo rpm -ivh griddb_c_client-X.X.X-linux.x86_64.rpm
+    $ sudo rpm -ivh griddb-c-client-X.X.X-linux.x86_64.rpm
 
 [Ubuntu]
 
