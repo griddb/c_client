@@ -23,20 +23,22 @@
 
 	- インタフェース型
 		- @ref Group_GSAggregationResult
-		- @ref Group_GSCollection
 		- @ref Group_GSContainer
+			- @ref Group_GSCollection
+			- @ref Group_GSTimeSeries
 		- @ref Group_GSGridStore
 		- @ref Group_GSGridStoreFactory
 		- @ref Group_GSQuery
 		- @ref Group_GSRowSet
-		- @ref Group_GSTimeSeries
 		- @ref Group_GSRow
 		- @ref Group_GSRowKeyPredicate
 		- @ref Group_GSPartitionController
 
 	- ユーティリティ
+		- @ref Group_BasicDefinitions
 		- @ref Group_GSTimestamp
 		- @ref Group_ErrorHandling
+		- @ref Group_Binding
 
 	- ヘッダファイル
 		- @ref gridstore.h
@@ -48,20 +50,22 @@
 
 	- Interface Types
 		- @ref Group_GSAggregationResult
-		- @ref Group_GSCollection
 		- @ref Group_GSContainer
+			- @ref Group_GSCollection
+			- @ref Group_GSTimeSeries
 		- @ref Group_GSGridStore
 		- @ref Group_GSGridStoreFactory
 		- @ref Group_GSQuery
 		- @ref Group_GSRowSet
-		- @ref Group_GSTimeSeries
 		- @ref Group_GSRow
 		- @ref Group_GSRowKeyPredicate
 		- @ref Group_GSPartitionController
 
 	- Utilities
+		- @ref Group_BasicDefinitions
 		- @ref Group_GSTimestamp
 		- @ref Group_ErrorHandling
+		- @ref Group_Binding
 
 	- Header Files
 		- @ref gridstore.h
@@ -77,12 +81,24 @@
 #include <stdint.h>
 #endif
 
+/*!
+	@JP
+	@defgroup Group_BasicDefinitions 基本定義
+
+	@EN
+	@defgroup Group_BasicDefinitions Basic definitions
+
+	@ENDL
+ */
+
 #ifndef GS_CLIENT_VERSION_MAJOR
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@brief GridDBクライアントのメジャーバージョンを表す数値です。
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@brief Represents the major version of GridDB client
 
 	@ENDL
@@ -93,14 +109,16 @@
 #ifndef GS_CLIENT_VERSION_MINOR
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@brief GridDBクライアントのマイナーバージョンを表す数値です。
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@brief Represents the minor version of GridDB client
 
 	@ENDL
 */
-#define GS_CLIENT_VERSION_MINOR 2
+#define GS_CLIENT_VERSION_MINOR 3
 #endif
 
 // C API
@@ -196,7 +214,7 @@ extern "C" {
 #define GS_COMPATIBILITY_DEPRECATE_FETCH_OPTION_SIZE 1
 #endif
 
-#endif	// GS_DEPRECATED_FUNC_ENABLED
+#endif // GS_DEPRECATED_FUNC_ENABLED
 
 #if !defined(GS_COMPATIBILITY_SUPPORT_1_5) && \
 	(GS_CLIENT_VERSION_MAJOR > 1 || \
@@ -254,15 +272,25 @@ extern "C" {
 #define GS_COMPATIBILITY_SUPPORT_4_2 0
 #endif
 
-#endif	// GS_INTERNAL_DEFINITION_VISIBLE
+#if !defined(GS_COMPATIBILITY_SUPPORT_4_3) && \
+	(GS_CLIENT_VERSION_MAJOR > 4 || \
+	(GS_CLIENT_VERSION_MAJOR == 4 && GS_CLIENT_VERSION_MINOR >= 3))
+#define GS_COMPATIBILITY_SUPPORT_4_3 1
+#else
+#define GS_COMPATIBILITY_SUPPORT_4_3 0
+#endif
+
+#endif // GS_INTERNAL_DEFINITION_VISIBLE
 
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@brief GridDB APIで使用される標準の文字の型です。
 	@par
 		この型の文字列エンコーディングは常にUTF-8です。
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@brief Standard character type used in GridDB API.
 	@par
 		The character encoding is always UTF-8.
@@ -273,11 +301,13 @@ typedef char GSChar;
 
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@brief GridDB APIで使用されるブール型です。
 	@par
 		GridDB上のBOOL型と対応します。
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@brief Boolean type used in GridDB API.
 	@par
 		This type corresponds to the BOOL type in GridDB.
@@ -288,9 +318,11 @@ typedef char GSBool;
 
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@brief 真であることを示すブール型値です。
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@brief Indicates the true on boolean data type.
 
 	@ENDL
@@ -299,9 +331,11 @@ typedef char GSBool;
 
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@brief 偽であることを示すブール型値です。
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@brief Indicates the false on boolean data type.
 
 	@ENDL
@@ -310,9 +344,11 @@ typedef char GSBool;
 
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@brief 列挙型
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@brief Enumeration Type
 
 	@ENDL
@@ -681,6 +717,7 @@ typedef struct GSGridStoreTag GSGridStore;
 		Empty value is a type of field value that are sometimes used as initial
 		values of various operations such as @ref GSRow creation, etc.
 		Column type | Empty value
+		- | -
 		STRING | @c "" (0-length string)
 		BOOL | False(@ref GS_FALSE)
 		Numeric type | @c 0
@@ -977,6 +1014,32 @@ typedef GSContainer GSTimeSeries;
  */
 typedef struct GSRowTag GSRow;
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSRow
+	@brief ロウキーに関するカラムのみから構成される@ref GSRow の一種です。
+	@par
+		@ref gsGetRowSchema より求まる@ref GSContainerInfo に含まれるカラム
+		情報は、ロウキーに関するカラムの情報のみとなります。
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSRow
+	@brief A type of GSRow consisting only of columns related to a Row key.
+	@par
+		The column information contained in @ref GSContainerInfo derived from
+		@ref gsGetRowSchema is limited to the column information about the
+		Row key.
+	@since 4.3
+
+	@ENDL
+*/
+typedef GSRow GSRowKey;
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
 /*!
 	@JP
 	@defgroup Group_GSRowKeyPredicate GSRowKeyPredicate
@@ -1047,13 +1110,15 @@ typedef struct GSRowKeyPredicateTag GSRowKeyPredicate;
  */
 typedef struct GSPartitionControllerTag GSPartitionController;
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
 
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@brief GridDBに対する命令の実行結果コードの型です。
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@brief The type of result code for GridDB instructions.
 
 	@ENDL
@@ -1062,10 +1127,12 @@ typedef int32_t GSResult;
 
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@brief GridDBに対する命令の実行に成功したことを示す、実行結果コードの値です。
 	@see GSResult
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@brief The value of result code which indicates the successful execution for
 		GridDB instructions.
 	@see GSResult
@@ -1076,12 +1143,14 @@ typedef int32_t GSResult;
 
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@brief 実行結果コードに基づきGridDBに対する命令の実行に成功したかどうかの
 		ブール値を求めるマクロです。
 	@see GS_RESULT_OK
 	@see GSResult
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@brief The macro to find the Boolean value of success or failure in the
 		execution of the instruction for the GridDB based on the result code.
 	@see GS_RESULT_OK
@@ -1093,9 +1162,11 @@ typedef int32_t GSResult;
 
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@brief ロウオブジェクトにおけるBLOB構造を表します。
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@brief Represents the BLOB structure in a Row object.
 
 	@ENDL
@@ -1128,9 +1199,11 @@ typedef struct GSBlobTag {
 
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@brief プロパティの構成エントリです。
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@brief The entry of the property configuration.
 
 	@ENDL
@@ -1163,9 +1236,11 @@ typedef struct GSPropertyEntryTag {
 
 /*!
 	@JP
+	@ingroup Group_GSQuery
 	@brief クエリ実行結果を取得する際のオプション項目です。
 
 	@EN
+	@ingroup Group_GSQuery
 	@brief The options for fetching the result of a query.
 
 	@ENDL
@@ -1308,9 +1383,9 @@ enum GSFetchOptionTag {
 		@ENDL
 	 */
 	GS_FETCH_PARTIAL_EXECUTION = (GS_FETCH_LIMIT + 2)
-#endif	// GS_COMPATIBILITY_SUPPORT_4_0
+#endif // GS_COMPATIBILITY_SUPPORT_4_0
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
 };
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
@@ -1324,9 +1399,11 @@ static const enum GSFetchOptionTag GS_DEPRECATED_VAR(GS_FETCH_SIZE) =
 
 /*!
 	@JP
+	@ingroup Group_GSQuery
 	@see GSFetchOptionTag
 
 	@EN
+	@ingroup Group_GSQuery
 	@see GSFetchOptionTag
 
 	@ENDL
@@ -1335,12 +1412,14 @@ typedef GSEnum GSFetchOption;
 
 /*!
 	@JP
+	@ingroup Group_GSQuery
 	@brief クエリにおける要求ロウ順序を表します。
 	@par
 		各種クエリ機能別に定義される判定対象を基準として、順序指定を行うために使
 		用します。具体的な判定対象は、個別の機能によって異なります。
 
 	@EN
+	@ingroup Group_GSQuery
 	@brief Represents the order of Rows requested by a query.
 	@par
 		It is used to specify the order of Rows targeted by each query function.
@@ -1376,9 +1455,11 @@ enum GSQueryOrderTag {
 
 /*!
 	@JP
+	@ingroup Group_GSQuery
 	@see GSQueryOrderTag
 
 	@EN
+	@ingroup Group_GSQuery
 	@see GSQueryOrderTag
 
 	@ENDL
@@ -1387,9 +1468,11 @@ typedef GSEnum GSQueryOrder;
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief @ref GSContainer に設定する索引の種別を示します。
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Represents the type(s) of indexes set on a @ref GSContainer.
 
 	@ENDL
@@ -1512,9 +1595,11 @@ enum GSIndexTypeFlagTag {
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@see GSIndexTypeFlagTag
 
 	@EN
+	@ingroup Group_GSContainer
 	@see GSIndexTypeFlagTag
 
 	@ENDL
@@ -1523,6 +1608,7 @@ typedef int32_t GSIndexTypeFlags;
 
 /*!
 	@JP
+	@ingroup Group_GSTimeSeries
 	@brief ロウ集合またはその特定のカラムに対する、集計演算の方法を示します。
 	@par
 		現バージョンでは、@ref GSTimeSeries に対してのみ使用できます。
@@ -1541,6 +1627,7 @@ typedef int32_t GSIndexTypeFlags;
 			演算対象に非数(@c NaN)が含まれていた場合、非数が求まります。
 
 	@EN
+	@ingroup Group_GSTimeSeries
 	@brief Represents the methods of aggregation operation on a set of Rows or
 		their specific Columns.
 	@par
@@ -1734,9 +1821,11 @@ enum GSAggregationTag {
 
 /*!
 	@JP
+	@ingroup Group_GSTimeSeries
 	@see GSAggregationTag
 
 	@EN
+	@ingroup Group_GSTimeSeries
 	@see GSAggregationTag
 
 	@ENDL
@@ -1745,11 +1834,13 @@ typedef GSEnum GSAggregation;
 
 /*!
 	@JP
+	@ingroup Group_GSTimeSeries
 	@brief ロウの補間方法の種別を表します。
 	@par
 		時系列ロウの補間機能で使用されます。
 
 	@EN
+	@ingroup Group_GSTimeSeries
 	@brief Represents the type of interpolation of Rows.
 	@par
 		It is used by the function of interpolating TimeSeries Rows.
@@ -1807,9 +1898,11 @@ enum GSInterpolationModeTag {
 
 /*!
 	@JP
+	@ingroup Group_GSTimeSeries
 	@see GSInterpolationModeTag
 
 	@EN
+	@ingroup Group_GSTimeSeries
 	@see GSInterpolationModeTag
 
 	@ENDL
@@ -1818,6 +1911,7 @@ typedef GSEnum GSInterpolationMode;
 
 /*!
 	@JP
+	@ingroup Group_GSTimeSeries
 	@brief @ref GSTimeSeries のキー時刻に基づく、ロウの特定方法を表します。
 	@par
 		別途指定する時刻と組み合わせることで、最も近い時刻のキーを持つロウなどを
@@ -1825,6 +1919,7 @@ typedef GSEnum GSInterpolationMode;
 		それぞれの機能により異なります。
 
 	@EN
+	@ingroup Group_GSTimeSeries
 	@brief Represents how to specify a Row based on a key timestamp of
 		@ref GSTimeSeries.
 	@par
@@ -1889,9 +1984,11 @@ enum GSTimeOperatorTag {
 
 /*!
 	@JP
+	@ingroup Group_GSTimeSeries
 	@see GSTimeOperatorTag
 
 	@EN
+	@ingroup Group_GSTimeSeries
 	@see GSTimeOperatorTag
 
 	@ENDL
@@ -1900,11 +1997,13 @@ typedef GSEnum GSTimeOperator;
 
 /*!
 	@JP
+	@ingroup Group_GSCollection
 	@brief 空間範囲同士の関係性についての制約を定義します。
 	@par
 		空間範囲検索の条件指定のために使用します。
 
 	@EN
+	@ingroup Group_GSCollection
 	@brief Defines a restriction to the relationship of each spatial region.
 	@par
 		This is used to set a search condition for the spatial region search.
@@ -1939,9 +2038,11 @@ enum GSGeometryOperatorTag {
 
 /*!
 	@JP
+	@ingroup Group_GSCollection
 	@see GSGeometryOperatorTag
 
 	@EN
+	@ingroup Group_GSCollection
 	@see GSGeometryOperatorTag
 
 	@ENDL
@@ -1950,11 +2051,13 @@ typedef GSEnum GSGeometryOperator;
 
 /*!
 	@JP
+	@ingroup Group_GSTimeSeries
 	@brief 圧縮方式の種別を表します。
 	@par
 		時系列圧縮設定を行う際に使用します。
 
 	@EN
+	@ingroup Group_GSTimeSeries
 	@brief Shows a type of compression methods.
 	@par
 		Used to set a configuration of compression.
@@ -2034,9 +2137,11 @@ enum GSCompressionMethodTag {
 
 /*!
 	@JP
+	@ingroup Group_GSTimeSeries
 	@see GSCompressionMethodTag
 
 	@EN
+	@ingroup Group_GSTimeSeries
 	@see GSCompressionMethodTag
 
 	@ENDL
@@ -2045,9 +2150,11 @@ typedef GSEnum GSCompressionMethod;
 
 /*!
 	@JP
+	@ingroup Group_GSTimestamp
 	@brief 時系列処理で用いる時間の単位を示します。
 
 	@EN
+	@ingroup Group_GSTimestamp
 	@brief Represents the time unit(s) used in TimeSeries data operation.
 
 	@ENDL
@@ -2133,9 +2240,11 @@ enum GSTimeUnitTag {
 
 /*!
 	@JP
+	@ingroup Group_GSTimestamp
 	@see GSTimeUnitTag
 
 	@EN
+	@ingroup Group_GSTimestamp
 	@see GSTimeUnitTag
 
 	@ENDL
@@ -2144,9 +2253,11 @@ typedef GSEnum GSTimeUnit;
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief コンテナの種別を表します。
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Represents the type(s) of a Container.
 
 	@ENDL
@@ -2179,9 +2290,11 @@ enum GSContainerTypeTag {
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@see GSContainerTypeTag
 
 	@EN
+	@ingroup Group_GSContainer
 	@see GSContainerTypeTag
 
 	@ENDL
@@ -2190,9 +2303,11 @@ typedef GSEnum GSContainerType;
 
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@brief GridDB上のフィールド値の型を表します。
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@brief Represents the type(s) of field values in GridDB.
 
 	@ENDL
@@ -2440,9 +2555,11 @@ enum GSTypeTag {
 
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@see GSTypeTag
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@see GSTypeTag
 
 	@ENDL
@@ -2451,10 +2568,12 @@ typedef GSEnum GSType;
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief カラムに関するオプション設定を示します。
 	@see GSTypeOption
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Indicates optional settings for Column.
 	@see GSTypeOption
 
@@ -2521,14 +2640,15 @@ enum GSTypeOptionTag {
 	*/
 	GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL = 1 << 4
 
-#endif	// GS_COMPATIBILITY_SUPPORT_4_1
+#endif // GS_COMPATIBILITY_SUPPORT_4_1
 
-#endif	// GS_COMPATIBILITY_SUPPORT_3_5
+#endif // GS_COMPATIBILITY_SUPPORT_3_5
 
 };
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief カラムに関するオプション設定を示すフラグ値のビット和です。
 	@par
 		ある設定項目について、対応するフラグ値が複数含まれていた場合に、
@@ -2556,6 +2676,7 @@ enum GSTypeOptionTag {
 	@see GSTypeOptionTag
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Sum of bits of value of the flag indicating the option setting
 		for Column.
 	@par
@@ -2589,9 +2710,11 @@ typedef int32_t GSTypeOption;
 
 /*!
 	@JP
+	@ingroup Group_GSRowSet
 	@brief @ref GSRowSet から取り出すことのできる内容の種別です。
 
 	@EN
+	@ingroup Group_GSRowSet
 	@brief The type of content that can be extracted from @ref GSRowSet.
 
 	@ENDL
@@ -2641,9 +2764,11 @@ enum GSRowSetTypeTag {
 
 /*!
 	@JP
+	@ingroup Group_GSRowSet
 	@see GSRowSetTypeTag
 
 	@EN
+	@ingroup Group_GSRowSet
 	@see GSRowSetTypeTag
 
 	@ENDL
@@ -2652,11 +2777,13 @@ typedef GSEnum GSRowSetType;
 
 /*!
 	@JP
+	@ingroup Group_GSTimeSeries
 	@brief 特定のカラムの圧縮設定を表します。
 	@par
 		時系列を対象とした誤差あり間引き圧縮のカラム別設定に使用します。
 
 	@EN
+	@ingroup Group_GSTimeSeries
 	@brief Represents the compression settings for a particular column.
 	@par
 		Use for the column-specific settings for thinning compression with error
@@ -2798,9 +2925,11 @@ typedef struct GSColumnCompressionTag {
 #else
 /*!
 	@JP
+	@ingroup Group_GSTimeSeries
 	@brief @ref GSColumnCompression の初期化子です。
 
 	@EN
+	@ingroup Group_GSTimeSeries
 	@brief Initializer of @ref GSColumnCompression.
 
 	@ENDL
@@ -2811,10 +2940,12 @@ typedef struct GSColumnCompressionTag {
 
 /*!
 	@JP
+	@ingroup Group_GSCollection
 	@brief コレクションの構成オプションを表します。
 	@note 現バージョンでは使用されておりません。
 
 	@EN
+	@ingroup Group_GSCollection
 	@brief Represents a collection of configuration options.
 	@note Not used in the current version
 
@@ -2830,9 +2961,11 @@ typedef struct GSCollectionPropertiesTag {
 
 /*!
 	@JP
+	@ingroup Group_GSCollection
 	@brief @ref GSCollectionProperties の初期化子です。
 
 	@EN
+	@ingroup Group_GSCollection
 	@brief Initializer of @ref GSCollectionProperties.
 
 	@ENDL
@@ -2842,6 +2975,7 @@ typedef struct GSCollectionPropertiesTag {
 
 /*!
 	@JP
+	@ingroup Group_GSTimeSeries
 	@brief 時系列を新規作成または変更する際に使用される、オプションの構成情報を
 		表します。
 	@par
@@ -2849,6 +2983,7 @@ typedef struct GSCollectionPropertiesTag {
 		内容の妥当性について、必ずしも検査するとは限りません。
 
 	@EN
+	@ingroup Group_GSTimeSeries
 	@brief Represents the information about optional configuration settings
 		used for newly creating or updating a TimeSeries.
 	@par
@@ -3112,19 +3247,21 @@ typedef struct GSTimeSeriesPropertiesTag {
 	 */
 	int32_t expirationDivisionCount;
 
-#endif	// GS_COMPATIBILITY_SUPPORT_2_0
+#endif // GS_COMPATIBILITY_SUPPORT_2_0
 
 } GSTimeSeriesProperties;
 
 #if GS_COMPATIBILITY_SUPPORT_2_0
 /*!
 	@JP
+	@ingroup Group_GSTimeSeries
 	@brief @ref GSTimeSeriesProperties の初期化子です。
 	@par
 		ロウの有効期限ならびに圧縮ロウの間引き連続制限は無効、
 		時系列圧縮方式は無圧縮に設定されます。
 
 	@EN
+	@ingroup Group_GSTimeSeries
 	@brief Initializer of @ref GSTimeSeriesProperties.
 	@par
 		Invalid the validity period of a Row and the continuous thinning limitation of
@@ -3146,9 +3283,11 @@ typedef struct GSTimeSeriesPropertiesTag {
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief カラムのスキーマに関する情報を表します。
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Represents the information about the schema of a Column.
 
 	@ENDL
@@ -3227,9 +3366,9 @@ typedef struct GSColumnInfoTag {
 		@ENDL
 	*/
 	GSTypeOption options;
-#endif	// GS_COMPATIBILITY_SUPPORT_3_5
+#endif // GS_COMPATIBILITY_SUPPORT_3_5
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
 
 } GSColumnInfo;
 
@@ -3237,9 +3376,11 @@ typedef struct GSColumnInfoTag {
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief @ref GSColumnInfo の初期化子です。
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Initializer of @ref GSColumnInfo.
 
 	@ENDL
@@ -3257,15 +3398,17 @@ typedef struct GSColumnInfoTag {
 #define GS_COLUMN_INFO_INITIALIZER \
 	{ NULL, GS_TYPE_STRING }
 
-#endif	// not GS_COMPATIBILITY_SUPPORT_1_5
+#endif // not GS_COMPATIBILITY_SUPPORT_1_5
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief トリガの種別を表します。
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Represent the trigger type.
 
 	@ENDL
@@ -3299,9 +3442,11 @@ enum GSTriggerTypeTag {
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@see GSTriggerTypeTag
 
 	@EN
+	@ingroup Group_GSContainer
 	@see GSTriggerTypeTag
 
 	@ENDL
@@ -3310,9 +3455,11 @@ typedef GSEnum GSTriggerType;
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief トリガで監視対象とする更新操作種別を表します。
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Represent the update operation type subject to monitoring by the
 		trigger.
 
@@ -3346,9 +3493,11 @@ enum GSTriggerEventTypeFlagTag {
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@see GSTriggerEventTypeFlagTag
 
 	@EN
+	@ingroup Group_GSContainer
 	@see GSTriggerEventTypeFlagTag
 
 	@ENDL
@@ -3357,10 +3506,12 @@ typedef int32_t GSTriggerEventTypeFlags;
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief トリガに関する情報を表します。
 	@since 1.5
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Represent the trigger information.
 	@since 1.5
 
@@ -3484,9 +3635,11 @@ typedef struct GSTriggerInfoTag {
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief @ref GSTriggerInfo の初期化子です。
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Initializer of @ref GSTriggerInfo.
 
 	@ENDL
@@ -3496,16 +3649,18 @@ typedef struct GSTriggerInfoTag {
 	0, NULL, \
 	NULL, NULL, NULL, NULL }
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
 
 #if GS_COMPATIBILITY_SUPPORT_3_5
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief 索引の設定内容を表します。
 	@since 3.5
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Indicates the contents of index setting.
 	@since 3.5
 
@@ -3552,10 +3707,16 @@ typedef struct GSIndexInfoTag {
 	/*!
 		@JP
 		@brief 索引に対応するカラムのカラム番号です。
+		@par
+			単一のカラムからなるカラム番号の列が設定された場合と同等であると
+			みなされます。
 		@since 3.5
 
 		@EN
 		@brief Column number
+		@par
+			It is considered equivalent to the case where a sequence of
+			column numbers consisting of single columns has been set.
 		@since 3.5
 
 		@ENDL
@@ -3565,28 +3726,118 @@ typedef struct GSIndexInfoTag {
 	/*!
 		@JP
 		@brief 索引に対応するカラムのカラム名です。
+		@par
+			単一のカラムからなるカラム名の列が設定された場合と同等であると
+			みなされます。
 		@since 3.5
 
 		@EN
 		@brief Column name
+		@par
+			It is considered equivalent to the case where a sequence of
+			column names consisting of single columns has been set.
 		@since 3.5
 
 		@ENDL
 	*/
 	const GSChar *columnName;
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+	/*!
+		@JP
+		@brief 索引に対応する任意個数のカラムのカラム番号の列のカラム数です。
+		@since 4.3
+
+		@EN
+		@brief The number of columns in the sequence of column numbers of
+			an arbitrary number of columns associated with the index.
+		@since 4.3
+
+		@ENDL
+	*/
+	size_t columnCount;
+
+	/*!
+		@JP
+		@brief 索引に対応する任意個数のカラムのカラム番号の列です。
+		@since 4.3
+
+		@EN
+		@brief The sequence of column numbers of an arbitrary number of
+			columns associated with the index.
+		@since 4.3
+
+		@ENDL
+	*/
+	const int32_t *columnList;
+
+	/*!
+		@JP
+		@brief 索引に対応する任意個数のカラムのカラム名の列のカラム数です。
+		@since 4.3
+
+		@EN
+		@brief The number of columns in the sequence of column names of
+			an arbitrary number of columns associated with the index.
+		@since 4.3
+
+		@ENDL
+	*/
+	size_t columnNameCount;
+
+	/*!
+		@JP
+		@brief 索引に対応する任意個数のカラムのカラム名の列です。
+		@since 4.3
+
+		@EN
+		@brief The sequence of column names of an arbitrary number of columns
+			associated with the index.
+		@since 4.3
+
+		@ENDL
+	*/
+	const GSChar *const *columnNameList;
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
 } GSIndexInfo;
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSContainer
+	@brief @ref GSIndexInfo の初期化子です。
+	@since 3.5
+
+	@EN
+	@ingroup Group_GSContainer
+	@brief Initializer of @ref GSIndexInfo.
+	@since 3.5
+
+	@ENDL
+*/
+#define GS_INDEX_INFO_INITIALIZER \
+	{ NULL, GS_INDEX_FLAG_DEFAULT, -1, NULL, 0, NULL, 0, NULL }
+
+#else
 
 #define GS_INDEX_INFO_INITIALIZER \
 	{ NULL, GS_INDEX_FLAG_DEFAULT, -1, NULL }
 
-#endif	// GS_COMPATIBILITY_SUPPORT_3_5
+#endif // not GS_COMPATIBILITY_SUPPORT_4_3
+
+#endif // GS_COMPATIBILITY_SUPPORT_3_5
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief 特定のコンテナに関する情報を表します。
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Represents the information about a specific Container.
 
 	@ENDL
@@ -3647,12 +3898,21 @@ typedef struct GSContainerInfoTag {
 		@JP
 		@brief ロウキーに対応するカラムが設定されているかどうかを示す真偽値です。
 		@par
-			コンテナがロウキーを持つ場合、対応するカラム番号は0です。
+			現バージョンでは、コンテナが単一カラムからなるロウキーを持つ場合、
+			対応するカラム番号は@c 0 となります。
+		@par
+			任意のロウキー構成を扱うには、@ref GSContainerInfo::rowKeyColumnList
+			を使用します。
 
 		@EN
 		@brief The boolean value indicating whether the Row key Column is assigned.
 		@par
-			If the Container has a Row key, the number of its corresponding Column is 0.
+			In the current version, if the container has a Row key consisting
+			of a single-column Row key, the corresponding column number
+			will be @c 0.
+		@par
+			To handle an arbitrary Row key configuration, use
+			@ref GSContainerInfo::rowKeyColumnList.
 
 		@ENDL
 	 */
@@ -3798,25 +4058,66 @@ typedef struct GSContainerInfoTag {
 	*/
 	const GSIndexInfo *indexInfoList;
 
-#endif	// GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
-#endif	// GS_COMPATIBILITY_SUPPORT_2_1
+	/*!
+		@JP
+		@brief ロウキーを構成するカラム列についての、カラム数です。
+		@since 4.3
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+		@EN
+		@brief The number of columns in the column sequence configuring
+			Row keys.
+		@since 4.3
+
+		@ENDL
+	*/
+	size_t rowKeyColumnCount;
+
+	/*!
+		@JP
+		@brief ロウキーを構成するカラム列についての、@c 0 から始まる
+			カラム番号一覧です。
+		@since 4.3
+
+		@EN
+		@brief A list of column numbers that starts at @c 0 in the column
+			sequence configuring Row keys.
+		@since 4.3
+
+		@ENDL
+	*/
+	const int32_t *rowKeyColumnList;
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
+#endif // GS_COMPATIBILITY_SUPPORT_3_5
+
+#endif // GS_COMPATIBILITY_SUPPORT_2_1
+
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
 
 } GSContainerInfo;
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief @ref GSContainerInfo の初期化子です。
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Initializer of @ref GSContainerInfo.
 
 	@ENDL
  */
+#define GS_CONTAINER_INFO_INITIALIZER \
+	{ NULL, GS_CONTAINER_COLLECTION, 0, NULL, GS_FALSE, \
+	GS_FALSE, NULL, 0, NULL, NULL, 0, NULL, 0, NULL }
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
 #define GS_CONTAINER_INFO_INITIALIZER \
 	{ NULL, GS_CONTAINER_COLLECTION, 0, NULL, GS_FALSE, \
 	GS_FALSE, NULL, 0, NULL, NULL, 0, NULL }
@@ -3838,23 +4139,31 @@ typedef struct GSContainerInfoTag {
 #define GS_CONTAINER_INFO_INITIALIZER \
 	{ NULL, GS_CONTAINER_COLLECTION, 0, NULL, GS_FALSE }
 
-#endif	// not GS_COMPATIBILITY_SUPPORT_1_5
+#endif // not GS_COMPATIBILITY_SUPPORT_1_5
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
+struct GSBindingTag;
+typedef const struct GSBindingTag* (*GSBindingGetterFunc)();
 typedef struct GSBindingEntryTag {
 	const GSChar *columnName;
 	GSType elementType;
 	size_t offset;
 	size_t arraySizeOffset;
 	GSTypeOption options;		// GSTypeOption
+#if GS_COMPATIBILITY_SUPPORT_4_3
+	const struct GSBindingTag *keyBinding;
+	GSBindingGetterFunc keyBindingGetter;
+#endif
 } GSBindingEntry;
 #endif
 
 /*!
 	@JP
+	@ingroup Group_Binding
 	@brief ロウオブジェクトとロウデータとの対応関係を表すバインディング情報です。
 
 	@EN
+	@ingroup Group_Binding
 	@brief The binding information representing the correspondence between
 		a Row objects and a Row data.
 
@@ -3869,6 +4178,7 @@ typedef struct GSBindingTag {
 
 /*!
 	@JP
+	@ingroup Group_GSRowSet
 	@brief クエリプランならびにクエリ処理解析結果を構成する
 		一連の情報の一つを示します。
 	@par
@@ -3876,6 +4186,7 @@ typedef struct GSBindingTag {
 		使用します。1つの実行結果は、このエントリの列により表現されます。
 
 	@EN
+	@ingroup Group_GSRowSet
 	@brief Represents one of information entries composing a query plan
 		and the results of analyzing a query operation.
 	@par
@@ -4002,9 +4313,11 @@ typedef struct GSQueryAnalysisEntryTag {
 
 /*!
 	@JP
+	@ingroup Group_GSRowSet
 	@brief @ref GSQueryAnalysisEntry の初期化子です。
 
 	@EN
+	@ingroup Group_GSRowSet
 	@brief Initializer of @ref GSQueryAnalysisEntry.
 
 	@ENDL
@@ -4016,11 +4329,13 @@ typedef struct GSQueryAnalysisEntryTag {
 
 /*!
 	@JP
+	@ingroup Group_GSGridStore
 	@brief 複数のコンテナの複数のロウを一括して操作する場合に用いる、
 		コンテナ別のロウ内容エントリです。
 	@since 1.5
 
 	@EN
+	@ingroup Group_GSGridStore
 	@brief The Row contents entry by a container used when operating collectively
 		a plurality of Rows of a plurality of containers.
 	@since 1.5
@@ -4074,10 +4389,12 @@ typedef struct GSContainerRowEntryTag {
 
 /*!
 	@JP
+	@ingroup Group_GSGridStore
 	@brief @ref GSContainerRowEntry の初期化子です。
 	@since 1.5
 
 	@EN
+	@ingroup Group_GSGridStore
 	@brief Initializer of @ref GSContainerRowEntry.
 	@since 1.5
 
@@ -4088,11 +4405,13 @@ typedef struct GSContainerRowEntryTag {
 
 /*!
 	@JP
+	@ingroup Group_GSGridStore
 	@brief 複数のコンテナに対する取得条件を表すための、コンテナ別の
 		合致条件エントリです。
 	@since 1.5
 
 	@EN
+	@ingroup Group_GSGridStore
 	@brief The specified condition entry by a container for representing the acquisition
 		conditions for a plurality of containers.
 	@since 1.5
@@ -4127,10 +4446,12 @@ typedef struct GSRowKeyPredicateEntryTag {
 
 /*!
 	@JP
+	@ingroup Group_GSGridStore
 	@brief @ref GSRowKeyPredicateEntry の初期化子です。
 	@since 1.5
 
 	@EN
+	@ingroup Group_GSGridStore
 	@brief Initializer of @ref GSRowKeyPredicateEntry.
 	@since 1.5
 
@@ -4141,10 +4462,12 @@ typedef struct GSRowKeyPredicateEntryTag {
 
 /*!
 	@JP
+	@ingroup Group_BasicDefinitions
 	@brief ロウフィールドに格納できるいずれかの型の値です。
 	@since 1.5
 
 	@EN
+	@ingroup Group_BasicDefinitions
 	@brief One of the type of value that can be stored in the Row field.
 	@since 1.5
 
@@ -4476,7 +4799,64 @@ typedef union GSValueTag {
 
 } GSValue;
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief タイムゾーン情報を表します。
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief Indicates time zone information.
+	@since 4.3
+
+	@ENDL
+*/
+typedef struct GSTimeZoneTag {
+#if GS_INTERNAL_DEFINITION_VISIBLE
+	struct {
+		int64_t offsetMillis;
+	} internalData;
+#endif // GS_INTERNAL_DEFINITION_VISIBLE
+} GSTimeZone;
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief @ref GSTimeZone の初期化子です。
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief Initializer of @ref GSTimeZone.
+	@since 4.3
+
+	@ENDL
+*/
+#define GS_TIME_ZONE_INITIALIZER \
+	{ { 0 } }
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief 時刻<tt>1970-01-01T00:00:00Z</tt>に相当する@ref GSTimestamp 値です。
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief The @ref GSTimestamp value equivalent to the time
+		<tt>1970-01-01T00:00:00Z</tt>.
+	@since 4.3
+
+	@ENDL
+*/
+#define GS_TIMESTAMP_DEFAULT 0
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
 
 /*!
 	@JP
@@ -4494,6 +4874,30 @@ typedef union GSValueTag {
 	@ENDL
  */
 #define GS_TIME_STRING_SIZE_MAX 32
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief @ref GSTimeZone 値の文字列表現を格納するための文字列バッファ
+		における、終端文字を含むバイト単位での最大サイズです。
+	@see gsFormatTimeZone
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief The maximum size of a string buffer in bytes, including
+		the termination character to store a string representation of
+		the @ref GSTimeZone value.
+	@see gsFormatTimeZone
+	@since 4.3
+
+	@ENDL
+*/
+#define GS_TIME_ZONE_STRING_SIZE_MAX 8
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
 
 //
 // GridStoreFactory API
@@ -4659,6 +5063,16 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		定義するかについては関与しない。省略時はアプリケーション名の
 		指定がなかったものとみなされる。空文字列は指定できない。
 		バージョン4.2よりサポート</td>
+		</tr>
+		<tr>
+		<td>timeZone</td>
+		<td>タイムゾーン情報。TQLでのTIMESTAMP値演算などに使用される。
+		「@c ±hh:mm 」または「@c ±hhmm 」形式によるオフセット値
+		(@c ± は@c + または@c - 、@c hh は時、@c mm は分)、
+		「@c Z 」(@c +00:00 に相当)、「@c auto 」(実行環境に応じ
+		自動設定)のいずれかを指定する。@c auto が使用できるのは
+		夏時間を持たないタイムゾーンに限定される。
+		バージョン4.3よりサポート</td>
 		</tr>
 		</table>
 	@par
@@ -4834,6 +5248,18 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		cannot be specified. This property is supported on version 4.2 or
 		later.</td>
 		</tr>
+		<tr>
+		<td>timeZone</td>
+		<td>time zone information. Used for TIMESTAMP value operations and
+		other purposes.
+		Specifies an offset value in the @c "±hh:mm" or the @c "±hhmm" format
+		(where @c ± is @c + or @c -, @c hh is hours, and @c mm is minutes),
+		@c "Z " (equivalent to @c +00:00), or
+		@c "auto" (automatically set according to the execution environment).
+		@c "auto" can only be used for the time zone that does not observe the
+		daylight saving time.
+		This property is supported on version 4.3 or later.</td>
+		</tr>
 		</table>
 	@par
 		Cluster names, database names, user names and passwords
@@ -4903,7 +5329,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 #define gsGetGridStore(factory, properties, propertyCount, store) \
 		gsGetGridStore(factory, properties, propertyCount, store)
 #endif
-#endif	// not GS_INTERNAL_DEFINITION_VISIBLE
+#endif // not GS_INTERNAL_DEFINITION_VISIBLE
 
 /*!
 	@JP
@@ -5012,7 +5438,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 #define gsSetFactoryProperties(factory, properties, propertyCount) \
 		gsSetFactoryProperties(factory, properties, propertyCount)
 #endif
-#endif	// not GS_INTERNAL_DEFINITION_VISIBLE
+#endif // not GS_INTERNAL_DEFINITION_VISIBLE
 
 //
 // GridStore API
@@ -5154,6 +5580,14 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL gsGetRowByPath(
 		GSBool *exists));
 #endif
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetCollectionV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSCollection **collection);
+#endif
+
 /*!
 	@JP
 	@ingroup Group_GSGridStore
@@ -5214,14 +5648,24 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL gsGetRowByPath(
 
 	@ENDL
  */
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetCollection(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSCollection **collection) {
+	return gsGetCollectionV4_3(store, name, binding, collection);
+}
+
+#else
+
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetCollection(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, GSCollection **collection);
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#endif // not GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV3_3(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV4_3(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists);
 #endif
@@ -5286,8 +5730,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV3_3(
 		information, it uses a temporary memory area which is managed by the
 		specified @ref GSGridStore instance.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] store
@@ -5314,6 +5758,18 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV3_3(
 
 	@ENDL
  */
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetContainerInfo(
+		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
+		GSBool *exists) {
+	return gsGetContainerInfoV4_3(store, name, info, exists);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfoV3_3(
+		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
+		GSBool *exists);
+
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetContainerInfo(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists) {
@@ -5350,7 +5806,15 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfo(
 		GSGridStore *store, const GSChar *name, GSContainerInfo *info,
 		GSBool *exists);
 
-#endif	// not GS_COMPATIBILITY_SUPPORT_1_5
+#endif // not GS_COMPATIBILITY_SUPPORT_1_5
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetTimeSeriesV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSTimeSeries **timeSeries);
+#endif
 
 /*!
 	@JP
@@ -5412,9 +5876,19 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerInfo(
 
 	@ENDL
  */
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetTimeSeries(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, GSTimeSeries **timeSeries) {
+	return gsGetTimeSeriesV4_3(store, name, binding, timeSeries);
+}
+
+#else
+
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetTimeSeries(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, GSTimeSeries **timeSeries);
+
+#endif // not GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_DEPRECATED_FUNC_ENABLED
 GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL gsPutRowByPath(
@@ -5422,7 +5896,15 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL gsPutRowByPath(
 		GSBool *exists));
 #endif
 
-#if GS_COMPATIBILITY_SUPPORT_2_1
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container);
+#endif
+
 /*!
 	@JP
 	@ingroup Group_GSGridStore
@@ -5511,11 +5993,31 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL gsPutRowByPath(
 
 	@ENDL
  */
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutContainer(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container) {
+	return gsPutContainerV4_3(
+			store, name, binding, info, modifiable, container);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_2_1
+
 GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainer(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container);
-#endif	// GS_COMPATIBILITY_SUPPORT_2_1
+
+#endif // GS_COMPATIBILITY_SUPPORT_2_1
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionV4_3(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSCollectionProperties *properties,
+		GSBool modifiable, GSCollection **collection);
+#endif
 
 /*!
 	@JP
@@ -5665,15 +6167,26 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainer(
 
 	@ENDL
  */
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutCollection(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSCollectionProperties *properties,
+		GSBool modifiable, GSCollection **collection) {
+	return gsPutCollectionV4_3(store, name, binding, properties, modifiable, collection);
+}
+
+#else
+
 GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollection(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, const GSCollectionProperties *properties,
 		GSBool modifiable, GSCollection **collection);
 
-#if GS_COMPATIBILITY_SUPPORT_2_0
+#endif // not GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesV2_0(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesV4_3(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, const GSTimeSeriesProperties *properties,
 		GSBool modifiable, GSTimeSeries **timeSeries);
@@ -5817,6 +6330,21 @@ GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutTimeSeries(
 		GSGridStore *store, const GSChar *name,
 		const GSBinding *binding, const GSTimeSeriesProperties *properties,
 		GSBool modifiable, GSTimeSeries **timeSeries) {
+	return gsPutTimeSeriesV4_3(
+			store, name, binding, properties, modifiable, timeSeries);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_2_0
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesV2_0(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSTimeSeriesProperties *properties,
+		GSBool modifiable, GSTimeSeries **timeSeries);
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutTimeSeries(
+		GSGridStore *store, const GSChar *name,
+		const GSBinding *binding, const GSTimeSeriesProperties *properties,
+		GSBool modifiable, GSTimeSeries **timeSeries) {
 	return gsPutTimeSeriesV2_0(
 			store, name, binding, properties, modifiable, timeSeries);
 }
@@ -5859,10 +6387,10 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV3_3(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV4_3(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container);
@@ -5895,7 +6423,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV3_3(
 		と同様の振る舞いとなる。</td></tr>
 		<tr><td>カラムレイアウト</td><td>@c info</td>
 		<td>@ref GSContainer にて規定された制約に合致するよう
-		@ref GSColumnInfo のリストならびにロウキーの有無を設定する。
+		@ref GSColumnInfo のリストならびにロウキーの構成を設定する。
 		ただし現バージョンでは、初期値でのNULL使用有無が設定された
 		@ref GSColumnInfo::options を持つ@ref GSColumnInfo を含めることは
 		できない。</td></tr>
@@ -5968,10 +6496,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV3_3(
 		<tr><td>Container type</td><td>@c info</td>
 		<td>If @ref GS_CONTAINER_COLLECTION is specified, the behavior will be
 		the same as @ref gsPutCollection.
-		If @ref GS_CONTAINER_TIME_SERIES is	specified, the behavior will be
+		If @ref GS_CONTAINER_TIME_SERIES is specified, the behavior will be
 		the same as @ref gsPutTimeSeries.</td></tr>
 		<tr><td>column layout</td><td>@c info</td>
-		<td>Set the @ref GSColumnInfo list and whether there is any Row key
+		<td>Set the @ref GSColumnInfo list and the configuration of the Row key
 		so as to conform to the restrictions stipulated in @ref GSContainer.
 		However, in the current version, it is not allowed that the list
 		includes one or more @ref GSColumnInfo which has option
@@ -6030,6 +6558,21 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV3_3(
 
 	@ENDL
  */
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutContainerGeneral(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container) {
+	return gsPutContainerGeneralV4_3(
+			store, name, info, modifiable, container);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneralV3_3(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container);
+
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutContainerGeneral(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
@@ -6157,10 +6700,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutContainerGeneral(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerGeneral(
 		GSGridStore *store, const GSChar *name, GSContainer **container);
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV3_3(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV4_3(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSContainer **container);
@@ -6235,6 +6778,21 @@ GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutCollectionGeneral(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSCollection **collection) {
+	return gsPutCollectionGeneralV4_3(
+			store, name, info, modifiable, collection);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneralV3_3(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSContainer **container);
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutCollectionGeneral(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSCollection **collection) {
 	return gsPutCollectionGeneralV3_3(
 			store, name, info, modifiable, collection);
 }
@@ -6261,7 +6819,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneral(
 		const GSContainerInfo *info,
 		GSBool modifiable, GSCollection **collection);
 
-#endif	// not GS_COMPATIBILITY_SUPPORT_2_1
+#endif // not GS_COMPATIBILITY_SUPPORT_2_1
 
 /*!
 	@JP
@@ -6321,10 +6879,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutCollectionGeneral(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetCollectionGeneral(
 		GSGridStore *store, const GSChar *name, GSCollection **collection);
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV3_3(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV4_3(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
 		GSBool modifiable, GSTimeSeries **timeSeries);
@@ -6395,6 +6953,21 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV3_3(
 
 	@ENDL
  */
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutTimeSeriesGeneral(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSTimeSeries **timeSeries) {
+	return gsPutTimeSeriesGeneralV4_3(
+			store, name, info, modifiable, timeSeries);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutTimeSeriesGeneralV3_3(
+		GSGridStore *store, const GSChar *name,
+		const GSContainerInfo *info,
+		GSBool modifiable, GSTimeSeries **timeSeries);
+
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsPutTimeSeriesGeneral(
 		GSGridStore *store, const GSChar *name,
 		const GSContainerInfo *info,
@@ -6558,10 +7131,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetTimeSeriesGeneral(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsDropContainer(
 		GSGridStore *store, const GSChar *name);
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStoreV3_3(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStoreV4_3(
 		GSGridStore *store, const GSContainerInfo *info, GSRow **row);
 #endif
 
@@ -6571,7 +7144,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStoreV3_3(
 	@brief @ref GSContainerInfo を指定して、@ref GSRow を新規作成します。
 	@par
 		@ref GSContainer にて規定された制約に合致するよう、
-		@ref GSColumnInfo のリストならびにロウキーの有無を含む
+		@ref GSColumnInfo のリストならびにロウキーの構成を含む
 		カラムレイアウトを@ref GSContainerInfo に指定します。
 	@par
 		また、コンテナ種別を@ref GSContainerInfo に含めることで、
@@ -6625,9 +7198,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStoreV3_3(
 	@ingroup Group_GSGridStore
 	@brief Creates a new @ref GSRow with the specified @ref GSContainerInfo.
 	@par
-		Include the @ref GSColumnInfo list and whether there is any Row key
-		so as to conform to the restrictions stipulated in @ref GSContainer.
-		Specify the column layout in @ref GSContainerInfo.
+		In @ref GSContainerInfo, specify the column layout that includes the
+		@ref GSColumnInfo list and the configuration of the Row key so as to
+		conform to the restrictions stipulated in @ref GSContainer.
 	@par
 		In addition, by including the Container type in @ref GSContainerInfo, it
 		can be verified whether the restrictions unique to a specific Container
@@ -6687,6 +7260,16 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStoreV3_3(
  */
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsCreateRowByStore(
 		GSGridStore *store, const GSContainerInfo *info, GSRow **row) {
+	return gsCreateRowByStoreV4_3(store, info, row);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStoreV3_3(
+		GSGridStore *store, const GSContainerInfo *info, GSRow **row);
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsCreateRowByStore(
+		GSGridStore *store, const GSContainerInfo *info, GSRow **row) {
 	return gsCreateRowByStoreV3_3(store, info, row);
 }
 
@@ -6695,7 +7278,62 @@ GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsCreateRowByStore(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByStore(
 		GSGridStore *store, const GSContainerInfo *info, GSRow **row);
 
-#endif
+#endif // not GS_COMPATIBILITY_SUPPORT_3_5
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSGridStore
+	@brief @ref GSContainerInfo を指定して、@ref GSRowKey を新規作成します。
+	@par
+		ロウキー以外のカラムに関する情報は無視されます。それ以外は
+		@ref gsCreateRowByStore と同様に振る舞います。
+	@param [in] store
+		処理対象の@ref GSGridStore
+	@param [in] info
+		カラムレイアウトを含むコンテナ情報。その他の内容は無視される
+	@param [out] key
+		@ref GSRowKey インスタンスを格納するためのポインタ変数へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、このポインタ値が
+		@c NULL 以外の値であれば、対応するポインタ変数に@c NULL が格納されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- ロウキーを持たないコンテナ情報が指定された場合
+		- コンテナ種別もしくはカラムレイアウトの制約に合致しない場合
+		- 引数に@c NULL が指定された場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSGridStore
+	@brief Newly creates @ref GSRowKey with @ref GSContainerInfo specified.
+	@par
+		Information concerning columns other than Row keys is ignored.
+		Otherwise, it behaves the same as @ref gsCreateRowByStore.
+	@param [in] store
+		@ref GSGridStore to be processed
+	@param [in] info
+		Container information including the column layout. Other contents are
+		ignored
+	@param [out] key
+		The pointer to a pointer variable for storing the @ref GSRowKey
+		instance.
+		If non-@ref GS_RESULT_OK is returned as the execution result, @c NULL
+		is stored in the corresponding pointer variable so long as the pointer
+		is @c non-NULL.
+	@return The return code of the execution result. In the following cases,
+		it returns the value other than @ref GS_RESULT_OK :
+		- if the Container information without a Row key is specified.
+		- if constraints regarding the Container type or the column layout are
+			not satisfied
+		- when @c NULL is specified as an argument.
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowKeyByStore(
+		GSGridStore *store, const GSContainerInfo *info, GSRowKey **key);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
 
 /*!
 	@JP
@@ -7198,8 +7836,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutMultipleContainerRows(
 		in the entry column, it uses a temporary memory area which is managed by
 		the specified @ref GSGridStore instance.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] store
@@ -7301,11 +7939,14 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionController(
 	@ingroup Group_GSGridStore
 	@brief 指定の@ref GSType をロウキーの型とする合致条件を作成します。
 	@par
-		合致条件の評価対象とするコンテナは、ロウキーを持ち、かつ、ロウキーの型が指定の
-		@ref GSType と同一の型でなければなりません。
+		合致条件の評価対象とするコンテナは、単一カラムからなるロウキーを持ち、
+		かつ、そのロウキーの型は指定の@ref GSType と同一の型でなければなりません。
 	@par
 		設定可能なロウキーの型は、@ref GSContainer から派生した個別の
 		コンテナ型にて許容されている型のみです。
+	@par
+		複合ロウキーなどロウキーを構成するカラムの個数によらずに合致条件を
+		作成するには、@ref gsCreateRowKeyPredicateGeneral を使用します。
 	@param [in] store
 		処理対象の@ref GSGridStore
 	@param [in] keyType
@@ -7325,11 +7966,16 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionController(
 	@brief Creates a matching condition with the specified @ref GSType as the
 		type of Row key.
 	@par
-		The target Container must have a Row key, and it must be the same type
-		as the specified @ref GSType.
+		The container to be evaluated by the match condition must have a
+		Row key composed of single columns, and the type of that Row key
+		must be the same as that of the specified @ref GSType.
 	@par
 		The type of Row key that can be set must be the same type that is
 		allowed by the individual Container type derived from @ref GSContainer.
+	@par
+		To create a match condition regardless of the number of columns
+		composing a Row key, including a composite Row key, use
+		@ref gsCreateRowKeyPredicateGeneral.
 	@param [in] store
 		@ref GSGridStore to be processed
 	@param [in] keyType
@@ -7351,7 +7997,72 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionController(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowKeyPredicate(
 		GSGridStore *store, GSType keyType, GSRowKeyPredicate **predicate);
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSGridStore
+	@brief 指定の@ref GSContainerInfo のロウキーに関するカラム定義に基づく、
+		合致条件を作成します。
+	@par
+		合致条件の評価対象とするコンテナは、ロウキーを持ち、かつ、指定の
+		@ref GSContainerInfo のロウキーに関するカラム定義と対応づく
+		必要があります。ロウキー以外のカラム定義については対応関係の
+		判定に用いられません。
+	@param [in] store
+		処理対象の@ref GSGridStore
+	@param [in] info
+		合致条件の判定対象とするロウキーのカラムレイアウトを含む、コンテナ情報。
+		その他の内容は無視される
+	@param [out] predicate
+		@ref GSRowKeyPredicate インスタンスを格納するためのポインタ変数へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、このポインタ値が
+		@c NULL 以外の値であれば、対応するポインタ変数に@c NULL が格納されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 指定の情報がロウキーを含まないか、ロウキーとして常にサポート外となる
+			場合
+		- ポインタ型引数に@c NULL が指定された場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSGridStore
+	@brief Creates a match condition based on the column definition for the
+		Row key in the specified @ref GSContainerInfo.
+	@par
+		The container to be evaluated by the match condition must have a
+		Row key and correspond to the column definition for the Row key
+		specified in @ref GSContainerInfo. The column definition other than for
+		a Row key will not be used for determining the correspondence.
+	@param [in] store
+		@ref GSGridStore to be processed
+	@param [in] info
+		Container information including the column layout of the Row key to be
+		evaluated by the match condition.
+		Other contents are ignored
+	@param [out] predicate
+		the pointer to a pointer variable to store the @ref GSRowKeyPredicate
+		instance.
+		If non-@ref GS_RESULT_OK is returned as the execution result, @c NULL
+		is stored in the corresponding pointer variable so long as the pointer
+		is @c non-NULL.
+
+	@return The return code of the execution result. In the following cases,
+		it returns the value other than @ref GS_RESULT_OK :
+		- The specified information does not contain a Row key, or the Row key
+			contained in the specified information remains unsupported as a
+			Row key.
+		- if @c NULL is specified to a pointer type argument
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowKeyPredicateGeneral(
+		GSGridStore *store, const GSContainerInfo *info,
+		GSRowKeyPredicate **predicate);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
 
 //
 // Container API
@@ -7541,7 +8252,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 	GSResult GS_API_CALL gsCreateEventNotification(
 	GSContainer *container, const GSChar *url));
 
-#endif	// GS_DEPRECATED_FUNC_ENABLED
+#endif // GS_DEPRECATED_FUNC_ENABLED
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 /*!
@@ -7844,7 +8555,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateTrigger(
 		GSContainer *container, const GSTriggerInfo *info);
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
 
 /*!
 	@JP
@@ -7896,16 +8607,22 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndex(
 		GSContainer *container,
 		const GSChar *columnName, GSIndexTypeFlags flags);
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndexDetailV4_3(
+		GSContainer *container, const GSIndexInfo *info);
+#endif
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief @ref GSIndexInfo で設定されている内容に従い、索引を作成します。
 	@par
-		作成対象の索引のカラムについては、カラム名またはカラム番号の
+		作成対象の索引のカラムについては、カラム名列またはカラム番号列の
 		少なくとも一方が設定されており、かつ、対応するコンテナにおいて実在する
-		ものが設定されている必要があります。カラム名とカラム番号が共に設定
-		されていた場合、対応するカラムが互いに一致しなければなりません。
+		ものが設定されている必要があります。カラム名列とカラム番号列が共に設定
+		されている場合、対応するカラム列が順序を含め一致している必要があります。
 	@par
 		索引種別が一つも設定されていないか@ref GS_INDEX_FLAG_DEFAULT が設定
 		されていた場合、後述の基準に従い、デフォルト種別の索引が選択されます。
@@ -7933,8 +8650,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndex(
 		現バージョンでは、少なくとも@ref GSContainer を通じて作成された
 		索引において、次の条件を満たす場合に索引名を除いて同一設定の
 		索引であるとみなされます。
-		- 索引対象のカラムが一致すること。カラム名、カラム番号といった、
-			カラムの指定方法の違いは無視される
+		- 索引対象のカラム列が順序を含め一致すること。カラム名列、カラム
+			番号列、単一カラム指定、といった、カラム列の指定方法の違いは
+			無視される
 		- 索引種別が一致すること。デフォルト指定の有無といった索引種別の
 			指定方法の違いは無視される
 	@par
@@ -7952,6 +8670,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndex(
 		配列型 | (なし) | (なし)
 	@par
 		時系列のロウキー(TIMESTAMP型)には索引を設定できません。
+		また、カラム列を構成するカラム型によってデフォルト種別が異なる場合
+		には、選択できません。
 	@par
 		この@ref GSContainer インスタンスが未コミットのトランザクションを
 		保持していた場合、コミットしてから作成を行います。処理対象のコンテナ
@@ -7982,12 +8702,14 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndex(
 	@since 3.5
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Create index according to the contents set in @ref GSIndexInfo.
 	@par
-		For the column of the index to be created, at least one of the column name
-		and column number must be set, and the actual container must be set in the
-		corresponding container.If both column name and column number are set,
-		the corresponding columns must match each other.
+		For the column of the index to be created, at least one of the column
+		name sequence and column number sequence must be set, and the actual
+		column in the corresponding container must be set. If both the column
+		name sequence and the column number sequence are set, the corresponding
+		column sequences must match including their order.
 	@par
 		If no index type is set but @ref GS_INDEX_FLAG_DEFAULT is set, the default
 		type index is selected according to the criteria described below.
@@ -8015,8 +8737,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndex(
 	@par
 		In the current version, the index created using @ref GSContainer is considered to
 		be identical if the following conditions are satisfied.
-		- The columns to be indexed are matching. The differences in column specification
-		methods, such as column names and column numbers are not taken into consideration.
+		- The column sequence to be indexed must match, including the order.
+			The differences in column sequence specification methods, such as
+			column name sequences, column number sequences, and single column
+			specification, are ignored.
 		- Index types are matching. Differences in the specification method of index type
 		such as existence of default designation are not taken into consideration.
 	@par
@@ -8034,6 +8758,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndex(
 		ARRAY | (None) | (None)
 	@par
 		Index cannot be set for time-series row keys (TIMESTAMP).
+		It cannot be selected when the default type differs depending on the
+		column type configuring the column sequence.
 	@par
 		If this @ref GSContainer instance holds an uncommitted transaction, it will be created
 		after the commit. If there are other transactions being executed in the container, wait
@@ -8062,10 +8788,17 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndex(
 
 	@ENDL
 */
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsCreateIndexDetail(
+		GSContainer *container, const GSIndexInfo *info) {
+	return gsCreateIndexDetailV4_3(container, info);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndexDetail(
 		GSContainer *container, const GSIndexInfo *info);
 
-#endif	// GS_COMPATIBILITY_SUPPORT_3_5
+#endif // GS_COMPATIBILITY_SUPPORT_3_5
 
 #if GS_DEPRECATED_FUNC_ENABLED
 /*!
@@ -8109,7 +8842,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 	GSResult GS_API_CALL gsDropEventNotification(
 	GSContainer *container, const GSChar *url));
 
-#endif	// GS_DEPRECATED_FUNC_ENABLED
+#endif // GS_DEPRECATED_FUNC_ENABLED
 
 #if GS_COMPATIBILITY_SUPPORT_1_5
 /*!
@@ -8149,7 +8882,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsDropTrigger(
 		GSContainer *container, const GSChar *name);
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
 
 /*!
 	@JP
@@ -8204,23 +8937,30 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDropIndex(
 		GSContainer *container,
 		const GSChar *columnName, GSIndexTypeFlags flags);
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSResult GS_API_CALL gsDropIndexDetailV4_3(
+		GSContainer *container, const GSIndexInfo *info);
+#endif
 
 /*!
 	@JP
+	@ingroup Group_GSContainer
 	@brief @ref GSIndexInfo で設定されている内容に一致する、すべての索引を
 		削除します。
 	@par
 		@ref GSIndexInfo の設定内容は、削除対象の索引を絞り込む条件として
-		使用されます。絞り込み条件は、カラム、索引種別、索引名の3つに分類
+		使用されます。絞り込み条件は、カラム列、索引種別、索引名の3つに分類
 		されます。それぞれ設定するかどうかは任意です。いずれも設定されていない
 		場合は、作成済みのすべての索引が削除されます。
 	@par
-		カラム名 またはカラム番号が設定されている場合、対応するコンテナにおいて
-		実在するものである必要があります。カラム名とカラム番号が共に設定されている
-		場合、対応するカラムが互いに一致している必要があります。カラム名ならびに
-		カラム番号が共に設定されていない場合、他の絞り込み条件(索引種別、
-		索引名)を満たす任意のカラムに対する索引が削除対象となります。
+		カラム名列またはカラム番号列が設定されている場合、対応するコンテナ
+		において実在するものである必要があります。カラム名列とカラム番号列が共に
+		設定されている場合、対応するカラムが互いに一致している必要があります。
+		カラム名列ならびにカラム番号列が共に設定されていない場合、他の絞り込み
+		条件(索引種別、索引名)を満たす任意のカラム列に対する索引が削除対象
+		となります。
 	@par
 		索引種別が設定されている場合、指定の種別の索引のみが削除対象と
 		なります。@ref GS_INDEX_FLAG_DEFAULT が設定されている場合、
@@ -8231,12 +8971,12 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDropIndex(
 		できることや、エラーが生じるとその状態まま削除操作が終了することが
 		あります。索引をサポートしていないカラムや指定の種別の索引をサポート
 		していないカラムについては、削除対象にはなりません。索引種別が設定されて
-		いない場合、他の絞り込み条件(カラム、索引名)を満たす任意の種別の索引が
+		いない場合、他の絞り込み条件(カラム列、索引名)を満たす任意の種別の索引が
 		削除対象となります。
 	@par
 		索引名が設定されている場合、指定の名前の索引のみが削除対象と
 		なります。索引名の同一性は、@ref gsCreateIndexDetail の基準に
-		従います。索引名が設定されていない場合、他の絞り込み条件(カラム、
+		従います。索引名が設定されていない場合、他の絞り込み条件(カラム列、
 		索引種別)を満たす、任意の名前の索引ならびに名前のない索引が削除対象
 		となります。
 	@par
@@ -8262,18 +9002,22 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDropIndex(
 	@since 3.5
 
 	@EN
+	@ingroup Group_GSContainer
 	@brief Delete all indexes that match the contents set in @ref GSIndexInfo
 	@par
 		The contents of @ref GSIndexInfo are used as a condition to narrow down
-		the index to be deleted. Filtering conditions are classified into three categories:
-		column, index type, and index name. It is optional to set these categories.
+		the index to be deleted. The filtering conditions are classified into
+		three categories: column sequence, index type, and index name. It is
+		optional to set these categories.
 		If none of them are set, all created indexes will be deleted.
 	@par
-		When setting column name or column number, it must be done within the
-		corresponding container. When both column name and column number are set,
-		the corresponding columns must match each other. If neither the column name
-		nor the column number are set, the index for any column that meets other
-		narrowing conditions (index type, index name) will be deleted.
+		When the column name sequence or column number sequence is set, they
+		must exist in the corresponding container. When both the column name
+		sequence and the column number sequence are set, the corresponding
+		columns must match each other. If neither the column name sequence nor
+		the column number sequence is set, the index for any column sequence
+		that satisfies other refinement conditions (index type, index name)
+		will be deleted.
 	@par
 		When index type is set, only the index of the specified type will be deleted.
 		If @ref GS_INDEX_FLAG_DEFAULT is set, the default type index is selected
@@ -8288,8 +9032,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDropIndex(
 	@par
 		If an index name is set, only the index with the specified name will be deleted.
 		The identity of the index name follows the criteria of @ref gsCreateIndexDetail.
-		If an index name is not set, an index with an arbitrary name and an unnamed index
-		satisfying other refinement conditions (column, index type) will be deleted.
+		If an index name is not set, an index with an arbitrary name and
+		an unnamed index that satisfies other refinement conditions
+		(column sequence, index type) will be deleted.
 	@par
 		If there is no index to be deleted, the index will not be deleted。
 	@par
@@ -8312,10 +9057,17 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDropIndex(
 
 	@ENDL
 */
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsDropIndexDetail(
+		GSContainer *container, const GSIndexInfo *info) {
+	return gsDropIndexDetailV4_3(container, info);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
 GS_DLL_PUBLIC GSResult GS_API_CALL gsDropIndexDetail(
 		GSContainer *container, const GSIndexInfo *info);
 
-#endif	// GS_COMPATIBILITY_SUPPORT_3_5
+#endif // GS_COMPATIBILITY_SUPPORT_3_5
 
 /*!
 	@JP
@@ -8389,6 +9141,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsFlush(GSContainer *container);
 		INTEGER | int32_t*
 		LONG | int64_t*
 		TIMESTAMP | GSTimeStamp*
+		複合ロウキー | GSRowKey*
 	@param [out] rowObj
 		取得対象のロウの内容を格納するためのロウオブジェクト。
 		取得対象のロウが存在しない場合、ロウオブジェクトの内容は何も変更されません。
@@ -8426,8 +9179,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsFlush(GSContainer *container);
 		@ref GSGridStore instance corresponding to the specified
 		@ref GSContainer.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] container
@@ -8442,6 +9195,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsFlush(GSContainer *container);
 		INTEGER | int32_t*
 		LONG | int64_t*
 		TIMESTAMP | GSTimeStamp*
+		composite Row key | GSRowKey*
 	@param [out] rowObj
 		The Row object to store the contents of target Row to be obtained.
 		Nothing will be changed in the contents of Row object if the target Row
@@ -8698,7 +9452,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRow(
 		process will complete successfully without creating a new Row.
 	@param [out] exists
 		In the current version, @ref GS_FALSE is always stored unless the
-		pointer value is not @c NULL.
+		pointer value is @c NULL.
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
 		- When an operation violating the restrictions unique to a specific
@@ -8738,7 +9492,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 #define gsPutMultipleRows(container, rowObjs, rowCount, exists) \
 		gsPutMultipleRows(container, rowObjs, rowCount, exists)
 #endif
-#endif	// not GS_INTERNAL_DEFINITION_VISIBLE
+#endif // not GS_INTERNAL_DEFINITION_VISIBLE
 
 /*!
 	@JP
@@ -8960,7 +9714,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetContainerType(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByContainer(
 		GSContainer *container, GSRow **row);
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
 
 //
 // Container API (Transaction)
@@ -8974,7 +9728,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByContainer(
 	@param [in] container
 		処理対象の@ref GSContainer
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
-		- 自動コミットモードでないにもかかわらず呼び出した場合
+		- 自動コミットモードであるにもかかわらず呼び出した場合
 		- この処理またはトランザクションのタイムアウト、
 			指定のコンテナの削除、接続障害が発生した場合
 		- 引数に@c NULL が指定された場合
@@ -8987,7 +9741,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByContainer(
 		@ref GSContainer to be processed
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
-		- if called not in the auto commit mode
+		- if called in the auto commit mode
 		- if a timeout occurs during this operation or the transaction,
 			a specified Container is deleted, a connection failure occurs
 		- if @c NULL is specified in the argument(s)
@@ -9004,7 +9758,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAbort(GSContainer *container);
 	@param [in] container
 		処理対象の@ref GSContainer
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
-		- 自動コミットモードでないにもかかわらず呼び出した場合
+		- 自動コミットモードであるにもかかわらず呼び出した場合
 		- この処理またはトランザクションのタイムアウト、
 			指定のコンテナの削除、接続障害が発生した場合
 		- 引数に@c NULL が指定された場合
@@ -9017,7 +9771,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAbort(GSContainer *container);
 		@ref GSContainer to be processed
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
-		- if called not in the auto commit mode
+		- if called in the auto commit mode
 		- if a timeout occurs during this operation or the transaction,
 			a specified Container is deleted, a connection failure occurs
 		- if @c NULL is specified in the argument(s)
@@ -9110,8 +9864,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCommit(GSContainer *container);
 		@ref GSGridStore instance corresponding to the specified
 		@ref GSContainer.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] container
@@ -9257,7 +10011,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetAutoCommit(
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- ロウキーに対応するINTEGER型のカラムが存在しない場合
-		- 自動コミットモードでないにもかかわらず、更新用ロックを要求しようとした場合
+		- 自動コミットモードであるにもかかわらず、更新用ロックを要求しようとした場合
 		- この処理またはトランザクションのタイムアウト、
 			指定のコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
 		- サポート範囲外の値がキーとして設定されていた場合
@@ -9296,8 +10050,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetAutoCommit(
 		@ref GSGridStore instance corresponding to the specified
 		@ref GSContainer.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] container
@@ -9382,7 +10136,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByInteger(
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- ロウキーに対応するLONG型のカラムが存在しない場合
-		- 自動コミットモードでないにもかかわらず、更新用ロックを要求しようとした場合
+		- 自動コミットモードであるにもかかわらず、更新用ロックを要求しようとした場合
 		- この処理またはトランザクションのタイムアウト、
 			指定のコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
 		- サポート範囲外の値がキーとして設定されていた場合
@@ -9420,8 +10174,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByInteger(
 		@ref GSGridStore instance corresponding to the specified
 		@ref GSContainer.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] container
@@ -9506,7 +10260,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByLong(
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- ロウキーに対応するTIMESTAMP型のカラムが存在しない場合
-		- 自動コミットモードでないにもかかわらず、更新用ロックを要求しようとした場合
+		- 自動コミットモードであるにもかかわらず、更新用ロックを要求しようとした場合
 		- この処理またはトランザクションのタイムアウト、
 			指定のコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
 		- サポート範囲外の値がキーとして設定されていた場合
@@ -9545,8 +10299,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByLong(
 		@ref GSGridStore instance corresponding to the specified
 		@ref GSContainer.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] container
@@ -9631,7 +10385,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByTimestamp(
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- ロウキーに対応するSTRING型のカラムが存在しない場合
-		- 自動コミットモードでないにもかかわらず、更新用ロックを要求しようとした場合
+		- 自動コミットモードであるにもかかわらず、更新用ロックを要求しようとした場合
 		- この処理またはトランザクションのタイムアウト、
 			指定のコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
 		- サポート範囲外の値がキーとして設定されていた場合
@@ -9670,8 +10424,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByTimestamp(
 		@ref GSGridStore instance corresponding to the specified
 		@ref GSContainer.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] container
@@ -10363,6 +11117,294 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByTimestamp(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByString(
 		GSContainer *container, const GSChar *key, GSBool *exists);
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSContainer
+	@brief 指定の@ref GSRowKey に対応するロウの内容を@ref GSRow として
+		取得します。
+	@par
+		ロウキーを持つコンテナであれば、ロウキーを構成するカラム数やカラム型に
+		よらず使用できます。@ref gsGetRow とは異なり、指定の@ref GSRow
+		がクローズされるまで各フィールド値にアクセスすることができます。
+	@par
+		手動コミットモードにおいて更新用ロックを要求した場合、
+		トランザクションが終了するかタイムアウトするまで対象ロウのロックを維持します。
+		ロックされたロウに対する他のトランザクションからの更新・削除操作は、
+		このトランザクションが終了するかタイムアウトするまで待機するようになります。
+		対象ロウが削除されたとしても、ロックは維持されます。
+	@par
+		自動コミットモードの場合、更新用ロックを要求できません。
+	@param [in] container
+		処理対象の@ref GSContainer
+	@param [in] keyObj
+		処理対象のロウキー
+	@param [out] rowObj
+		取得対象のロウの内容を格納するためのロウオブジェクト。
+		取得対象のロウが存在しない場合、ロウオブジェクトの内容は何も変更されません。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		ロウオブジェクトのフィールドのうち一部またはすべてが変更されることがあります。
+	@param [in] forUpdate
+		更新用ロックを要求するかどうか
+	@param [out] exists
+		処理対象のロウが存在したかどうかを格納するためのブール型変数へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@ref GS_FALSE が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- ロウキーが存在しない場合
+		- 自動コミットモードであるにもかかわらず、更新用ロックを要求しようとした場合
+		- この処理またはトランザクションのタイムアウト、
+			指定のコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
+		- サポート範囲外の値がキーとして設定されていた場合
+		- @c exists 以外の引数に@c NULL が指定された場合
+	@see gsGetRow
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSContainer
+	@brief Retrieves the content of the Row corresponding to the specified
+		@ref GSRowKey as @ref GSRow.
+	@par
+		It can be used for any container with a Row key regardless of the
+		number and type of the columns configuring a Row key. Unlike
+		@ref gsGetRow, each field value can be accessed until the specified
+		@ref GSRow closes.
+	@par
+		If it requests a lock for update in the manual commit mode, it will
+		hold the lock of the target Row until of a relevant transaction
+		completes or a timeout occurs.
+		The update or deletion operation by any other transaction on
+		the locked Row will wait until the transaction completes or a timeout
+		occurs.
+		The lock will be held even if the target Row is deleted.
+	@par
+		In the auto commit mode, it cannot request a lock for update.
+	@param [in] container
+		@ref GSContainer to be processed
+	@param [in] keyObj
+		Row key to be processed
+	@param [out] rowObj
+		The Row object to store the contents of the target Row to be obtained.
+		The contents of Row object will not be changed so long as the target
+		Row to be obtained does not exist.
+		Some or all fields in the Row object may be changed if
+		non-@ref GS_RESULT_OK is returned as the execution result.
+	@param [in] forUpdate
+		indicates whether it requests a lock for update or not
+	@param [out] exists
+		the pointer to a BOOL-type variable to store the value which can be
+		used to identify whether the target Row exists or not.
+		@ref GS_FALSE is stored if non-@ref GS_RESULT_OK is returned as the
+		execution result.
+		If the pointer is @c NULL, this storing process will be skipped.
+	@return The return code of the execution result. In the following cases,
+		it returns the value other than @ref GS_RESULT_OK :
+		- if a Row key does not exist.
+		- if it requests a lock for update in the auto commit mode
+		- if a timeout occurs during this operation or the transaction,
+			a specified Container is deleted, its schema is changed, or
+			a connection failure occurs
+		- if an unsupported value is specified as the Row key
+		- if @c NULL is specified to arguments other than @c "exists";
+	@see gsGetRow
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowGeneral(
+		GSContainer *container, GSRowKey *keyObj, GSRow *rowObj,
+		GSBool forUpdate, GSBool *exists);
+
+/*!
+	@JP
+	@ingroup Group_GSContainer
+	@brief 必要に応じ別途ロウキーを指定して、ロウを新規作成または更新します。
+	@par
+		ロウキーを構成するカラム数やカラム型によらず使用できます。
+	@par
+		ロウキーに対応するカラムが存在する場合、ロウキーとコンテナの状態を
+		基に、ロウを新規作成するか、更新するかを決定します。この際、対応する
+		ロウがコンテナ内に存在しない場合は新規作成、存在する場合は更新します。
+		ロウオブジェクトとは別にロウキーを指定した場合、ロウオブジェクト内の
+		ロウキーより優先して使用されます。
+	@par
+		ロウキーに対応するカラムを持たない場合、常に新規のロウを作成します。
+		この場合、別途指定するロウキーには、常に@c NULL を指定します。
+	@par
+		ただし、コンテナの種別ならびに設定によっては、@ref gsPutRow と同様の
+		制限が設けられています。
+	@par
+		手動コミットモードの場合、対象のロウはロックされます。
+	@param [in] container
+		処理対象の@ref GSContainer
+	@param [in] keyObj
+		処理対象のロウキー。
+		ロウキーに対応するカラムが存在しない場合、もしくは指定のロウオブジェクト内の
+		キーを用いる場合は@c NULL を指定します。
+	@param [in] rowObj
+		新規作成または更新するロウの内容と対応するロウオブジェクト
+	@param [out] exists
+		処理対象のロウが存在したかどうかを格納するためのブール型変数へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@ref GS_FALSE が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- ロウキーに対応するカラムが存在しないにもかかわらず、キーが指定された場合
+		- 特定コンテナ固有の制限に反する操作を行った場合
+		- この処理またはトランザクションのタイムアウト、
+			指定のコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
+		- サポート範囲外の値がキーまたはロウオブジェクトに含まれていた場合
+		- @c exists 以外の引数に@c NULL が指定された場合。
+			また、指定のロウオブジェクト内のロウキー以外のフィールドについて、
+			文字列など可変長サイズのデータへのポインタ値に
+			@c NULL が含まれていた場合。もしくは、ロウキーに対応するカラムが
+			存在し@c key が@c NULL であるにもかかわらず、ロウキーの フィールドに
+			同様に@c NULL が含まれていた場合
+	@see gsPutRow
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSContainer
+	@brief Newly creates or updates a Row by specifying the Row key elsewhere
+		as needed.
+	@par
+		It can be used regardless of the number and type of columns
+		configuring a Row key.
+	@par
+		If a Column exists which corresponds to the specified Row key,
+		it determines whether to newly create or update a Row, based on the
+		Row key and the state of the Container. If there is no corresponding
+		Row in the Container, it determines to newly create a Row; otherwise,
+		it updates a relevant Row.
+		If a Row key is specified besides a Row object, the specified Row key
+		is used in preference to the Row key in the Row object.
+	@par
+		If no Column exists which corresponds to the specified Row key,
+		it always creates a new Row.
+		In this case, @c NULL should always be specified to the Row key to be
+		specified elsewhere.
+	@par
+		However, @ref gsPutRowGeneral has the same restrictions as
+		@ref gsPutRow depending on the type of Container and its settings.
+	@par
+		In the manual commit mode, the target Row is locked.
+	@param [in] container
+		@ref GSContainer to be processed
+	@param [in] keyObj
+		Row key to be processed.
+		Specify @c NULL if a column corresponding to the Row key does not
+		exist, or if the key in the specified Row object is used.
+	@param [in] rowObj
+		A Row object representing the content of a Row to be newly created or
+		updated.
+	@param [out] exists
+		the pointer to a BOOL-type variable to store the value which can be
+		used to identify whether the target Row exists or not.
+		@ref GS_FALSE is stored if non-@ref GS_RESULT_OK is returned as the
+		execution result.
+		If the pointer is @c NULL, this storing process will be skipped.
+	@return The return code of the execution result. In the following cases,
+		it returns the value other than @ref GS_RESULT_OK :
+		- if a Row key is specified even though no Column exists which
+			corresponds to the key
+		- if an operation has been performed in violation of the restrictions
+			specific to a particular Container
+		- if a timeout occurs during this operation or the transaction,
+			a specified Container is deleted, its schema is changed, or
+			a connection failure occurs
+		- if an unsupported value is included in the Row key or the Row object
+		- if @c NULL is specified to arguments other than @c "exists";
+			or if in the fields other than Row key in the specified Row object,
+			@c NULL is included in the pointer to the variable-length data
+			such as strings. or even though the column corresponding to the
+			Row key exists and @c "key" is @c NULL, @c NULL is included in
+			the field of the Row key as well.
+	@see gsPutRow
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRowGeneral(
+		GSContainer *container, GSRowKey *keyObj, GSRow *rowObj,
+		GSBool *exists);
+
+/*!
+	@JP
+	@ingroup Group_GSContainer
+	@brief 指定のロウキーに対応するロウを削除します。
+	@par
+		ロウキーを持つコンテナであれば、ロウキーを構成するカラム数やカラム型に
+		よらず使用できます。対応するロウが存在しない場合は何も変更しません。
+	@par
+		ただし、コンテナの種別ならびに設定によっては、制限が設けられています。
+		圧縮オプションが設定された状態の時系列に対しては使用できません。
+	@par
+		手動コミットモードの場合、対象のロウはロックされます。
+	@param [in] container
+		処理対象の@ref GSContainer
+	@param [in] keyObj
+		処理対象のロウキー
+	@param [out] exists
+		処理対象のロウが存在したかどうかを格納するためのブール型変数へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@ref GS_FALSE が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- ロウキーに対応するカラムが存在しない場合
+		- 特定コンテナ固有の制限に反する操作を行った場合
+		- この処理またはトランザクションのタイムアウト、
+			指定のコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
+		- サポート範囲外の値がキーとして指定された場合
+		- @c exists 以外の引数に@c NULL が指定された場合。
+			また、@c key に対応する文字列キーのポインタ値が@c NULL の場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSContainer
+	@brief Deletes the Row corresponding to the specified Row key.
+	@par
+		It can be used for any container with a Row key regardless of the
+		number and type of the columns configuring a Row key. If no
+		corresponding Row exists, nothing is changed.
+	@par
+		However, there are some restrictions depending on the type of the
+		Container and its settings. It cannot be used to the TimeSeries whose
+		compression option is enabled.
+	@par
+		In the manual commit mode, the target Row is locked.
+	@param [in] container
+		@ref GSContainer to be processed
+	@param [in] keyObj
+		Row key to be processed
+	@param [out] exists
+		the pointer to a BOOL-type variable to store the value which can be
+		used to identify whether the target Row exists or not.
+		@ref GS_FALSE is stored if non-@ref GS_RESULT_OK is returned as the
+		execution result.
+		If the pointer is @c NULL, this storing process will be skipped.
+	@return The return code of the execution result. In the following cases,
+		it returns the value other than @ref GS_RESULT_OK :
+		- if no column exists that corresponds to the Row key exists
+		- if an operation has been performed in violation of the restrictions
+			specific to a particular Container
+		- if a timeout occurs during this operation or the transaction,
+			a specified Container is deleted, its schema is changed, or
+			a connection failure occurs
+		- if an unsupported value is specified as the Row key
+		- if @c NULL is specified to arguments other than @c "exists";
+			or if @c NULL is specified to a pointer of the string key which
+			corresponds to @c "key"
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowGeneral(
+		GSContainer *container, GSRowKey *keyObj, GSBool *exists);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
 //
 // Collection API
 //
@@ -10728,8 +11770,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAppendTimeSeriesRow(
 		@ref GSGridStore instance corresponding to the specified
 		@ref GSTimeSeries.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] timeSeries
@@ -10842,8 +11884,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByBaseTime(
 		@ref GSGridStore instance corresponding to the specified
 		@ref GSTimeSeries.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] timeSeries
@@ -11147,7 +12189,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL
 				timeSeries, start, end, columnSet, columnCount, \
 				mode, interval, intervalUnit, query)
 #endif
-#endif	// not GS_INTERNAL_DEFINITION_VISIBLE
+#endif // not GS_INTERNAL_DEFINITION_VISIBLE
 
 //
 // Row API
@@ -11183,10 +12225,10 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(GSResult GS_API_CALL
  */
 GS_DLL_PUBLIC void GS_API_CALL gsCloseRow(GSRow **row);
 
-#if GS_COMPATIBILITY_SUPPORT_3_5
+#if GS_COMPATIBILITY_SUPPORT_4_3
 
 #if GS_INTERNAL_DEFINITION_VISIBLE
-GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV3_3(
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV4_3(
 		GSRow *row, GSContainerInfo *schemaInfo);
 #endif
 
@@ -11231,8 +12273,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV3_3(
 		specified @ref GSGridStore instance corresponding to the specified
 		@ref GSRow.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] row
@@ -11248,6 +12290,16 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV3_3(
 
 	@ENDL
  */
+
+GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetRowSchema(
+		GSRow *row, GSContainerInfo *schemaInfo) {
+	return gsGetRowSchemaV4_3(row, schemaInfo);
+}
+
+#elif GS_COMPATIBILITY_SUPPORT_3_5
+
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchemaV3_3(
+		GSRow *row, GSContainerInfo *schemaInfo);
 
 GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetRowSchema(
 		GSRow *row, GSContainerInfo *schemaInfo) {
@@ -11269,7 +12321,7 @@ GS_STATIC_HEADER_FUNC_SPECIFIER GSResult gsGetRowSchema(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSchema(
 		GSRow *row, GSContainerInfo *schemaInfo);
 
-#endif	// not GS_COMPATIBILITY_SUPPORT_2_1
+#endif // not GS_COMPATIBILITY_SUPPORT_2_1
 
 /*!
 	@JP
@@ -11374,8 +12426,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldGeneral(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] row
@@ -11408,6 +12460,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldGeneral(
 
 /*!
 	@JP
+	@ingroup Group_GSRow
 	@brief 指定のフィールドにNULLを設定します。
 	@param [in] row
 		処理対象の@ref GSRow
@@ -11421,6 +12474,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldGeneral(
 	@since 3.5
 
 	@EN
+	@ingroup Group_GSRow
 	@brief Sets NULL to the specified field.
 	@param [in] row
 		@ref GSRow to be processed
@@ -11441,6 +12495,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldNull(
 
 /*!
 	@JP
+	@ingroup Group_GSRow
 	@brief 指定のフィールドにNULLが設定されているかどうかを返します。
 	@par
 		NOT NULL制約の設定されたカラムが指定された場合、常に@ref GS_FALSE
@@ -11458,11 +12513,12 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldNull(
 	@since 3.5
 
 	@EN
+	@ingroup Group_GSRow
 	@brief Returns whether the specified field is set to NULL.
 	@par
 		Whenever a Column with a NOT NULL constraint is specified,
 		it always returns @ref GS_FALSE.
-@param [in] row
+	@param [in] row
 		@ref GSRow to be processed
 	@param [in] column
 		the Column number of the target field, from @c 0 to number of Columns
@@ -11482,7 +12538,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldNull(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldNull(
 		GSRow *row, int32_t column, GSBool *nullValue);
 
-#endif	// GS_COMPATIBILITY_SUPPORT_3_5
+#endif // GS_COMPATIBILITY_SUPPORT_3_5
 
 /*!
 	@JP
@@ -11556,8 +12612,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByString(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] row
@@ -12305,8 +13361,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByGeometry(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] row
@@ -12402,8 +13458,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByBlob(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] row
@@ -12511,8 +13567,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByStringArray(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] row
@@ -12625,8 +13681,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByBoolArray(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] row
@@ -12739,8 +13795,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByByteArray(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] row
@@ -12853,8 +13909,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByShortArray(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] row
@@ -12967,8 +14023,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByIntegerArray(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] row
@@ -13081,8 +14137,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByLongArray(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] row
@@ -13195,8 +14251,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByFloatArray(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] row
@@ -13309,8 +14365,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByDoubleArray(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] row
@@ -13423,8 +14479,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByTimestampArray(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRow.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] row
@@ -13455,7 +14511,90 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldAsTimestampArray(
 		GSRow *row, int32_t column, const GSTimestamp **fieldValue,
 		size_t *size);
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSRow
+	@brief 同一のフィールド値からなる新たな@ref GSRow インスタンスを作成します。
+	@param [in] row
+		作成元とする@ref GSRow
+	@param [out] destRow
+		新たに作成される@ref GSRow インスタンスを格納するための、ポインタ変数
+		へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、このポインタ値が
+		@c NULL 以外の値であれば、対応するポインタ変数に@c NULL が格納されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 引数に@c NULL が指定された場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSRow
+	@brief Creates a new @ref GSRow instance consisting of the same field
+		value.
+	@param [in] row
+		@ref GSRow from which to create the instance.
+	@param [out] destRow
+		The pointer to the pointer variable for storing the @ref GSRow instance
+		to be newly created.
+		If non-@ref GS_RESULT_OK is returned as the execution result, @c NULL
+		is stored in the corresponding pointer variable so long as the pointer
+		is @c non-NULL.
+	@return The return code of the execution result. In the following cases,
+		it returns the value other than @ref GS_RESULT_OK :
+		- when @c NULL is specified as an argument.
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowByRow(
+		GSRow *row, GSRow **destRow);
+
+/*!
+	@JP
+	@ingroup Group_GSRow
+	@brief ロウキーを構成するカラムのみを持ち、それらのカラムについて同一の
+		フィールド値からなる新たな@ref GSRowKey インスタンスを作成します。
+	@param [in] row
+		作成元とする@ref GSRow
+	@param [out] key
+		新たに作成される@ref GSRowKey インスタンスを格納するための、ポインタ変数
+		へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、このポインタ値が
+		@c NULL 以外の値であれば、対応するポインタ変数に@c NULL が格納されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 作成元とする@ref GSRow がロウキーを持たない場合
+		- 引数に@c NULL が指定された場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSRow
+	@brief Creates a new @ref GSRowKey instance that only has columns
+		configuring the Row key and consists of the same field value with
+		regard to those columns.
+	@param [in] row
+		@ref GSRow from which to create the instance.
+	@param [out] key
+		The pointer to the pointer variable for storing the @ref GSRowKey
+		instance to be newly created.
+		If non-@ref GS_RESULT_OK is returned as the execution result, @c NULL
+		is stored in the corresponding pointer variable so long as the pointer
+		is @c non-NULL.
+	@return The return code of the execution result. In the following cases,
+		it returns the value other than @ref GS_RESULT_OK :
+		- The @ref GSRow from which to create a Row key does not have
+			a Row key.
+		- when @c NULL is specified as an argument.
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowKeyByRow(
+		GSRow *row, GSRowKey **key);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
 
 //
 // Query API
@@ -13695,7 +14834,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetFetchOption(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSet(
 		GSQuery *query, GSRowSet **rowSet);
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
 
 //
 // RowSet API
@@ -13824,8 +14963,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteCurrentRow(
 		@ref GSGridStore instance corresponding to the specified
 		@ref GSRowSet.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] rowSet
@@ -14213,6 +15352,7 @@ GS_DLL_PUBLIC GSBool GS_API_CALL gsGetAggregationValue(
 
 /*!
 	@JP
+	@ingroup Group_GSAggregationResult
 	@brief 数値型の集計値をLONG型(@c int64_t)として取得します。
 	@par
 		数値型以外の値を保持している場合、@c assigned 引数には@ref GS_FALSE
@@ -14231,6 +15371,7 @@ GS_DLL_PUBLIC GSBool GS_API_CALL gsGetAggregationValue(
 	@since 3.5
 
 	@EN
+	@ingroup Group_GSAggregationResult
 	@brief Gets the aggregate value of numeric type as LONG (@c int64_t).
 	@par
 		If a non-numeric value is saved, the @c assigned argument contains
@@ -14257,6 +15398,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsLong(
 
 /*!
 	@JP
+	@ingroup Group_GSAggregationResult
 	@brief 数値型の集計値をDOUBLE型(@c double)として取得します。
 	@par
 		数値型以外の値を保持している場合、@c assigned 引数には@ref GS_FALSE
@@ -14275,6 +15417,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsLong(
 	@since 3.5
 
 	@EN
+	@ingroup Group_GSAggregationResult
 	@brief Gets the aggregate value of numeric type as DOUBLE (@c double).
 	@par
 		If a non-numeric value is saved, the @c assigned argument contains
@@ -14301,6 +15444,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsDouble(
 
 /*!
 	@JP
+	@ingroup Group_GSAggregationResult
 	@brief 時刻型の集計値をTIMESTAMP型(@ref GSTimestamp)で取得します。
 	@par
 		TIMESTAMP型以外の値を保持している場合、@c assigned 引数には
@@ -14318,6 +15462,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsDouble(
 	@since 3.5
 
 	@EN
+	@ingroup Group_GSAggregationResult
 	@brief Gets the aggregate value of numeric type as TIMESTAMP (@c GSTimestamp).
 	@par
 		If a non TIMESTAMP value is saved, the @c assigned argument contains
@@ -14341,7 +15486,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsTimestamp(
 		GSAggregationResult *aggregationResult, GSTimestamp *value,
 		GSBool *assigned);
 
-#endif	// GS_COMPATIBILITY_SUPPORT_3_5
+#endif // GS_COMPATIBILITY_SUPPORT_3_5
 
 //
 // RowKeyPredicate API
@@ -14415,10 +15560,102 @@ GS_DLL_PUBLIC void GS_API_CALL gsCloseRowKeyPredicate(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateKeyType(
 		GSRowKeyPredicate *predicate, GSType *keyType);
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
 /*!
 	@JP
 	@ingroup Group_GSRowKeyPredicate
-	@brief 範囲条件の開始位置とするロウキーの値を取得します。
+	@brief 合致条件の評価対象とするロウキーのスキーマを取得します。
+	@par
+		この合致条件の作成に用いられた情報に、ロウキー以外のカラム情報や
+		スキーマ以外のコンテナ情報が含まれていたとしても、返却されるスキーマ
+		情報には含まれません。
+	@param [in] predicate
+		処理対象の@ref GSRowKeyPredicate
+	@param [out] info
+		スキーマ情報を格納するための@ref GSContainerInfo へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@ref GS_CONTAINER_INFO_INITIALIZER
+		と同一の内容の初期値が格納されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 引数に@c NULL が指定された場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSRowKeyPredicate
+	@brief Retrieves the schema of the Row key to be evaluated by the
+		match condition.
+	@par
+		Even if the information used for creating this match condition contains
+		the column information other than the Row key or the container
+		information other than the schema, such information will not be
+		included in the schema information to be returned.
+	@param [in] predicate
+		@ref GSRowKeyPredicate to be processed
+	@param [out] info
+		The pointer to @ref GSContainerInfo for storing schema information.
+		If non-@ref GS_RESULT_OK is returned as the execution result,
+		the same initial value as that for the contents of
+		@ref GS_CONTAINER_INFO_INITIALIZER is stored.
+	@return The return code of the execution result. In the following cases,
+		it returns the value other than @ref GS_RESULT_OK :
+		- when @c NULL is specified as an argument.
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateKeySchema(
+		GSRowKeyPredicate *predicate, GSContainerInfo *info);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSRowKeyPredicate
+	@brief 範囲条件の開始位置とするロウキーを取得します。
+	@param [in] predicate
+		処理対象の@ref GSRowKeyPredicate
+	@param [out] keyObj
+		開始位置とするロウキーとして新たに作成される@ref GSRowKey インスタンスを
+		格納するための、ポインタ変数へのポインタ値。
+		開始位置が設定されていない場合は@c NULL が格納されます。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@c NULL が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 引数に@c NULL が指定された場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSRowKeyPredicate
+	@brief Returns the Row key at the start position of the range condition.
+	@param [in] predicate
+		@ref GSRowKeyPredicate to be processed
+	@param [out] keyObj
+		The pointer to the pointer variable for storing the @ref GSRowKey
+		instance to be newly created as a Row key at the start position.
+		@c NULL is stored if the start position is not set.
+		@c NULL is stored if non-@ref GS_RESULT_OK is returned as the
+		execution result.
+		If the pointer is @c NULL, this storing process will be skipped.
+	@return The return code of the execution result. In the following cases,
+		it returns the value other than @ref GS_RESULT_OK :
+		- when @c NULL is specified as an argument.
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey **keyObj);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSRowKeyPredicate
+	@brief 範囲条件の開始位置とする、単一カラムのロウキーの値を取得します。
 	@attention
 		値を格納する領域を確保するために、指定の@ref GSRowKeyPredicate
 		と関係する@ref GSGridStore インスタンス上で管理される一時的なメモリ領域を
@@ -14435,20 +15672,21 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateKeyType(
 		@c NULL が格納されます。
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 複合ロウキーについての合致条件が指定された場合
 		- 引数に@c NULL が指定された場合
 	@since 1.5
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
-	@brief Returns the value of the Row key at the starting position of the
-		range condition.
+	@brief Returns the value of the single-column Row key at the start
+		position of the range condition.
 	@attention
 		In order to allocate the area for storing the value, it might use a
 		temporary memory area which is managed by @ref GSGridStore instance
 		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -14462,6 +15700,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateKeyType(
 		No value is stored if @c NULL is specified to this pointer.
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
+		- The match condition of a composite Row key is specified
 		- if @c NULL is specified in the argument(s)
 	@since 1.5
 
@@ -14503,8 +15742,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyGeneral(
 		temporary memory area which is managed by @ref GSGridStore instance
 		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -14561,8 +15800,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsString(
 		temporary memory area which is managed by @ref GSGridStore instance
 		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -14619,8 +15858,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsInteger(
 		temporary memory area which is managed by @ref GSGridStore instance
 		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -14677,8 +15916,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsLong(
 		temporary memory area which is managed by @ref GSGridStore instance
 		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -14702,10 +15941,54 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsLong(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp **startKey);
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
 /*!
 	@JP
 	@ingroup Group_GSRowKeyPredicate
 	@brief 範囲条件の終了位置とするロウキーの値を取得します。
+	@param [in] predicate
+		処理対象の@ref GSRowKeyPredicate
+	@param [out] keyObj
+		終了位置とするロウキーとして新たに作成される@ref GSRowKey インスタンスを
+		格納するための、ポインタ変数へのポインタ値。
+		終了位置が設定されていない場合は@c NULL が格納されます。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@c NULL が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 引数に@c NULL が指定された場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSRowKeyPredicate
+	@brief Returns the value of the Row key at the end position of the range
+		condition.
+	@param [in] predicate
+		@ref GSRowKeyPredicate to be processed
+	@param [out] keyObj
+		The pointer to the pointer variable for storing the @ref GSRowKey
+		instance to be newly created as a Row key at the end position.
+		@c NULL is stored if the end position is not set.
+		@c NULL is stored if non-@ref GS_RESULT_OK is returned as the
+		execution result.
+		If the pointer is @c NULL, this storing process will be skipped.
+	@return The return code of the execution result. In the following cases,
+		it returns the value other than @ref GS_RESULT_OK :
+		- when @c NULL is specified as an argument.
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey **keyObj);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSRowKeyPredicate
+	@brief 範囲条件の終了位置とする、単一カラムのロウキーの値を取得します。
 	@attention
 		値を格納する領域を確保するために、指定の@ref GSRowKeyPredicate
 		と関係する@ref GSGridStore インスタンス上で管理される一時的なメモリ領域を
@@ -14722,20 +16005,21 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsTimestamp(
 		@c NULL が格納されます。
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 複合ロウキーについての合致条件が指定された場合
 		- 引数に@c NULL が指定された場合
 	@since 1.5
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
-	@brief Returns the value of the Row key at the end position of the
-		range condition.
+	@brief Returns the value of the single-column Row key at the end position
+		of the range condition.
 	@attention
 		In order to allocate the area for storing the value, it might use a
 		temporary memory area which is managed by @ref GSGridStore instance
 		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -14749,6 +16033,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsTimestamp(
 		No value is stored if @c NULL is specified to this pointer.
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
+		- The match condition of a composite Row key is specified
 		- if @c NULL is specified in the argument(s)
 	@since 1.5
 
@@ -14790,8 +16075,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyGeneral(
 		temporary memory area which is managed by @ref GSGridStore instance
 		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -14848,8 +16133,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsString(
 		temporary memory area which is managed by @ref GSGridStore instance
 		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -14906,8 +16191,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsInteger(
 		temporary memory area which is managed by @ref GSGridStore instance
 		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -14964,8 +16249,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsLong(
 		temporary memory area which is managed by @ref GSGridStore instance
 		related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -14989,10 +16274,82 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsLong(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp **finishKey);
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
 /*!
 	@JP
 	@ingroup Group_GSRowKeyPredicate
-	@brief 個別条件を構成するロウキーの値の集合を取得します。
+	@brief 個別条件を構成するロウキーの集合を取得します。
+	@attention
+		ロウキーの列を格納する領域を確保するために、指定の
+		@ref GSRowKeyPredicate と関係する@ref GSGridStore インスタンス上で
+		管理される一時的なメモリ領域を使用する場合があります。
+		この領域は、指定の@ref GSGridStore もしくはその関連リソースに対し、
+		この関数もしくは同様に一時的なメモリ領域を使用する関数が再び実行されるまで
+		有効です。 無効になった領域にアクセスしようとした場合の動作は未定義です。
+	@param [in] predicate
+		処理対象の@ref GSRowKeyPredicate
+	@param [out] keyObjList
+		個別条件を構成するロウキーの集合を構成する配列のアドレスを
+		格納するための変数へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@c NULL が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@param [out] size
+		個別条件を構成するロウキーの集合の要素数を格納するための変数への
+		ポインタ値。個別条件が設定されていない場合は@c 0 が格納されます。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@c 0 が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 引数に@c NULL が指定された場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSRowKeyPredicate
+	@brief Retrieves a set of Row keys configuring the individual condition.
+	@attention
+		In order to allocate the area for storing the sequence of the Row key,
+		it might use a temporary memory area which is managed by
+		the @ref GSGridStore instance related to the specified
+		@ref GSRowKeyPredicate.
+		This area is valid until this function or similar functions which use a
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
+		The behavior is undefined when the area which has been invalidated is
+		accessed.
+	@param [in] predicate
+		@ref GSRowKeyPredicate to be processed
+	@param [out] keyObjList
+		The pointer to a variable for storing the address of an array
+		configuring a set of Row keys configuring the individual condition.
+		@c NULL is stored if non-@ref GS_RESULT_OK is returned as the
+		execution result.
+		If the pointer is @c NULL, this storing process will be skipped.
+	@param [out] size
+		The pointer to a variable for storing the number of elements in the
+		set of Row keys configuring the individual condition. @c 0 is stored
+		if no individual condition is set.
+		@c 0 is stored if non-@ref GS_RESULT_OK is returned as the execution
+		result.
+		If the pointer is @c NULL, this storing process will be skipped.
+	@return The return code of the execution result. In the following cases,
+		it returns the value other than @ref GS_RESULT_OK :
+		- when @c NULL is specified as an argument.
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctGeneralKeys(
+		GSRowKeyPredicate *predicate, GSRowKey *const **keyObjList,
+		size_t *size);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSRowKeyPredicate
+	@brief 個別条件を構成する、単一カラムのロウキーの値の集合を取得します。
 	@attention
 		値ならびにその列を格納する領域を確保するために、指定の
 		@ref GSRowKeyPredicate と関係する@ref GSGridStore インスタンス上で
@@ -15015,20 +16372,21 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsTimestamp(
 		@c 0 が格納されます。
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 複合ロウキーについての合致条件が指定された場合
 		- 引数に@c NULL が指定された場合
 	@since 1.5
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
-	@brief Returns a set of the values of the Row keys that configure the
-		individual condition.
+	@brief Returns a set of the values of the single-column Row keys that
+		configure the individual condition.
 	@attention
 		In order to allocate the area for storing the value and its column, it
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -15050,6 +16408,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsTimestamp(
 		No value is stored if @c NULL is specified to this pointer.
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
+		- if the match condition of a composite Row key is specified
 		- if @c NULL is specified in the argument(s)
 	@since 1.5
 
@@ -15097,8 +16456,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysGeneral(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -15170,8 +16529,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsString(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -15242,8 +16601,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsInteger(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -15314,8 +16673,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsLong(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSRowKeyPredicate.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] predicate
@@ -15348,10 +16707,64 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsTimestamp(
 		GSRowKeyPredicate *predicate,
 		const GSTimestamp **keyList, size_t *size);
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
 /*!
 	@JP
 	@ingroup Group_GSRowKeyPredicate
 	@brief 範囲条件の開始位置とするロウキーの値を設定します。
+	@par
+		設定された値より小さな値のロウキーは合致しないものとみなされるようになります。
+	@par
+		STRING型のロウキーまたはその型を含む複合ロウキーのように、大小関係が
+		定義されていないロウキーの場合、条件として設定はできるものの、実際の
+		判定に用いることはできません。
+	@param [in] predicate
+		処理対象の@ref GSRowKeyPredicate
+	@param [in] keyObj
+		開始位置とするロウキー。@c NULL の場合、設定が解除されます
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- @c predicate 引数に@c NULL が指定された場合
+		- 個別条件がすでに設定されていた場合
+		- 期待した型が合致条件の評価対象とするロウキーの型と異なる場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSRowKeyPredicate
+	@brief Sets the value of the Row key as the start position of
+		the range condition.
+	@par
+		The Row key which has a smaller value than the specified value is
+		considered to be unmatched.
+	@par
+		A Row key in which the greater-than relationship is not defined,
+		including a STRING-type Row key and a composite Row key containing
+		its type, can be set as a condition, but cannot be used for the
+		actual evaluation.
+	@param [in] predicate
+		@ref GSRowKeyPredicate to be processed
+	@param [in] keyObj
+		the Row key as the start position. If @c NULL, the setting is
+		cancelled.
+	@return The return code of the execution result. In the following cases,
+		it returns the value other than @ref GS_RESULT_OK :
+		- if @c NULL is specified to the @c predicate argument.
+		- if an individual condition has already been set
+		- if the expected type is different from the type of the Row key to be
+			evaluated in the match conditions
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey *keyObj);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSRowKeyPredicate
+	@brief 範囲条件の開始位置とする、単一カラムのロウキーの値を設定します。
 	@par
 		設定された値より小さな値のロウキーは合致しないものとみなされるようになります。
 	@par
@@ -15375,8 +16788,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsTimestamp(
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
-	@brief Sets the value of the Row key as the start position of
-		the range condition.
+	@brief Sets the value of the single-column Row key as the start position
+		of the range condition.
 	@par
 		The Row key which has smaller value than the specified value is
 		considered to be unmatched.
@@ -15596,10 +17009,63 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByLong(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp *startKey);
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
 /*!
 	@JP
 	@ingroup Group_GSRowKeyPredicate
 	@brief 範囲条件の終了位置とするロウキーの値を設定します。
+	@par
+		設定された値より大きな値のロウキーは合致しないものとみなされるようになります。
+	@par
+		STRING型のロウキーまたはその型を含む複合ロウキーのように、大小関係が
+		定義されていないロウキーの場合、条件として設定はできるものの、実際の
+		判定に用いることはできません。
+	@param [in] predicate
+		処理対象の@ref GSRowKeyPredicate
+	@param [in] keyObj
+		終了位置とするロウキー。@c NULL の場合、設定が解除されます
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- @c predicate 引数に@c NULL が指定された場合
+		- 個別条件がすでに設定されていた場合
+		- 期待した型が合致条件の評価対象とするロウキーの型と異なる場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSRowKeyPredicate
+	@brief Sets the value of the Row key as the end position of the range
+		condition.
+	@par
+		The Row key which has a greater value than the specified value is
+		considered to be unmatched.
+	@par
+		A Row key in which the greater-than relationship is not defined,
+		including a STRING-type Row key and a composite Row key containing
+		its type, can be set as a condition, but cannot be used for the
+		actual evaluation.
+	@param [in] predicate
+		@ref GSRowKeyPredicate to be processed
+	@param [in] keyObj
+		the Row key at the end position. If @c NULL, the setting is cancelled.
+	@return The return code of the execution result. In the following cases,
+		it returns the value other than @ref GS_RESULT_OK :
+		- if @c NULL is specified to the @c predicate argument.
+		- if an individual condition has already been set
+		- if the expected type is different from the type of the Row key
+			to be evaluated in the match conditions
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey *keyObj);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSRowKeyPredicate
+	@brief 範囲条件の終了位置とする、単一カラムのロウキーの値を設定します。
 	@par
 		設定された値より大きな値のロウキーは合致しないものとみなされるようになります。
 	@par
@@ -15623,7 +17089,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByTimestamp(
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
-	@brief Sets the value of the Row key as the end position of
+	@brief Sets the value of the single-column Row key as the end position of
 		the range condition.
 	@par
 		The Row key which has greater value than the specified value is
@@ -15844,10 +17310,54 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByLong(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp *finishKey);
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
 /*!
 	@JP
 	@ingroup Group_GSRowKeyPredicate
 	@brief 個別条件の要素の一つとするロウキーの値を追加します。
+	@par
+		追加された値と同一の値のロウキーは合致するものとみなされるようになります。
+	@param [in] predicate
+		処理対象の@ref GSRowKeyPredicate
+	@param [in] keyObj
+		個別条件の要素の一つとするロウキー
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 引数に@c NULL が指定された場合
+		- 個別条件がすでに設定されていた場合
+		- 期待した型が合致条件の評価対象とするロウキーの型と異なる場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSRowKeyPredicate
+	@brief Adds the value of the Row key as one of the elements in the
+		individual condition.
+	@par
+		The Row key which has the same value as the added value is considered
+		to match.
+	@param [in] predicate
+		@ref GSRowKeyPredicate to be processed
+	@param [in] keyObj
+		the Row key as one of the elements in the individual condition
+	@return The return code of the execution result. In the following cases,
+		it returns the value other than @ref GS_RESULT_OK :
+		- when @c NULL is specified as an argument.
+		- if an individual condition has already been set
+		- if the expected type is different from the type of the Row key
+			to be evaluated in the match conditions
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateGeneralKey(
+		GSRowKeyPredicate *predicate, GSRowKey *keyObj);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSRowKeyPredicate
+	@brief 個別条件の要素の一つとする、単一カラムのロウキーの値を追加します。
 	@par
 		追加された値と同一の値のロウキーは合致するものとみなされるようになります。
 	@attention
@@ -15857,10 +17367,9 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByTimestamp(
 	@param [in] predicate
 		処理対象の@ref GSRowKeyPredicate
 	@param [in] key
-		個別条件の要素の一つとするロウキーの値
-		終了位置とするロウキーの値。@c NULL の場合、設定が解除されます
+		個別条件の要素の一つとするロウキー
 	@param [in] keyType
-		終了位置とするロウキーの値の型
+		個別条件の要素の一つとするロウキーの値の型
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- ポインタ型引数に@c NULL が指定された場合
 		- 個別条件がすでに設定されていた場合
@@ -15869,7 +17378,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByTimestamp(
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
-	@brief Adds the value of the Row key as one of the elements
+	@brief Adds the value of the single-column Row key as one of the elements
 		in the individual condition.
 	@par
 		The Row key which has the same value with the added value is
@@ -15882,12 +17391,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByTimestamp(
 	@param [in] predicate
 		@ref GSRowKeyPredicate to be processed
 	@param [in] key
-		the value of Row key to be added as one of the elements in the
-		individual condition.
-		the value of the Row key as the end position. If @c NULL, the setting
-		is cancelled
+		the Row key as one of the elements in the individual condition
 	@param [in] keyType
-		the type of the Row key as the end position
+		the type of Row key to be added as one of the elements in the
+		individual condition.
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
 		- if @c NULL is specified to pointer type arguments
@@ -16077,7 +17584,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByLong(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByTimestamp(
 		GSRowKeyPredicate *predicate, GSTimestamp key);
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
 
 //
 // PartitionController API
@@ -16284,8 +17791,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionContainerCount(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSPartitionController.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] controller
@@ -16373,8 +17880,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionContainerNames(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSPartitionController.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] controller
@@ -16451,8 +17958,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionHosts(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSPartitionController.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] controller
@@ -16534,8 +18041,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionOwnerHost(
 		might use a temporary memory area which is managed by @ref GSGridStore
 		instance related to specified @ref GSPartitionController.
 		This area is valid until this function or similar functions which use a
-		temporary memory area managed by specified @ref GSGridStore instance or
-		by related resources is executed again.
+		temporary memory area is executed again for the specified
+		@ref GSGridStore or its related resources.
 		The behavior is undefined when the area which has been invalidated is
 		accessed.
 	@param [in] controller
@@ -16689,7 +18196,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionIndexOfContainer(
 		GSPartitionController *controller, const GSChar *containerName,
 		int32_t *partitionIndex);
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
 
 //
 // Timestamp API
@@ -16712,12 +18219,199 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionIndexOfContainer(
  */
 GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsCurrentTime();
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief @ref GSTimestamp を構成するフィールド値の一つを取得します。
+	@par
+		現バージョンでは、取得の際に使用されるタイムゾーンはUTCです。
+	@param [in] timestamp
+		対象とする時刻
+	@param [in] timeUnit
+		取得するフィールド値の単位
+	@return 指定の条件に合致するフィールド値。次の場合は@c -1
+		- サポート範囲外の時刻や単位が指定された場合
+	@see gsGetZonedTimeField
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief Retrieves one of the field values configuring @ref GSTimestamp.
+	@par
+		The current version uses the UTC time zone for retrieval.
+	@param [in] timestamp
+		the time to be processed
+	@param [in] timeUnit
+		the unit of a field value to be obtained.
+	@return the field value that meets the specified condition.
+		It returns @c -1 in the following cases.
+		- an unsupported time or unit is specified
+	@see gsGetZonedTimeField
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetTimeField(
+		GSTimestamp timestamp, GSTimeUnit timeUnit);
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief 指定のタイムゾーン設定を用い、@ref GSTimestamp を構成する
+		フィールド値の一つを取得します。
+	@par
+		演算に用いる時間の単位によっては、タイムゾーン設定の影響を受けない
+		場合があります。
+	@param [in] timestamp
+		対象とする時刻
+	@param [in] timeUnit
+		取得するフィールド値の単位
+	@param [in] zone
+		タイムゾーン設定情報へのポインタ値。
+		@c NULL の場合は@ref gsGetTimeField と同様に振る舞います。
+	@return 指定の条件に合致するフィールド値。次の場合は@c -1
+		- サポート範囲外の時刻や単位が指定された場合
+		- 初期化誤りなど正しくないタイムゾーン情報が指定されたことを検知した場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief Retrieves one of the field values configuring @ref GSTimestamp,
+		using the specified time zone settings.
+	@par
+		Depending on the time unit used for operations, the result may not be
+		impacted by the time zone settings.
+	@param [in] timestamp
+		the time to be processed
+	@param [in] timeUnit
+		the unit of a field value to be obtained.
+	@param [in] zone
+		The pointer to time zone settings information.
+		If @c NULL, it behaves the same as @ref gsGetTimeField.
+	@return the field value that meets the specified condition.
+		It returns @c -1 in the following cases.
+		- an unsupported time or unit is specified
+		- It has been detected that incorrect time zone information, such as
+			initialization errors, has been specified.
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetZonedTimeField(
+		GSTimestamp timestamp, GSTimeUnit timeUnit, const GSTimeZone *zone);
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief @ref GSTimestamp を構成するフィールド値の一つを設定します。
+	@par
+		現バージョンでは、設定の際に使用されるタイムゾーンはUTCです。
+	@param [in,out] timestamp
+		対象とする時刻
+	@param [in] field
+		設定するフィールド値
+	@param [in] timeUnit
+		設定するフィールド値の単位
+	@return フィールド値を設定できたかどうか。次の場合は@ref GS_FALSE
+		- @c timestamp 引数に@c NULL が指定された場合
+		- サポート範囲外の時刻や単位、フィールド値が指定された場合
+	@see gsGetZonedTimeField
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief Sets one of the field values configuring @ref GSTimestamp.
+	@par
+		The current version uses the UTC time zone for settings.
+	@param [in,out] timestamp
+		the time to be processed
+	@param [in] field
+		the field value to be set.
+	@param [in] timeUnit
+		the unit of the field value to be set.
+	@return a value indicating whether the field value has been set.
+		In the following cases, @ref GS_FALSE is returned.
+		- @c NULL is specified for the @c timestamp argument.
+		- An unsupported time, unit, or field value is specified.
+	@see gsGetZonedTimeField
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSBool GS_API_CALL gsSetTimeField(
+		GSTimestamp *timestamp, int64_t field, GSTimeUnit timeUnit);
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief 指定のタイムゾーン設定を用い、@ref GSTimestamp を構成する
+		フィールド値の一つを設定します。
+	@par
+		演算に用いる時間の単位によっては、タイムゾーン設定の影響を受けない
+		場合があります。
+	@param [in,out] timestamp
+		対象とする時刻
+	@param [in] field
+		設定するフィールド値
+	@param [in] timeUnit
+		設定するフィールド値の単位
+	@param [in] zone
+		タイムゾーン設定情報へのポインタ値。
+		@c NULL の場合は@ref gsSetTimeField と同様に振る舞います。
+	@return フィールド値を設定できたかどうか。次の場合は@ref GS_FALSE
+		- @c timestamp 引数に@c NULL が指定された場合
+		- サポート範囲外の時刻や単位、フィールド値が指定された場合
+		- 初期化誤りなど正しくないタイムゾーン情報が指定されたことを検知した場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief Sets one of the field values configuring @ref GSTimestamp, using
+		the specified time zone settings.
+	@par
+		Depending on the time unit used for operations, the result may not be
+		impacted by the time zone settings.
+	@param [in,out] timestamp
+		the time to be processed
+	@param [in] field
+		the field value to be set.
+	@param [in] timeUnit
+		the unit of the field value to be set.
+	@param [in] zone
+		The pointer to time zone settings information.
+		If @c NULL, it behaves the same as @ref gsSetTimeField.
+	@return a value indicating whether the field value has been set.
+		In the following cases, @ref GS_FALSE is returned.
+		- @c NULL is specified for the @c timestamp argument.
+		- An unsupported time, unit, or field value is specified.
+		- It has been detected that incorrect time zone information, such as
+			initialization errors, has been specified.
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSBool GS_API_CALL gsSetZonedTimeField(
+		GSTimestamp *timestamp, int64_t field, GSTimeUnit timeUnit,
+		const GSTimeZone *zone);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddTimeV4_3(
+		GSTimestamp timestamp, int64_t amount, GSTimeUnit timeUnit);
+#endif
+
 /*!
 	@JP
 	@ingroup Group_GSTimestamp
 	@brief 時刻に一定の値を加算します。
 	@par
-		@c amount に負の値を指定することで、指定の時刻より前の時刻を求めることができます。
+		@c amount に負の値を指定することで、指定の時刻より前の時刻を求める
+		ことができます。
 	@par
 		現バージョンでは、算出の際に使用されるタイムゾーンはUTCです。
 	@param [in] timestamp
@@ -16727,8 +18421,9 @@ GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsCurrentTime();
 	@param [in] timeUnit
 		加算する値の単位
 	@return 加算後の@ref GSTimestamp 。次の場合は@c -1
-		- 年・月単位の加算において桁あふれを起こすなどし、内部のシステムコールに
-			失敗した場合
+		- サポート範囲外の時刻や単位が指定された場合
+		- 加算結果がサポート範囲外の時刻となりうる場合
+	@see gsAddZonedTime
 
 	@EN
 	@ingroup Group_GSTimestamp
@@ -16746,12 +18441,186 @@ GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsCurrentTime();
 		the unit of value to be added
 	@return @ref GSTimestamp after adding the specified time value. It returns
 		@c -1 in the following cases.
-		- if an internal system call fails by the overflow during this operation
+		- an unsupported time or unit is specified
+		- There is a possibility that the result of addition would result in
+			an unsupported time.
+	@see gsAddZonedTime
 
 	@ENDL
  */
+GS_STATIC_HEADER_FUNC_SPECIFIER GSTimestamp gsAddTime(
+		GSTimestamp timestamp, int64_t amount, GSTimeUnit timeUnit) {
+	return gsAddTimeV4_3(timestamp, amount, timeUnit);
+}
+
+#else
+
 GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddTime(
 		GSTimestamp timestamp, int32_t amount, GSTimeUnit timeUnit);
+
+#endif // not GS_COMPATIBILITY_SUPPORT_4_3
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief 指定のタイムゾーン設定を用い、時刻に一定の値を加算します。
+	@par
+		@c amount に負の値を指定することで、指定の時刻より前の時刻を求める
+		ことができます。
+	@par
+		演算に用いる時間の単位によっては、タイムゾーン設定の影響を受けない
+		場合があります。
+	@param [in] timestamp
+		対象とする時刻
+	@param [in] amount
+		加算する値
+	@param [in] timeUnit
+		加算する値の単位
+	@param [in] zone
+		タイムゾーン設定情報へのポインタ値。
+		@c NULL の場合は@ref gsAddTime と同様に振る舞います。
+	@return 加算後の@ref GSTimestamp 。次の場合は@c -1
+		- サポート範囲外の時刻や単位が指定された場合
+		- 加算結果がサポート範囲外の時刻となりうる場合
+		- 初期化誤りなど正しくないタイムゾーン情報が指定されたことを検知した場合
+	@see gsAddZonedTime
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief Adds a certain value to the time, using the specified time zone
+		settings.
+	@par
+		An earlier time than the specified time can be obtained by specifying
+		a negative value as @c "amount."
+	@par
+		Depending on the time unit used for operations, the result may not be
+		impacted by the time zone settings.
+	@param [in] timestamp
+		the time to be processed
+	@param [in] amount
+		the value to be added
+	@param [in] timeUnit
+		the unit of a value to be added
+	@param [in] zone
+		The pointer to time zone settings information.
+		If @c NULL, it behaves the same as @ref gsAddTime.
+	@return @ref GSTimestamp after adding the specified time value.
+		It returns @c -1 in the following cases.
+		- an unsupported time or unit is specified
+		- There is a possibility that the result of addition would result in
+			an unsupported time.
+		- It has been detected that incorrect time zone information, such as
+			initialization errors, has been specified.
+	@see gsAddZonedTime
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddZonedTime(
+		GSTimestamp timestamp, int64_t amount, GSTimeUnit timeUnit,
+		const GSTimeZone *zone);
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief 二つの時刻間の差分値を求めます。
+	@par
+		@c timestamp1 に対して、@c timestamp2 で減じた値を求めます。
+	@par
+		現バージョンでは、算出の際に使用されるタイムゾーンはUTCです。
+	@param [in] timestamp1
+		対象とする一つ目の時刻
+	@param [in] timestamp2
+		対象とする二つ目の時刻
+	@param [in] timeUnit
+		求める差分値の単位
+	@return 差分値。次の場合は@c int64_t 型の値として取りうる範囲の最小値
+		- サポート範囲外の時刻や単位が指定された場合
+	@see gsGetZonedTimeDiff
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief Calculates the difference value between two times.
+	@par
+		Calculates the value of @c timestamp1 subtracted by @c timestamp2.
+	@par
+		The current version uses the UTC time zone for calculation.
+	@param [in] timestamp1
+		the first time used for calculation.
+	@param [in] timestamp2
+		the second time used for calculation.
+	@param [in] timeUnit
+		the unit of the difference value calculated.
+	@return the difference value. Returns the minimum value in the range of
+		values possible as an @c int64_t value, in the following case.
+		- an unsupported time or unit is specified
+	@see gsGetZonedTimeDiff
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetTimeDiff(
+		GSTimestamp timestamp1, GSTimestamp timestamp2, GSTimeUnit timeUnit);
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief 指定のタイムゾーン設定を用い、二つの時刻間の差分値を求めます。
+	@par
+		@c timestamp1 に対して、@c timestamp2 で減じた値を求めます。
+	@par
+		演算に用いる時間の単位によっては、タイムゾーン設定の影響を受けない
+		場合があります。
+	@param [in] timestamp1
+		対象とする一つ目の時刻
+	@param [in] timestamp2
+		対象とする二つ目の時刻
+	@param [in] timeUnit
+		求める差分値の単位
+	@param [in] zone
+		タイムゾーン設定情報へのポインタ値。
+		@c NULL の場合は@ref gsGetTimeDiff と同様に振る舞います。
+	@return 差分値。次の場合は@c int64_t 型の値として取りうる範囲の最小値
+		- サポート範囲外の時刻や単位が指定された場合
+		- 初期化誤りなど正しくないタイムゾーン情報が指定されたことを検知した場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief Calculates the difference value between the two times, using the
+		specified time zone settings.
+	@par
+		Calculates the value of @c timestamp1 subtracted by @c timestamp2.
+	@par
+		Depending on the time unit used for operations, the result may not be
+		impacted by the time zone settings.
+	@param [in] timestamp1
+		the first time used for calculation.
+	@param [in] timestamp2
+		the second time used for calculation.
+	@param [in] timeUnit
+		the unit of the difference value calculated.
+	@param [in] zone
+		The pointer to time zone settings information.
+		If @c NULL, it behaves the same as @ref gsGetTimeDiff.
+	@return the difference value. Returns the minimum value in the range of
+		values possible as an @c int64_t value, in the following case.
+		- an unsupported time or unit is specified
+		- It has been detected that incorrect time zone information, such as
+			initialization errors, has been specified.
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetZonedTimeDiff(
+		GSTimestamp timestamp1, GSTimestamp timestamp2, GSTimeUnit timeUnit,
+		const GSTimeZone *zone);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
 
 /*!
 	@JP
@@ -16767,12 +18636,15 @@ GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddTime(
 		@c bufSize が@c 1 以上であり、出力に必要とするサイズに満たない場合、
 		終端文字をバッファ範囲内の最終位置に設定し、残りの領域に可能な限り
 		文字列を出力します。
-		@c strBuf が @c NULL または@c bufSize が@c 0 の場合、文字列は出力されません。
+		@c strBuf が @c NULL または@c bufSize が@c 0 の場合、文字列は出力
+		されません。
 	@param [in] bufSize
 		出力先の文字列バッファについての、終端文字を含んだバイト単位のサイズ
-	@return 終端文字を含んだ、出力に必要とする文字列バッファのバイト単位の最低サイズ。
-		ただし、内部のシステムコールに失敗した場合は空文字列のサイズに相当する@c 1 。
+	@return 終端文字を含んだ、出力に必要とする文字列バッファのバイト単位の
+		最低サイズ。ただし次の場合は、空文字列のサイズに相当する@c 1 。
+		- サポート範囲外の時刻が指定された場合
 	@see GS_TIME_STRING_SIZE_MAX
+	@see gsFormatZonedTime
 
 	@EN
 	@ingroup Group_GSTimestamp
@@ -16784,8 +18656,8 @@ GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddTime(
 		the time to be processed
 	@param [out] strBuf
 		the output string buffer.
-		The string contains the termination character within a range that does
-		not exceed the @c bufSize.
+		Outputs the string contains the termination character within a range
+		that does not exceed the @c bufSize.
 		If @c bufSize is greater than or equal to @c 1 and less than the size
 		required to output, the termination character is set to the last
 		position in the buffer range and the string is output as much as
@@ -16796,8 +18668,9 @@ GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddTime(
 		character
 	@return The minimum size of string buffer required for output in bytes,
 		including the termination character.
-		However, @c 1 which is equivalent to the size of the empty string is
-		returned if an internal system call fails
+		However, @c 1 which is equivalent to the size of an empty string is
+		returned in the following cases:
+		- An unsupported time is specified.
 	@see GS_TIME_STRING_SIZE_MAX
 
 	@ENDL
@@ -16805,23 +18678,91 @@ GS_DLL_PUBLIC GSTimestamp GS_API_CALL gsAddTime(
 GS_DLL_PUBLIC size_t GS_API_CALL gsFormatTime(
 		GSTimestamp timestamp, GSChar *strBuf, size_t bufSize);
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief 指定のタイムゾーン設定を用い、TQLのTIMESTAMP値表記に従って時刻の
+		文字列表現を求めます。
+	@param [in] timestamp
+		対象とする時刻
+	@param [out] strBuf
+		出力先の文字列バッファ。
+		@c bufSize を超えない範囲で終端文字を含む文字列を出力します。
+		@c bufSize が@c 1 以上であり、出力に必要とするサイズに満たない場合、
+		終端文字をバッファ範囲内の最終位置に設定し、残りの領域に可能な限り
+		文字列を出力します。
+		@c strBuf が @c NULL または@c bufSize が@c 0 の場合、文字列は出力
+		されません。
+	@param [in] bufSize
+		出力先の文字列バッファについての、終端文字を含んだバイト単位のサイズ
+	@param [in] zone
+		タイムゾーン設定情報へのポインタ値。
+		@c NULL の場合は@ref gsFormatTime と同様に振る舞います。
+	@return 終端文字を含んだ、出力に必要とする文字列バッファのバイト単位の
+		最低サイズ。ただし次の場合は、空文字列のサイズに相当する@c 1 。
+		- サポート範囲外の時刻が指定された場合
+		- 初期化誤りなど正しくないタイムゾーン情報が指定されたことを検知した場合
+	@see GS_TIME_STRING_SIZE_MAX
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief Using the specified time zone settings, finds the string
+		representation of time, according to the TIMESTAMP value notation of
+		TQL.
+	@param [in] timestamp
+		the time to be processed
+	@param [out] strBuf
+		the output string buffer.
+		Outputs the string containing the termination character within
+		a range that does not exceed the @c bufSize.
+		If @c bufSize is greater than or equal to @c 1 and less than the size
+		required to output, the termination character is set to the last
+		position in the buffer range and the string is output as much as
+		possible to the rest of the region.
+		If @c strBuf is @c NULL or @c bufSize is @c 0, no string is output.
+	@param [in] bufSize
+		the size of an output string buffer in bytes, including the
+		termination character
+	@param [in] zone
+		The pointer to time zone settings information.
+		If @c NULL, it behaves the same as @ref gsFormatTime.
+	@return The minimum size of a string buffer required for output in bytes,
+		including the termination character. However, @c 1 which is equivalent
+		to the size of an empty string is returned in the following cases:
+		- An unsupported time is specified.
+		- It has been detected that incorrect time zone information, such as
+			initialization errors, has been specified.
+	@see GS_TIME_STRING_SIZE_MAX
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC size_t GS_API_CALL gsFormatZonedTime(
+		GSTimestamp timestamp, GSChar *strBuf, size_t bufSize,
+		const GSTimeZone *zone);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
 /*!
 	@JP
 	@ingroup Group_GSTimestamp
 	@brief TQLのTIMESTAMP値表記に従い、指定の文字列に対応する
 		@ref GSTimestamp 値を求めます。
 	@par
-		現バージョンでは、変換の際に使用されるタイムゾーンはUTCです。
+		TIMESTAMP値表記に含まれるタイムゾーン設定を使用します。
 	@param [in] str
-		対象とする時刻の文字列表現
+		対象とする時刻を表す文字列
 	@param [out] timestamp
-		格納先の@ref GSTimestamp 変数へのポインタ値。
+		変換した値を格納するための変数へのポインタ値。
 		戻り値が@ref GS_FALSE となる場合、このポインタ値が@c NULL ではない限り
 		@c -1 が格納されます。
 	@return @ref GSTimestamp 値への変換に成功し結果を格納できたかどうか。
 		次の場合、@ref GS_FALSE を返します。
 		- 時刻の文字列表記と一致しない文字列が指定された場合
-		- 内部のシステムコールに失敗した場合
+		- サポート範囲外の時刻が指定された場合
 		- 引数に@c NULL が指定された場合
 
 	@EN
@@ -16829,25 +18770,191 @@ GS_DLL_PUBLIC size_t GS_API_CALL gsFormatTime(
 	@brief Returns the @ref GSTimestamp value corresponding to the specified
 		string, according to the TIMESTAMP value notation of TQL.
 	@par
-		The current version uses the UTC time zone for conversion.
+		Uses the time zone settings in the TIMESTAMP value notation.
 	@param [in] str
-		the string representation of the time to be processed
+		the string of the time to be processed
 	@param [out] timestamp
-		the pointer to a @ref GSTimestamp variable to be stored.
-		If return value is @ref GS_FALSE, @c -1 is stored unless the pointer
-		is not @c NULL.
-	@return Indicates whether the conversion to @ref GSTimestamp value is
-		succeeded and its result are successfully stored or not.
+		the pointer to a variable to store the converted value.
+		If the return value is @ref GS_FALSE, @c -1 is stored unless the pointer
+		is @c NULL.
+	@return Indicates whether the conversion to @ref GSTimestamp value
+		succeeded and its result is stored or not.
 		It returns @ref GS_FALSE in the following cases.
 		- if the string which does not match to the string representation of
 			time is specified
-		- if an internal system call fails
+		- An unsupported time is specified.
 		- if @c NULL is specified in the argument(s)
 
 	@ENDL
  */
 GS_DLL_PUBLIC GSBool GS_API_CALL gsParseTime(
 		const GSChar *str, GSTimestamp *timestamp);
+
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief 指定のタイムゾーンのオフセット値を取得します。
+	@param [in] zone
+		対象とするタイムゾーン情報
+	@param [in] timeUnit
+		求めるオフセット値の単位
+	@return 差分値。次の場合は@c int64_t 型の値として取りうる範囲の最小値
+		- サポート外の単位が指定された場合
+		- 初期化誤りなど正しくないタイムゾーン情報が指定されたことを検知した場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief Retrieves the offset value of the specified time zone.
+	@param [in] zone
+		time zone information to be used.
+	@param [in] timeUnit
+		the unit of the offset value calculated.
+	@return the difference value. Returns the minimum value in the range of
+		values possible as an @c int64_t value, in the following case.
+		- An unsupported unit is specified
+		- It has been detected that incorrect time zone information, such as
+			initialization errors, has been specified.
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC int64_t GS_API_CALL gsGetTimeZoneOffset(
+		const GSTimeZone *zone, GSTimeUnit timeUnit);
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief 指定のタイムゾーンのオフセット値を設定します。
+	@param [out] zone
+		対象とするタイムゾーン情報
+	@param [in] offset
+		オフセット値
+	@param [in] timeUnit
+		オフセット値の単位
+	@return オフセット値を設定できたかどうか。次の場合は@ref GS_FALSE
+		- @c zone 引数に@c NULL が指定された場合
+		- サポート範囲外のオフセット値や単位が指定された場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief Sets the offset value of the specified time zone.
+	@param [out] zone
+		time zone information to be used.
+	@param [in] offset
+		an offset value.
+	@param [in] timeUnit
+		the unit of an offset value.
+	@return Indicates whether an offset value has been successfully set.
+		In the following cases, @ref GS_FALSE is returned.
+		- @c NULL is specified for the @c zone argument.
+		- An unsupported offset value or unit is specified.
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSBool GS_API_CALL gsSetTimeZoneOffset(
+		GSTimeZone *zone, int64_t offset, GSTimeUnit timeUnit);
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief TQLのTIMESTAMP値表記に従い、タイムゾーン情報の文字列表現を求めます。
+	@param [out] zone
+		対象とするタイムゾーン情報
+	@param [out] strBuf
+		出力先の文字列バッファ。
+		@c bufSize を超えない範囲で終端文字を含む文字列を出力します。
+		@c bufSize が@c 1 以上であり、出力に必要とするサイズに満たない場合、
+		終端文字をバッファ範囲内の最終位置に設定し、残りの領域に可能な限り
+		文字列を出力します。
+		@c strBuf が @c NULL または@c bufSize が@c 0 の場合、文字列は出力
+		されません。
+	@param [in] bufSize
+		出力先の文字列バッファについての、終端文字を含んだバイト単位のサイズ
+	@return 終端文字を含んだ、出力に必要とする文字列バッファのバイト単位の
+		最低サイズ。ただし次の場合は、空文字列のサイズに相当する@c 1 。
+		- 初期化誤りなど正しくないタイムゾーン情報が指定されたことを検知した場合
+	@see GS_TIME_ZONE_STRING_SIZE_MAX
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief Finds the string representation of time zone information, according to the TIMESTAMP value notation of TQL.
+	@param [out] zone
+		time zone information to be used.
+	@param [out] strBuf
+		the output string buffer.
+		Outputs the string containing the termination character within
+		a range that does not exceed the @c bufSize.
+		If @c bufSize is greater than or equal to @c 1 and less than the size
+		required to output, the termination character is set to the last
+		position in the buffer range and the string is output as much as
+		possible to the rest of the region.
+		If @c strBuf is @c NULL or @c bufSize is @c 0, no string is output.
+	@param [in] bufSize
+		the size of an output string buffer in bytes, including the
+		termination character
+	@return The minimum size of a string buffer required for output in bytes,
+		including the termination character. However, @c 1 which is equivalent
+		to the size of an empty string is returned in the following cases:
+		- It has been detected that incorrect time zone information, such as
+			initialization errors, has been specified.
+	@see GS_TIME_ZONE_STRING_SIZE_MAX
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC size_t gsFormatTimeZone(
+		const GSTimeZone *zone, GSChar *strBuf, size_t bufSize);
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief TQLのTIMESTAMP値表記に従い、指定のタイムゾーン文字列に
+		対応する@ref GSTimeZone 値を求めます。
+	@param [in] str
+		対象とするタイムゾーン文字列
+	@param [out] zone
+		変換した値を格納するための変数へのポインタ値。
+		戻り値が@ref GS_FALSE となる場合、このポインタ値が@c NULL ではない限り
+		@ref GS_TIME_ZONE_INITIALIZER と同一の内容の初期値が格納されます。
+	@return @ref GSTimeZone 値への変換に成功し結果を格納できたかどうか。
+		次の場合、@ref GS_FALSE を返します。
+		- タイムゾーン情報の文字列表記と一致しない文字列が指定された場合
+		- サポート範囲外のタイムゾーンが指定された場合
+		- 引数に@c NULL が指定された場合
+	@since 4.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief According to the TIMESTAMP value notation of TQL, calculates the
+		@ref GSTimeZone value corresponding to the specified time zone string.
+	@param [in] str
+		A time zone string to be processed.
+	@param [out] zone
+		the pointer to a variable to store the converted value.
+		If the return value is @ref GS_FALSE, the initial value with the same
+		content as @ref GS_TIME_ZONE_INITIALIZER is stored unless the pointer
+		is @c NULL.
+	@return Indicates whether or not a conversion to a @ref GSTimeZone value
+		was successful and its result was successfully stored.
+		It returns @ref GS_FALSE in the following cases.
+		- A string that does not match the string notation of time zone
+			information is specified.
+		- An unsupported time zone is specified.
+		- when @c NULL is specified as an argument.
+	@since 4.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSBool GS_API_CALL gsParseTimeZone(
+		const GSChar *str, GSTimeZone *zone);
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
 
 //
 // Error handling API
@@ -17101,7 +19208,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
  */
 GS_DLL_PUBLIC GSBool GS_API_CALL gsIsTimeoutError(GSResult result);
 
-#endif	// GS_COMPATIBILITY_SUPPORT_1_5
+#endif // GS_COMPATIBILITY_SUPPORT_1_5
 
 
 #if GS_COMPATIBILITY_SUPPORT_4_2
@@ -17249,7 +19356,7 @@ GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorDescription(
 		see the definition of interfaces of which operation may occur the error
 		or the definition of related interfaces.
 	@par
-		The content of the parameters is also included in the  string returned
+		The content of the parameters is also included in the string returned
 		by @ref gsFormatErrorMessage or @ref gsFormatErrorDescription
 		in principle. But by a fixed parsing rule, it may not be able to extract
 		the particular information from this message. Even if the intended
@@ -17389,7 +19496,7 @@ GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorParameterName(
 GS_DLL_PUBLIC size_t GS_API_CALL gsFormatErrorParameterValue(
 		void *gsResource, size_t stackIndex, size_t parameterIndex,
 		GSChar *strBuf, size_t bufSize);
-#endif	// GS_COMPATIBILITY_SUPPORT_4_2
+#endif // GS_COMPATIBILITY_SUPPORT_4_2
 
 //
 // Experimental API
@@ -17413,8 +19520,28 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 		GSContainer *container, const GSExperimentalRowId *rowId);
 #endif
 
+//
+// Binding
+//
+
 /*!
 	@JP
+	@defgroup Group_Binding バインディング
+
+	@EN
+	@defgroup Group_Binding Binding
+
+	@ENDL
+ */
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+#define GS_STRUCT_BINDING_GETTER_NAME(type) \
+	gsSetupStructBindingOf_##type
+#endif
+
+/*!
+	@JP
+	@ingroup Group_Binding
 	@brief ユーザ定義構造体とコンテナスキーマとの対応関係の定義を取得します。
 	@par
 		指定の定義名の@ref GS_STRUCT_BINDING の定義を参照できるようにする
@@ -17425,6 +19552,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 	@see GS_STRUCT_BINDING
 
 	@EN
+	@ingroup Group_Binding
 	@brief Returns the definition of the relationship between the user-defined
 		structure and the Container schema.
 	@par
@@ -17438,13 +19566,16 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 	@ENDL
  */
 #define GS_GET_STRUCT_BINDING(type) \
-	gsSetupStructBindingOf_##type()
+	GS_STRUCT_BINDING_GETTER_NAME(type) ()
 
 /*!
 	@JP
+	@ingroup Group_Binding
 	@brief ユーザ定義構造体とコンテナスキーマとの対応関係を定義します。
 	@par
 		現バージョンでは、静的関数の定義に展開されます。
+	@par
+		複合ロウキーの構成情報の定義にも使用できます。
 	@param type
 		対応関係の定義名。関数名の一部として使用されます。
 	@param entries
@@ -17459,11 +19590,15 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 	@see GS_GET_STRUCT_BINDING
 
 	@EN
+	@ingroup Group_Binding
 	@brief Defines the relationship between the user-defined structure and the
 		Container schema.
 	@par
 		In the current version, it will be expanded in the definition of the
 		static function.
+	@par
+		It also can be used to define the configuration information about
+		a composite Row key.
 	@param type
 		the definition name of the correspondence.
 		It is used as part of the function name
@@ -17502,10 +19637,24 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 		(uintptr_t) ((GSBindingType*) 0) \
 	)
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+#define GS_STRUCT_BINDING_CUSTOM_DETAIL( \
+	name, elementType, offset, arraySizeOffset, options, keyBinding, \
+	keyBindingGetter ) \
+	{ name, elementType, offset, arraySizeOffset, options, keyBinding, \
+	keyBindingGetter },
+#else
+#define GS_STRUCT_BINDING_CUSTOM_DETAIL( \
+	name, elementType, offset, arraySizeOffset, options, keyBinding, \
+	keyBindingGetter ) \
+	{ name, elementType, offset, arraySizeOffset, options },
+#endif // not GS_COMPATIBILITY_SUPPORT_4_3
+
 #define GS_STRUCT_BINDING_CUSTOM_NAMED_ELEMENT( \
 	name, member, memberType, options) \
-	{ name, memberType, GS_STRUCT_OFFSET_OF(member), \
-		(size_t) -1, options },
+	GS_STRUCT_BINDING_CUSTOM_DETAIL( \
+		name, memberType, GS_STRUCT_OFFSET_OF(member), \
+		(size_t) -1, options, NULL, NULL)
 
 #define GS_STRUCT_BINDING_CUSTOM_ELEMENT(member, memberType, options) \
 	GS_STRUCT_BINDING_CUSTOM_NAMED_ELEMENT( \
@@ -17513,17 +19662,19 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 
 #define GS_STRUCT_BINDING_CUSTOM_NAMED_ARRAY( \
 	name, member, sizeMember, elementType, options) \
-	{ name, elementType, GS_STRUCT_OFFSET_OF(member), \
-		GS_STRUCT_OFFSET_OF(sizeMember), options },
+	GS_STRUCT_BINDING_CUSTOM_DETAIL( \
+		name, elementType, GS_STRUCT_OFFSET_OF(member), \
+		GS_STRUCT_OFFSET_OF(sizeMember), options, NULL, NULL)
 
 #define GS_STRUCT_BINDING_CUSTOM_ARRAY( \
 	member, sizeMember, elementType, options) \
 	GS_STRUCT_BINDING_CUSTOM_NAMED_ARRAY( \
 		#member, member, sizeMember, elementType, options)
-#endif	// GS_INTERNAL_DEFINITION_VISIBLE
+#endif // GS_INTERNAL_DEFINITION_VISIBLE
 
 /*!
 	@JP
+	@ingroup Group_Binding
 	@brief カラム名を指定して、ユーザ定義構造体メンバと基本型カラムスキーマとの
 		対応関係を定義します。
 	@param name
@@ -17535,6 +19686,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 	@see GS_STRUCT_BINDING
 
 	@EN
+	@ingroup Group_Binding
 	@brief Defines the relationship between the user-defined structure members
 		and the base type column schema by specifying column name.
 	@param name
@@ -17553,6 +19705,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 
 /*!
 	@JP
+	@ingroup Group_Binding
 	@brief カラム名を指定して、ユーザ定義構造体メンバとロウキー付き
 		基本型カラムスキーマとの対応関係を定義します。
 	@param name
@@ -17564,6 +19717,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 	@see GS_STRUCT_BINDING
 
 	@EN
+	@ingroup Group_Binding
 	@brief Defines the relationship between the user-defined structure members
 		and the base type column schema with row key by specifying a column
 		name.
@@ -17583,6 +19737,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 
 /*!
 	@JP
+	@ingroup Group_Binding
 	@brief カラム名を指定して、ユーザ定義構造体メンバと配列型カラムスキーマとの
 		対応関係を定義します。
 	@param name
@@ -17596,6 +19751,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 	@see GS_STRUCT_BINDING
 
 	@EN
+	@ingroup Group_Binding
 	@brief Defines the relationship between the user-defined structure members
 		and the array type column schema by specifying a column name.
 	@param name
@@ -17619,6 +19775,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 
 /*!
 	@JP
+	@ingroup Group_Binding
 	@brief ユーザ定義構造体メンバと基本型カラムスキーマとの対応関係を定義します。
 	@par
 		構造体メンバの名前がそのままカラム名として使用されます。
@@ -17629,6 +19786,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 	@see GS_STRUCT_BINDING
 
 	@EN
+	@ingroup Group_Binding
 	@brief Defines the relationship between the user-defined structure members
 		and the base type column schema.
 	@par
@@ -17647,6 +19805,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 
 /*!
 	@JP
+	@ingroup Group_Binding
 	@brief ユーザ定義構造体メンバとロウキー付き基本型カラムスキーマとの対応関係を
 		定義します。
 	@par
@@ -17658,6 +19817,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 	@see GS_STRUCT_BINDING
 
 	@EN
+	@ingroup Group_Binding
 	@brief Defines the relationship between the user-defined structure members
 		and the base type column schema with row key.
 	@par
@@ -17676,6 +19836,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 
 /*!
 	@JP
+	@ingroup Group_Binding
 	@brief ユーザ定義構造体メンバと配列型カラムスキーマとの対応関係を定義します。
 	@par
 		構造体メンバの名前がそのままカラム名として使用されます。
@@ -17688,6 +19849,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 	@see GS_STRUCT_BINDING
 
 	@EN
+	@ingroup Group_Binding
 	@brief Defines the relationship between the user-defined structure members
 		and the array type column schema.
 	@par
@@ -17708,8 +19870,46 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsExperimentalDeleteRowById(
 	GS_STRUCT_BINDING_CUSTOM_NAMED_ARRAY( \
 		#member, member, sizeMember, elementType, 0)
 
+#if GS_COMPATIBILITY_SUPPORT_4_3
+
+/*!
+	@JP
+	@ingroup Group_Binding
+	@brief ユーザ定義構造体メンバと複合ロウキー付きカラムスキーマとの
+		対応関係を定義します。
+	@param member
+		構造体メンバの名前
+	@param bindingType
+		複合ロウキーを構成するユーザ定義構造体の名前。対応する複合ロウキーの
+		構成については、別途@ref GS_STRUCT_BINDING を通じて定義されて
+		いなければならない
+	@see GS_STRUCT_BINDING
+	@since 4.3
+
+	@EN
+	@ingroup Group_Binding
+	@brief Defines the relationship between the user-defined structure member
+		and the column schema with a composite Row key.
+	@param member
+		The name of the structure member
+	@param bindingType
+		The name of the user-defined structure configuring a composite Row key.
+		The configuration of the corresponding composite Row key must be
+		defined elsewhere beforehand using @ref GS_STRUCT_BINDING.
+	@see GS_STRUCT_BINDING
+	@since 4.3
+
+	@ENDL
+*/
+#define GS_STRUCT_BINDING_COMPOSITE_KEY(member, bindingType) \
+	GS_STRUCT_BINDING_CUSTOM_DETAIL( \
+		#member, -1, GS_STRUCT_OFFSET_OF(member), \
+		(size_t) -1, 0, NULL, GS_STRUCT_BINDING_GETTER_NAME(bindingType))
+
+#endif // GS_COMPATIBILITY_SUPPORT_4_3
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif	// not GRIDSTORE_H_
+#endif // not GRIDSTORE_H_
