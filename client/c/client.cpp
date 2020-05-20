@@ -8241,13 +8241,13 @@ void NodeResolver::acceptClusterInfo(
 	for (bool checkOnly = true;; checkOnly = false) {
 		acceptClusterInfoEntry(
 				clusterInfo, clusterInfo.partitionCount_, "partition count",
-				*partitionCount, address, byConnection, checkOnly);
+				partitionCount, address, byConnection, checkOnly);
 		acceptClusterInfoEntry(
 				clusterInfo, clusterInfo.hashMode_, "container hash mode",
-				*hashMode, address, byConnection, checkOnly);
+				hashMode, address, byConnection, checkOnly);
 		acceptClusterInfoEntry(
 				clusterInfo, clusterInfo.databaseId_, "partition count",
-				*databaseId, address, byConnection, checkOnly);
+				databaseId, address, byConnection, checkOnly);
 
 		if (!checkOnly) {
 			break;
@@ -8257,10 +8257,10 @@ void NodeResolver::acceptClusterInfo(
 
 template<typename T> void NodeResolver::acceptClusterInfoEntry(
 		ClusterInfo &clusterInfo, ClusterInfoEntry<T> &entry,
-		const char8_t *name, const T &value,
+		const char8_t *name, const T *value,
 		const util::SocketAddress &address,
 		bool byConnection, bool checkOnly) {
-	if (entry.tryAccept(&value, address, byConnection, checkOnly)) {
+	if (entry.tryAccept(value, address, byConnection, checkOnly)) {
 		return;
 	}
 

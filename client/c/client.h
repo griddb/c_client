@@ -2157,7 +2157,7 @@ private:
 			const util::SocketAddress &address, bool byConnection);
 	template<typename T> void acceptClusterInfoEntry(
 			ClusterInfo &clusterInfo, ClusterInfoEntry<T> &entry,
-			const char8_t *name, const T &value,
+			const char8_t *name, const T *value,
 			const util::SocketAddress &address,
 			bool byConnection, bool checkOnly);
 
