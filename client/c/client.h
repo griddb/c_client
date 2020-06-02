@@ -1074,6 +1074,13 @@ private:
 	void clearField(const GSBindingEntry &entry, void *rowObj) const;
 	void clearFieldGeneral(const GSBindingEntry &entry, void *rowObj) const;
 
+	template<typename Alloc>
+	static void deallocateStringArray(
+			Alloc* alloc, GSChar **strArray, size_t arraySize) throw();
+	void deallocatePtrArray(
+			VarDataPool *pool, void *rowObj, void **ptrArray,
+			size_t arraySize) const throw();
+
 	void* allocate(VarDataPool *pool, void *rowObj, size_t size) const;
 	void deallocate(VarDataPool *pool, void *rowObj, void *ptr) const;
 
