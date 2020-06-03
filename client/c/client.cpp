@@ -2582,20 +2582,10 @@ void RowMapper::decode(
 		}
 		catch (...) {
 			if (pendingVarData != NULL) {
-				for (; pendingPtrArraySize > 0; pendingPtrArraySize--) {
-					void *elemPtr = static_cast<void**>(
-							pendingVarData)[pendingPtrArraySize];
-					try {
-						deallocate(cursor.varDataPool_, rowObj, elemPtr);
-					}
-					catch (...) {
-					}
-				}
-				try {
-					deallocate(cursor.varDataPool_, rowObj, pendingVarData);
-				}
-				catch (...) {
-				}
+				deallocatePtrArray(
+						cursor.varDataPool_, rowObj,
+						static_cast<void**>(pendingVarData),
+						pendingPtrArraySize);
 			}
 
 			if (general_) {
@@ -3025,7 +3015,7 @@ GSValue RowMapper::copyValue(const GSValue &src, const Traits&, Alloc *alloc,
 
 		size_t i = 0;
 		try {
-			for (size_t i = 0; i < arraySize; i++) {
+			for (i = 0; i < arraySize; i++) {
 				const GSChar *srcStr = Traits::as(src)[i];
 				if (srcStr == NULL) {
 					GS_CLIENT_THROW_ERROR(GS_ERROR_CC_EMPTY_PARAMETER, "");
@@ -3037,10 +3027,7 @@ GSValue RowMapper::copyValue(const GSValue &src, const Traits&, Alloc *alloc,
 			}
 		}
 		catch (...) {
-			for (size_t j = 0; j < i; j++) {
-				alloc->deallocate(destArray[i]);
-			}
-			alloc->deallocate(destArray);
+			deallocateStringArray(alloc, destArray, i);
 			throw;
 		}
 		Traits::as(dest) = destArray;
@@ -4646,6 +4633,60 @@ void RowMapper::clearFieldGeneral(
 
 	GSRow::FieldClearer clearer;
 	invokeTypedOperation(*static_cast<GSRow*>(rowObj), clearer, entry);
+}
+
+
+template<typename Alloc>
+void RowMapper::deallocateStringArray(
+		Alloc *alloc, GSChar **strArray, size_t arraySize) throw() {
+	try {
+		GSChar **it = strArray;
+		GSChar **const end = it + arraySize;
+
+		for (; it != end; ++it) {
+			GSChar* const str = *it;
+			try {
+				alloc->deallocate(str);
+			}
+			catch (...) {
+			}
+		}
+	}
+	catch (...) {
+	}
+
+	try {
+		alloc->deallocate(strArray);
+	}
+	catch (...) {
+	}
+}
+
+void RowMapper::deallocatePtrArray(
+		VarDataPool *pool, void *rowObj, void **ptrArray,
+		size_t arraySize) const throw() {
+	try {
+		void **it = ptrArray;
+		void **const end = it + arraySize;
+
+		for (; it != end; ++it) {
+			void* const elem = *it;
+			try {
+				deallocate(pool, rowObj, elem);
+			}
+			catch (...) {
+			}
+		}
+	}
+	catch (...) {
+	}
+
+	try {
+		deallocate(pool, rowObj, ptrArray);
+	}
+	catch (...) {
+	}
+
 }
 
 void* RowMapper::allocate(VarDataPool *pool, void *rowObj, size_t size) const {
