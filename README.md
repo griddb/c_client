@@ -93,8 +93,7 @@ A sample.exe is created under the <C_CLIENT_SRC_PATH>\bin\x64\Release folder (bu
 
 ## Document
   Refer to the file below for more detailed information.  
-  - [API Reference](https://griddb.github.io/griddb_nosql/manual/GridDB_API_Reference.html)
-  - [API Reference(Japanese)](https://griddb.github.io/griddb_nosql/manual/GridDB_API_Reference_ja.html)
+  - [C API Reference](http://griddb.github.io/docs-en/manuals/GridDB_C_API_Reference.html)
 
 Note: GEOMETRY type is not available for C Client CE(Community Edition).  
 

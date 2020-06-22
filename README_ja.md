@@ -86,7 +86,7 @@ GridDB CクライアントはC言語用のインタフェースを提供します。
 
 ## ドキュメント
   詳細は以下のドキュメントを参照してください。
-  - [APIリファレンス](https://griddb.github.io/griddb_nosql/manual/GridDB_API_Reference_ja.html)
+  - [C APIリファレンス](http://griddb.github.io/docs-ja/manuals/GridDB_C_API_Reference.html)
 
 ※Cクライアント(Community Edition)では空間型は利用できません。  
 
