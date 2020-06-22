@@ -11,12 +11,15 @@ GridDB CƒNƒ‰ƒCƒAƒ“ƒg‚ÍCŒ¾Œê—p‚ÌƒCƒ“ƒ^ƒtƒF[ƒX‚ğ’ñ‹Ÿ‚µ‚Ü‚·B
 ˆÈ‰º‚ÌŠÂ‹«‚ÅCƒNƒ‰ƒCƒAƒ“ƒg‚Ìƒrƒ‹ƒh‚ÆƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ÌÀs‚ğŠm”F‚µ‚Ä‚¢‚Ü‚·B
 
     OS: CentOS 7.6(x64) (gcc 4.8.5), Windows 10(x64) (VS2017, CMake 3.15.2)
-    GridDB server: V4.3 CE(Community Edition), CentOS 7.6(x64)
+    GridDB server: V4.5 CE(Community Edition), CentOS 7.6(x64) (gcc 4.8.5)
 
-    OS: Ubuntu 18.04(x64) (gcc 4.8.5)
-    GridDB server: V4.3 CE(Community Edition), Ubuntu 18.04(x64)
+    OS: Ubuntu 18.04(x64) (gcc 7.5)
+    GridDB server: V4.5 CE(Community Edition), Ubuntu 18.04(x64) (gcc 4.8.5)
 
-## ƒNƒCƒbƒNƒXƒ^[ƒg(CentOS, Ubuntu)
+    OS: openSUSE 15.1(x64) (gcc 7.5)
+    GridDB server: V4.5 CE(Community Edition), openSUSE 15.1(x64) (gcc 4.8.5)
+
+## ƒNƒCƒbƒNƒXƒ^[ƒg(CentOS, Ubuntu, openSUSE)
 
 ### ƒ\[ƒXƒR[ƒh‚Ì—˜—p
 
@@ -46,53 +49,6 @@ GridDB CƒNƒ‰ƒCƒAƒ“ƒg‚ÍCŒ¾Œê—p‚ÌƒCƒ“ƒ^ƒtƒF[ƒX‚ğ’ñ‹Ÿ‚µ‚Ü‚·B
 (’Ç‰Áî•ñ)
 - client/c/includeƒtƒHƒ‹ƒ_‚Ì‰º‚ÉAƒrƒ‹ƒh‚Ég‚í‚ê‚égridstore.hƒtƒ@ƒCƒ‹‚ª‚ ‚è‚Ü‚·B  
 - client/c/sampleƒtƒHƒ‹ƒ_‚Ì‰º‚ÉAƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ª‚ ‚è‚Ü‚·B
-
-### RPM/DEBƒtƒ@ƒCƒ‹‚Ì—˜—p
-
-#### ƒCƒ“ƒXƒg[ƒ‹
-
-[CentOS]
-
-(C1) yumƒRƒ}ƒ“ƒh‚Ì—˜—p
-
-	$ sudo yum-config-manager --add-repo https://download.opensuse.org/repositories/home:knonomura/CentOS_7/home:knonomura.repo
-	$ sudo yum install griddb-c-client
-
-(C2) rpmƒRƒ}ƒ“ƒh‚Ì—˜—p  
-RPMƒtƒ@ƒCƒ‹(https://github.com/griddb/c_client/releases) ‚ğƒ_ƒEƒ“ƒ[ƒhŒã‚ÉAŸ‚ÌƒRƒ}ƒ“ƒh‚ğÀs‚µ‚Ä‚­‚¾‚³‚¢B
-
-    $ sudo rpm -ivh griddb-c-client-X.X.X-linux.x86_64.rpm
-
-[Ubuntu]
-
-(U1) apt-getƒRƒ}ƒ“ƒh‚Ì—˜—p
-
-    $ sudo sh -c "echo 'deb http://download.opensuse.org/repositories/home:/knonomura/xUbuntu_18.04/ /' > /etc/apt/sources.list.d/home:knonomura.list"
-    $ wget -nv https://download.opensuse.org/repositories/home:knonomura/xUbuntu_18.04/Release.key -O Release.key
-    $ sudo apt-key add - < Release.key
-    $ sudo apt-get update
-    $ sudo apt-get install griddb-c-client
-
-  About installation information: 
-  https://software.opensuse.org/download/package?project=home:knonomura&package=griddb-c-client
-
-(U2) dpkgƒRƒ}ƒ“ƒh‚Ì—˜—p  
-DEBƒtƒ@ƒCƒ‹(https://github.com/griddb/c_client/releases) ‚ğƒ_ƒEƒ“ƒ[ƒhŒã‚ÉAŸ‚ÌƒRƒ}ƒ“ƒh‚ğÀs‚µ‚Ä‚­‚¾‚³‚¢B
-
-    $ sudo dpkg -i griddb-c-client-X.X.X_amd64.deb
-
-#### ƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ÌÀs
-–‘O‚ÉGridDBƒT[ƒo‚ğ‹N“®‚µ‚Ä‚¨‚­•K—v‚ª‚ ‚è‚Ü‚·B
-
-    $ cp /usr/griddb_c_client-X.X.X/sample/sample1.c .
-    $ gcc sample1.c -lgridstore
-    $ ./a.out <GridDB notification address(default is 239.0.0.1)> <GridDB notification port(default is 31999)>
-      <GridDB cluster name> <GridDB user> <GridDB password>
-      -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
-
-(’Ç‰Áî•ñ)
-- /usr/includeƒtƒHƒ‹ƒ_‚Ì‰º‚ÉAƒrƒ‹ƒh‚Ég‚í‚ê‚égridstore.hƒtƒ@ƒCƒ‹‚ª‚ ‚è‚Ü‚·B  
-- /usr/lib64(CentOS)A/usr/lib/x86_64-linux-gnu(Ubuntu)ƒtƒHƒ‹ƒ_‚Ì‰º‚ÉAƒrƒ‹ƒh‚¨‚æ‚ÑÀs‚Ég‚í‚ê‚élibgridstore.soƒtƒ@ƒCƒ‹‚ª‚ ‚è‚Ü‚·B  
 
 ## ƒNƒCƒbƒNƒXƒ^[ƒg(Windows)
 
@@ -127,28 +83,6 @@ DEBƒtƒ@ƒCƒ‹(https://github.com/griddb/c_client/releases) ‚ğƒ_ƒEƒ“ƒ[ƒhŒã‚ÉAŸ‚
 (’Ç‰Áî•ñ)
 - client/c/includeƒtƒHƒ‹ƒ_‚Ì‰º‚ÉAƒrƒ‹ƒh‚Ég‚í‚ê‚égridstore.hƒtƒ@ƒCƒ‹‚ª‚ ‚è‚Ü‚·B  
 - client/c/sampleƒtƒHƒ‹ƒ_‚Ì‰º‚ÉAƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ª‚ ‚è‚Ü‚·B
-
-### MSIƒtƒ@ƒCƒ‹‚Ì—˜—p
-
-#### ƒCƒ“ƒXƒg[ƒ‹
-
-MSIƒpƒbƒP[ƒW(https://github.com/griddb/c_client/releases) ‚ğƒ_ƒEƒ“ƒ[ƒh‚µ‚ÄÀs‚µ‚Ä‚­‚¾‚³‚¢BC:/Program Files/GridDB/C Client/X.X.XƒtƒHƒ‹ƒ_‚Ì‰º‚ÉƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚Ü‚·B
-
-#### ƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚Ìì¬Aƒrƒ‹ƒh
-
-ˆÈ‰º‚ÍAVS2017‚Ìê‡‚Ìè‡‚Å‚·B
-* x64‚ÌƒvƒƒWƒFƒNƒg‚ğì¬B[\¬ƒ}ƒl[ƒWƒƒ] - [ƒAƒNƒeƒBƒuƒ\ƒŠƒ…[ƒVƒ‡ƒ“ƒvƒ‰ƒbƒgƒtƒH[ƒ€] - [V‹Kì¬]‚Å "x64"‚ğ‘I‘ğ‚µ‚Ü‚·B
-* ƒvƒƒWƒFƒNƒg‚Ìƒ\[ƒX ƒtƒ@ƒCƒ‹‚Ésample1.cƒtƒ@ƒCƒ‹‚ğ’Ç‰Á‚µ‚Ü‚·B
-* IncludeƒfƒBƒŒƒNƒgƒŠ‚Ìİ’èB[\¬ƒvƒƒpƒeƒB] - [C/C++] - [‘S”Ê] - [’Ç‰Á‚ÌƒCƒ“ƒNƒ‹[ƒhƒfƒBƒŒƒNƒgƒŠ]‚É gridstore.h ‚ª‘¶İ‚·‚éƒfƒBƒŒƒNƒgƒŠ‚ğw’è‚µ‚Ü‚·B
-* ƒCƒ“ƒ|[ƒgƒ‰ƒCƒuƒ‰ƒŠ(gridstore_c.lib)‚Ìİ’èB[ƒŠƒ“ƒJ[] - [“ü—Í] - [’Ç‰Á‚ÌˆË‘¶ƒtƒ@ƒCƒ‹] ‚É’Ç‰Á‚µ‚Ü‚·B
-* ƒvƒƒWƒFƒNƒg‚ğƒrƒ‹ƒh‚µ‚Ü‚·B
-
-#### ƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ÌÀs
-–‘O‚ÉGridDBƒT[ƒo‚ğ‹N“®‚µ‚Ä‚¨‚­•K—v‚ª‚ ‚è‚Ü‚·B
-
-    > sample.exe <GridDB notification address(default is 239.0.0.1)> <GridDB notification port(default is 31999)>
-      <GridDB cluster name> <GridDB user> <GridDB password>
-      -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
 
 ## ƒhƒLƒ…ƒƒ“ƒg
   Ú×‚ÍˆÈ‰º‚ÌƒhƒLƒ…ƒƒ“ƒg‚ğQÆ‚µ‚Ä‚­‚¾‚³‚¢B
