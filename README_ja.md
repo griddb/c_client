@@ -50,6 +50,34 @@ GridDB CクライアントはC言語用のインタフェースを提供します。
 - client/c/includeフォルダの下に、ビルドに使われるgridstore.hファイルがあります。  
 - client/c/sampleフォルダの下に、サンプルプログラムがあります。
 
+
+### RPM/DEBファイルの利用
+
+#### インストール
+
+[CentOS, Ubuntu]
+
+以下のURLを参照してください。  
+https://software.opensuse.org/download/package?project=home:knonomura&package=griddb-c-client
+
+[openSUSE]
+
+以下のURLを参照してください。  
+https://software.opensuse.org//download.html?project=home%3Aknonomura&package=griddb-c-client-devel
+
+#### サンプルプログラムの実行
+事前にGridDBサーバを起動しておく必要があります。
+
+    $ cp /usr/griddb_c_client-X.X.X/sample/sample1.c .
+    $ gcc sample1.c -lgridstore
+    $ ./a.out <GridDB notification address(default is 239.0.0.1)> <GridDB notification port(default is 31999)>
+      <GridDB cluster name> <GridDB user> <GridDB password>
+      -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
+
+(追加情報)
+- /usr/includeフォルダの下に、ビルドに使われるgridstore.hファイルがあります。  
+- /usr/lib64(CentOS, openSUSE)、/usr/lib/x86_64-linux-gnu(Ubuntu)フォルダの下に、ビルドおよび実行に使われるlibgridstore.soファイルがあります。  
+
 ## クイックスタート(Windows)
 
 ### ソースコードの利用
@@ -83,6 +111,28 @@ GridDB CクライアントはC言語用のインタフェースを提供します。
 (追加情報)
 - client/c/includeフォルダの下に、ビルドに使われるgridstore.hファイルがあります。  
 - client/c/sampleフォルダの下に、サンプルプログラムがあります。
+
+### MSIファイルの利用
+
+#### インストール
+
+MSIパッケージ(https://github.com/griddb/c_client/releases) をダウンロードして実行してください。C:/Program Files/GridDB/C Client/X.X.Xフォルダの下にインストールされます。
+
+#### サンプルプログラムの作成、ビルド
+
+以下は、VS2017の場合の手順です。
+* x64のプロジェクトを作成。[構成マネージャ] - [アクティブソリューションプラットフォーム] - [新規作成]で "x64"を選択します。
+* プロジェクトのソース ファイルにsample1.cファイルを追加します。
+* Includeディレクトリの設定。[構成プロパティ] - [C/C++] - [全般] - [追加のインクルードディレクトリ]に gridstore.h が存在するディレクトリを指定します。
+* インポートライブラリ(gridstore_c.lib)の設定。[リンカー] - [入力] - [追加の依存ファイル] に追加します。
+* プロジェクトをビルドします。
+
+#### サンプルプログラムの実行
+事前にGridDBサーバを起動しておく必要があります。
+
+    > sample.exe <GridDB notification address(default is 239.0.0.1)> <GridDB notification port(default is 31999)>
+      <GridDB cluster name> <GridDB user> <GridDB password>
+      -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
 
 ## ドキュメント
   詳細は以下のドキュメントを参照してください。
