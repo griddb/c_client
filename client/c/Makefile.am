@@ -1,4 +1,8 @@
-SUBDIRS = main
+if OSX
+    SUBDIRS = mainMacOS
+else
+    SUBDIRS = main
+endif
 
 distclean-local:
 	rm -rfv autom4te.cache
