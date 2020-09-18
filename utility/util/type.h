@@ -172,7 +172,6 @@
 #define UTIL_HAVE_DEV_T	8
 #define UTIL_HAVE_DIRENT_H	1
 #define UTIL_HAVE_DLFCN_H	1
-#define UTIL_HAVE_EPOLL_CTL	1
 #define UTIL_HAVE_FCNTL	1
 #define UTIL_HAVE_FCNTL_H	1
 #define UTIL_HAVE_FSBLKCNT_T 4
@@ -190,7 +189,6 @@
 #define UTIL_HAVE_LONG_LONG_T	8
 #define UTIL_HAVE_LSTAT	1
 #define UTIL_HAVE_MODE_T	4
-#define UTIL_HAVE_MQUEUE_H	1
 #define UTIL_HAVE_NLINK_T	4
 #define UTIL_HAVE_OFF_T	4
 #define UTIL_HAVE_OPENDIR	1
@@ -211,11 +209,9 @@
 #define UTIL_HAVE_SIGINFO_T	128
 #define UTIL_HAVE_SIGNAL_H	1
 #define UTIL_HAVE_SIGSET_T	128
-#define UTIL_HAVE_SIZE_T	UTIL_POINTER_SIZE
 #define UTIL_HAVE_SOCKADDR_STORAGE_T	128
 #define UTIL_HAVE_SOCKADDR_UN_T	110
 #define UTIL_HAVE_SOCKLEN_T	4
-#define UTIL_HAVE_SSIZE_T	UTIL_POINTER_SIZE
 #define UTIL_HAVE_STAT	1
 #define UTIL_HAVE_STATVFS	1
 /* #undef UTIL_HAVE_STATVFS_H */
@@ -227,7 +223,17 @@
 #define UTIL_HAVE_STRCASECMP	1
 /* #undef UTIL_HAVE_STRICMP */
 /* #undef UTIL_HAVE_SYS_DIRENT_H */
+#ifdef __APPLE__
+#define UTIL_HAVE_SIZE_T	sizeof(__SIZE_TYPE__)
+#define UTIL_HAVE_SSIZE_T	sizeof(ssize_t)
+#else
+#define UTIL_HAVE_SIZE_T	UTIL_POINTER_SIZE
+#define UTIL_HAVE_SSIZE_T	UTIL_POINTER_SIZE
 #define UTIL_HAVE_SYS_EPOLL_H	1
+#define UTIL_HAVE_MQUEUE_H	1
+#define UTIL_HAVE_EPOLL_CTL	1
+#define UTIL_HAVE___BLKSIZE_T	4
+#endif
 #define UTIL_HAVE_SYS_IOCTL_H	1
 #define UTIL_HAVE_SYS_MMAN_H	1
 #define UTIL_HAVE_SYS_POLL_H	1
@@ -244,7 +250,6 @@
 #define UTIL_HAVE_UINT8_T	1
 #define UTIL_HAVE_UNISTD_H	1
 #define UTIL_HAVE_VSNPRINTF	1
-#define UTIL_HAVE___BLKSIZE_T	4
 /* #undef UTIL_HAVE___INT64_T */
 #define UTIL_HAVE_MEM_STAT_ST_BLKSIZE	1
 #define UTIL_HAVE_MEM_STAT_ST_BLOCKS	1
@@ -254,9 +259,11 @@
 #ifdef __off_t_defined
 #error "This header must be included before off_t declaration"
 #endif
+#ifndef __APPLE__
 #define _FILE_OFFSET_BITS 64
 #define LARGEFILE_SOURCE
 #define LARGE_FILES
+#endif
 #endif
 
 #define __STDC_CONSTANT_MACROS
@@ -323,7 +330,9 @@ typedef std::string u8string;
 #define UTIL_UTF8_STRING_DEFINED
 #endif
 
-#if defined(__GNUC__) && !UTIL_CXX11_SUPPORTED || \
+#ifdef __APPLE__
+#define _CHAR16T
+#elif defined(__GNUC__) && !UTIL_CXX11_SUPPORTED || \
 	defined(_MSC_VER) && !( \
 		defined(_HAS_CHAR16_T_LANGUAGE_SUPPORT) && \
 		_HAS_CHAR16_T_LANGUAGE_SUPPORT ) && \
@@ -904,7 +913,9 @@ public:
 
 template<>
 struct StaticAssertChecker<false> {
+#ifndef __APPLE__
 private:
+#endif
 	enum {
 		ASSERTION_FAILED
 	};

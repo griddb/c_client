@@ -97,10 +97,16 @@ PlatformException PlatformExceptionBuilder::operator()(
 	const char8_t *name =
 			(type == TYPE_NORMAL ? "errno" : "getaddrinfo");
 
+#ifdef __APPLE__
+	descriptionPtr = (type == TYPE_NORMAL ?
+			strerror(errorCode) :
+			gai_strerror(errorCode));
+#else
 	char8_t description[1024];
 	descriptionPtr = (type == TYPE_NORMAL ?
 			strerror_r(errorCode, description, sizeof(description)) :
 			gai_strerror(errorCode));
+#endif
 #endif
 
 	return PlatformException(errorCode,

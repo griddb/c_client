@@ -564,7 +564,9 @@ public:
 	template<typename S, typename E>
 	void put(S &s, const E *str);
 
+#ifndef __APPLE__
 private:
+#endif
 	struct StrSizeChecker {
 		static inline bool check(const uint8_t*) { return true; }
 		static inline bool check(const uint16_t*) { return true; }
@@ -574,6 +576,9 @@ private:
 		static inline bool check(const int16_t *s) { return *s >= 0; }
 		static inline bool check(const int32_t *s) { return *s >= 0; }
 		static inline bool check(const int64_t *s) { return *s >= 0; }
+#ifdef __APPLE__
+		static inline bool check(const size_t *s) { return *s >= 0; }
+#endif
 	};
 
 	struct InstanceForGet {};
@@ -1293,7 +1298,7 @@ UTIL_FORCEINLINE int32_t varIntDecode64(const uint8_t *p, uint64_t &v) {
 	a |= *p;
 	++p;
 	if ( !(a & 0x80) ) {
-		a &= (0x7f << 28) | (0x7f << 14) | (0x7f);
+		a &= (0x7ful << 28) | (0x7f << 14) | (0x7f);
 		b &= (0x7f << 14) | (0x7f);
 		b = b << 7;
 		a |= b;
@@ -1306,7 +1311,7 @@ UTIL_FORCEINLINE int32_t varIntDecode64(const uint8_t *p, uint64_t &v) {
 	b |= *p;
 	++p;
 	if ( !(b & 0x80) ) {
-		b &= (0x7f << 28) | (0x7f << 14) | (0x7f);
+		b &= (0x7ful << 28) | (0x7f << 14) | (0x7f);
 		a = a << 7;
 		a |= b;
 		s = s >> 4;
