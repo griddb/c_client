@@ -83,7 +83,7 @@ GridDB server need to be started in advance.
 - The gridstore.h file on /usr/include folder is used for building.  
 - The libgridstore.so file on /usr/lib64 (CentOS, openSUSE), /usr/lib/x86_64-linux-gnu (Ubuntu) folder is used for building and executing.  
 
-## Quick start for MacOS
+## Quick start (MacOS)
 
 ### Using source code
 
