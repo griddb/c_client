@@ -19,6 +19,9 @@ GridDB CクライアントはC言語用のインタフェースを提供します。
     OS: openSUSE 15.1(x64) (gcc 7.5)
     GridDB server: V4.5 CE(Community Edition), openSUSE 15.1(x64) (gcc 4.8.5)
 
+    OS: MacOS Catalina 10.15 (clang 11.0.3)
+    GridDB server: V4.5 CE(Community Edition), CentOS 7.8(x64) (gcc 4.8.5)
+
 ## クイックスタート(CentOS, Ubuntu, openSUSE)
 
 ### ソースコードの利用
