@@ -19,6 +19,9 @@ Library building and program execution are checked in the environment below.
     OS: openSUSE 15.1(x64) (gcc 7.5)
     GridDB server: V4.5 CE(Community Edition), openSUSE 15.1(x64) (gcc 4.8.5)
 
+    OS: MacOS Catalina 10.15 (clang 11.0.3)
+    GridDB server: V4.5 CE(Community Edition), CentOS 7.8(x64) (gcc 4.8.5)
+
 ## Quick start (CentOS, Ubuntu, openSUSE)
 
 ### Using source code
@@ -79,6 +82,39 @@ GridDB server need to be started in advance.
 (Additional information)
 - The gridstore.h file on /usr/include folder is used for building.  
 - The libgridstore.so file on /usr/lib64 (CentOS, openSUSE), /usr/lib/x86_64-linux-gnu (Ubuntu) folder is used for building and executing.  
+
+## Quick start for MacOS
+
+### Using source code
+
+#### Build
+
+Run the make command like the following:
+
+    $ cd client/c
+    $ ./bootstrap.sh
+    $ ./configure
+    $ make
+
+and create the following file and links under the bin/ folder.
+
+    libgridstore.dylib
+    libgridstore.0.dylib
+    libgridstore.0.0.0.dylib
+
+#### Execute a sample program
+GridDB server need to be started in advance.
+
+    $ cp client/c/sample/sample1.c .
+    $ gcc -I./client/c/include -L./bin sample1.c -lgridstore
+    $ export DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:./bin
+    $ ./a.out <GridDB notification address(default is 239.0.0.1)> <GridDB notification port(default is 31999)>
+      <GridDB cluster name> <GridDB user> <GridDB password>
+      -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
+
+(Additional information)
+- The gridstore.h file on client/c/include folder is used for building.
+- There are some samples on client/c/sample folder.
 
 ## Quick start (Windows)
 

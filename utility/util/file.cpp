@@ -113,9 +113,11 @@ const int FileFlag::TYPE_EXCLUSIVE = O_EXCL;
 const int FileFlag::TYPE_TRUNCATE = O_TRUNC;
 const int FileFlag::TYPE_APPEND = O_APPEND;
 const int FileFlag::TYPE_NON_BLOCK = O_NONBLOCK;
+#ifndef __APPLE__
 const int FileFlag::TYPE_SYNC = O_SYNC;
 const int FileFlag::TYPE_ASYNC = O_ASYNC;
 const int FileFlag::TYPE_DIRECT = O_DIRECT;
+#endif
 #endif
 
 FileFlag::FileFlag() :
@@ -183,26 +185,48 @@ bool FileFlag::isNonBlock(void) const {
 }
 
 void FileFlag::setSync(bool v) {
+#ifdef __APPLE__
+	UTIL_THROW_NOIMPL_UTIL();
+#else
 	FileLib::setFlag(flags_, TYPE_SYNC, v);
+#endif
 }
 
 bool FileFlag::isSync(void) const {
+#ifdef __APPLE__
+	UTIL_THROW_NOIMPL_UTIL();
+#else
 	return FileLib::getFlag(flags_, TYPE_SYNC);
+#endif
 }
 
 void FileFlag::setAsync(bool v) {
+#ifdef __APPLE__
+	UTIL_THROW_NOIMPL_UTIL();
+#else
 	FileLib::setFlag(flags_, TYPE_ASYNC, v);
+#endif
 }
 
 bool FileFlag::isAsync(void) const {
+#ifdef __APPLE__
+	UTIL_THROW_NOIMPL_UTIL();
+#endif
 	return FileLib::getFlag(flags_, TYPE_ASYNC);
 }
 
 void FileFlag::setDirect(bool v) {
+#ifdef __APPLE__
+	UTIL_THROW_NOIMPL_UTIL();
+#else
 	FileLib::setFlag(flags_, TYPE_DIRECT, v);
+#endif
 }
 
 bool FileFlag::isDirect(void) const {
+#ifdef __APPLE__
+	UTIL_THROW_NOIMPL_UTIL();
+#endif
 	return FileLib::getFlag(flags_, TYPE_DIRECT);
 }
 
@@ -543,11 +567,15 @@ off_t File::tell() {
 	fp.HighPart = fpHigh;
 	return fp.QuadPart;
 #else
+#ifdef __APPLE__
+	UTIL_THROW_NOIMPL_UTIL();
+#else
 	const off_t result = lseek64(fd_, 0, SEEK_CUR);
 	if (result == static_cast<off_t>(-1)) {
 		UTIL_THROW_PLATFORM_ERROR(NULL);
 	}
 	return result;
+#endif
 #endif
 }
 
@@ -564,7 +592,7 @@ void File::sync() {
 }
 
 void File::preAllocate(int mode, off_t offset, off_t len) {
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
 #else
 	if (fallocate(fd_, mode, offset, len) != 0) {
 		UTIL_THROW_PLATFORM_ERROR(NULL);
@@ -585,9 +613,13 @@ void File::setSize(uint64_t size) {
 		UTIL_THROW_PLATFORM_ERROR(NULL);
 	}
 #else
+#ifdef __APPLE__
+        UTIL_THROW_NOIMPL_UTIL();
+#else
 	if (ftruncate64(fd_, static_cast<off64_t>(size)) != 0) {
 		UTIL_THROW_PLATFORM_ERROR(NULL);
 	}
+#endif
 #endif
 }
 
@@ -775,8 +807,13 @@ void NamedFile::open(const char8_t *name, FileFlag flags, FilePermission perm) {
 #else
 	std::string encodedName;
 	CodeConverter(Code::UTF8, Code::CHAR)(nameStr, encodedName);
+#ifdef __APPLE__
+	const int fd = ::open(
+			encodedName.c_str(), flags, static_cast<int>(perm));
+#else
 	const int fd = ::open(
 			encodedName.c_str(), flags | O_LARGEFILE, static_cast<int>(perm));
+#endif
 	if (-1 == fd) {
 		UTIL_THROW_PLATFORM_ERROR(NULL);
 	}

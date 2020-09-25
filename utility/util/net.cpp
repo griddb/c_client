@@ -58,7 +58,9 @@
 #include "MSTcpIp.h"
 #else
 #include <sys/param.h>
+#ifndef __APPLE__
 #include <sys/eventfd.h>
+#endif
 #endif
 
 #ifdef UTIL_HAVE_SYS_SELECT_H
@@ -107,7 +109,7 @@ struct IOPollBase::InterruptionData : public IOPollHandler {
 };
 
 IOPollBase::InterruptionData::InterruptionData() {
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
 	util::Socket listenerSocket;
 	listenerSocket.open(
 			util::SocketAddress::FAMILY_INET, util::Socket::TYPE_STREAM);
@@ -136,7 +138,7 @@ IOPollBase::InterruptionData::~InterruptionData() {
 void IOPollBase::InterruptionData::handlePollEvent(
 		IOPollBase*, IOPollEvent ev) {
 	if (ev & IOPollEvent::TYPE_READ) {
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
 		uint8_t buf[1];
 		socketPair[1].receive(buf, sizeof(buf));
 #else
@@ -156,7 +158,7 @@ void IOPollBase::InterruptionData::interrupt() {
 	bool expected = false;
 	expected = true;
 	{ 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
 		uint8_t buf[1] = { 0 };
 		socketPair[0].send(buf, sizeof(buf));
 #else
@@ -267,7 +269,7 @@ const Socket::SocketHandle Socket::INVALID_SOCKET_HANDLE = INVALID_SOCKET;
 const Socket::SocketHandle Socket::INVALID_SOCKET_HANDLE = -1;
 #endif
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
 const int Socket::ADDITIONAL_MESSAGE_FLAGS = 0;
 #else
 const int Socket::ADDITIONAL_MESSAGE_FLAGS = MSG_NOSIGNAL;
@@ -634,10 +636,14 @@ void Socket::setKeepAlive(
 		UTIL_THROW_PLATFORM_ERROR("");
 	}
 #else
+#ifdef __APPLE__
+        UTIL_THROW_NOIMPL_UTIL();
+#else
 	setKeepAlive(true);
 	setInt32Option(IPPROTO_TCP, TCP_KEEPIDLE, idleSeconds);
 	setInt32Option(IPPROTO_TCP, TCP_KEEPINTVL, intervalSeconds);
 	setInt32Option(IPPROTO_TCP, TCP_KEEPCNT, retryCount);
+#endif
 #endif
 }
 
@@ -844,7 +850,7 @@ void Socket::setMulticastInterfaceOption(
 		UTIL_THROW_UTIL_ERROR_CODED(CODE_ILLEGAL_ARGUMENT);
 	}
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__APPLE__)
 	if (join) {
 		int value = 0;
 		setOption(IPPROTO_IP, IP_MULTICAST_ALL, &value, sizeof(value));
@@ -874,6 +880,9 @@ void Socket::setMulticastInterfaceOption(
 		break;
 	}
 	case AF_INET6: {
+#ifdef __APPLE__
+		UTIL_THROW_NOIMPL_UTIL();
+#else
 		if (interfaceAddr != NULL || interfaceAddr->isEmpty()) {
 			UTIL_THROW_NOIMPL_UTIL();
 		}
@@ -884,6 +893,7 @@ void Socket::setMulticastInterfaceOption(
 		setOption(IPPROTO_IPV6,
 				(join ? IPV6_ADD_MEMBERSHIP : IPV6_DROP_MEMBERSHIP),
 				&value, sizeof(value));
+#endif
 		break;
 	}
 	default:

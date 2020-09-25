@@ -16503,9 +16503,16 @@ bool GSContainerTag::filterIndexInfo(
 		filteredInfo.column = filteredInfo.columnList[0];
 	}
 
+#ifdef __APPLE__
+	// NOTE: compare with nullptr instead of 0 (to compatible with newer clang)
+	if (filteredInfo.columnName <= nullptr && filteredInfo.columnNameCount == 1) {
+		filteredInfo.columnName = filteredInfo.columnNameList[0];
+	}
+#else
 	if (filteredInfo.columnName <= 0 && filteredInfo.columnNameCount == 1) {
 		filteredInfo.columnName = filteredInfo.columnNameList[0];
 	}
+#endif
 
 	const GSIndexTypeFlags type = filteredInfo.type;
 	if (!GSGridStore::isIndexDetailEnabled() &&

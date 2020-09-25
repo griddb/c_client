@@ -19,6 +19,7 @@ AC_CONFIG_MACRO_DIR([m4])
 AC_DEFINE(GS_DLL_INSIDE,)
 AC_DEFINE(GS_EXPERIMENTAL_TOOL_ENABLED,1)
 AC_DEFINE(GS_ERROR_COMMON_ONLY,1)
+AC_CANONICAL_HOST
 
 CF_COMMON="-Wall -finput-charset=UTF-8"
 CX_COMMON="$CF_COMMON"
@@ -44,7 +45,26 @@ CX_STRICT="$CF_STRICT -Woverloaded-virtual -Weffc++\
 CFLAGS="$CF_ORG $CF_COMMON$CF_OPTIMIZE$CF_STRICT"
 CXXFLAGS="$CX_ORG $CX_COMMON$CX_OPTIMIZE$CX_STRICT"
 
-AC_CONFIG_FILES([
- Makefile
- main/Makefile])
+BUILD_LINUX=false
+BUILD_MAC=false
+
+# Detect the target system
+case "${host_os}" in
+    linux*)
+        BUILD_LINUX=true
+        ;;
+    darwin*)
+        BUILD_MAC=true
+        ;;
+    *)
+        AC_MSG_ERROR(["OS $host_os is not supported"])
+        ;;
+esac
+
+# Pass the conditionals to automake
+AM_CONDITIONAL([LINUX], [test "$BUILD_LINUX" = true])
+AM_CONDITIONAL([OSX], [test "$BUILD_MAC" = true])
+
+AC_CONFIG_FILES([Makefile main/Makefile mainMacOS/Makefile])
 AC_OUTPUT
+
