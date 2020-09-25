@@ -4,7 +4,7 @@ GridDB Cクライアント
 
 GridDB CクライアントはC言語用のインタフェースを提供します。  
 また、このリポジトリには簡単なサンプルプログラムがあります。  
-詳細はAPIリファレンスのAPI(C言語)の章を参照してください。
+詳細は[C APIリファレンス](http://griddb.github.io/docs-ja/manuals/GridDB_C_API_Reference.html)を参照してください。
 
 ## 動作環境
 

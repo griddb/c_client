@@ -4,7 +4,7 @@ GridDB C Client
 
 The GridDB C Client provides a C interface for GridDB.  
 This repository also includes simple samples.  
-Please refer to the API(C) section in API Reference for detailed information.
+Please refer to [C API Reference](http://griddb.github.io/docs-en/manuals/GridDB_C_API_Reference.html) for detailed information.
 
 ## Operating environment
 
