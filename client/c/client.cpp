@@ -1585,7 +1585,7 @@ RowMapper::~RowMapper() {
 	clear();
 }
 
-std::auto_ptr<RowMapper> RowMapper::getInstance(
+std::unique_ptr<RowMapper> RowMapper::getInstance(
 		ArrayByteInStream &in, const Config &config,
 		RowTypeCategory category) {
 
@@ -1608,7 +1608,7 @@ std::auto_ptr<RowMapper> RowMapper::getInstance(
 			RowMapper::toInfoRef(&info, ClientVersion()),
 			entryList, config.anyTypeAllowed_);
 
-	std::auto_ptr<RowMapper> mapper(
+	std::unique_ptr<RowMapper> mapper(
 			new RowMapper(category, &binding, config));
 
 	return mapper;
@@ -2286,7 +2286,7 @@ void RowMapper::encodeKeyGeneral(
 		out << ClientUtil::sizeValueToInt32(keyCount);
 	}
 
-	std::auto_ptr<OutputCursor> compositeCursor;
+	std::unique_ptr<OutputCursor> compositeCursor;
 	if (composite) {
 		compositeCursor.reset(new OutputCursor(
 				out, keyMapper, mode, static_cast<int32_t>(keyCount), false));
@@ -3700,7 +3700,7 @@ bool RowMapper::isKeyBindingFound(const GSBindingEntry &entry) {
 void RowMapper::makeKeyMapper(
 		const GSBinding &binding, RowTypeCategory rowTypeCategory,
 		size_t compositeKeyOffeset, bool general, const Config &config,
-		std::auto_ptr<RowMapper> &keyMapper) {
+		std::unique_ptr<RowMapper> &keyMapper) {
 	size_t keyCount = 0;
 	for (size_t i = 0; i < binding.entryCount; i++) {
 		if ((binding.entries[i].options & GS_TYPE_OPTION_KEY) != 0) {
@@ -5212,7 +5212,7 @@ const RowMapper* RowMapper::Cache::resolve(
 		}
 	}
 
-	std::auto_ptr<RowMapper> mapper(new RowMapper(
+	std::unique_ptr<RowMapper> mapper(new RowMapper(
 			digest, rowTypeCategory, general, config.nullableAllowed_));
 	mapper->binding_ = checkAndCopyBinding(
 			binding, general, mapper->columnIdMap_, rowTypeCategory,
@@ -5242,7 +5242,7 @@ const RowMapper* RowMapper::Cache::resolve(
 		}
 	}
 
-	std::auto_ptr<RowMapper> mapper(new RowMapper(
+	std::unique_ptr<RowMapper> mapper(new RowMapper(
 			digest, baseMapper.rowTypeCategory_, baseMapper.general_,
 			baseMapper.nullableAllowed_));
 	mapper->compositeKeyOffeset_ = baseMapper.compositeKeyOffeset_;
@@ -5328,7 +5328,7 @@ RowMapper::Reference::Reference(Cache &cache, const RowMapper *mapper) :
 		cache_(&cache), mapper_(mapper) {
 }
 
-RowMapper::Reference::Reference(std::auto_ptr<RowMapper> mapper) :
+RowMapper::Reference::Reference(std::unique_ptr<RowMapper> mapper) :
 		cache_(NULL),
 		mapper_(mapper.release()) {
 }
@@ -6400,7 +6400,7 @@ ArrayByteInStream NodeConnection::executeStatementDirect(
 	}
 
 	Heartbeat heartbeatStorage;
-	std::auto_ptr< util::NormalXArray<uint8_t> > heartbeatBuf;
+	std::unique_ptr< util::NormalXArray<uint8_t> > heartbeatBuf;
 	util::NormalXArray<uint8_t> *orgResp;
 
 	resp->resize(eeHeadLength);
@@ -7292,7 +7292,7 @@ void NodeConnectionPool::setMaxSize(size_t maxSize) {
 	closeExceededConnections();
 }
 
-void NodeConnectionPool::add(std::auto_ptr<NodeConnection> connection) {
+void NodeConnectionPool::add(std::unique_ptr<NodeConnection> &connection) {
 	{
 		util::LockGuard<util::Mutex> guard(mutex_);
 
@@ -7314,32 +7314,31 @@ void NodeConnectionPool::add(std::auto_ptr<NodeConnection> connection) {
 	closeExceededConnections();
 }
 
-std::auto_ptr<NodeConnection> NodeConnectionPool::pull(
+std::unique_ptr<NodeConnection> NodeConnectionPool::pull(
 		const util::SocketAddress &address) {
 	util::LockGuard<util::Mutex> guard(mutex_);
 
-	std::binder2nd<SocketAddressEqual> pred =
-			std::bind2nd(SocketAddressEqual(), address);
+	auto pred = std::bind(SocketAddressEqual(), std::placeholders::_1, address);
 
 	AddressQueue::iterator addressIt =
 			std::find_if(addressQueue_.begin(), addressQueue_.end(), pred);
 	if (addressIt == addressQueue_.end()) {
-		return std::auto_ptr<NodeConnection>(NULL);
+		return std::unique_ptr<NodeConnection>(nullptr);
 	}
 	addressQueue_.erase(addressIt);
 
 	ConnectionMap::iterator connectionIt = connectionMap_.find(address);
 	if (connectionIt == connectionMap_.end()) {
-		return std::auto_ptr<NodeConnection>(NULL);
+		return std::unique_ptr<NodeConnection>(nullptr);
 	}
 
 	std::vector<NodeConnection*> &list = connectionIt->second;
 	if (list.empty()) {
 		connectionMap_.erase(connectionIt);
-		return std::auto_ptr<NodeConnection>(NULL);
+		return std::unique_ptr<NodeConnection>(nullptr);
 	}
 
-	std::auto_ptr<NodeConnection> connection(list.back());
+	std::unique_ptr<NodeConnection> connection(list.back());
 	list.pop_back();
 	if (list.empty()) {
 		connectionMap_.erase(connectionIt);
@@ -7348,7 +7347,7 @@ std::auto_ptr<NodeConnection> NodeConnectionPool::pull(
 	return connection;
 }
 
-std::auto_ptr<NodeConnection> NodeConnectionPool::resolve(
+std::unique_ptr<NodeConnection> NodeConnectionPool::resolve(
 		const util::SocketAddress &address,
 		util::NormalXArray<uint8_t> &req,
 		util::NormalXArray<uint8_t> &resp,
@@ -7356,7 +7355,7 @@ std::auto_ptr<NodeConnection> NodeConnectionPool::resolve(
 		const NodeConnection::LoginInfo &loginInfo,
 		int64_t *databaseId,
 		bool preferCache) {
-	std::auto_ptr<NodeConnection> connection;
+	std::unique_ptr<NodeConnection> connection;
 	if (preferCache) {
 		connection = pull(address);
 	}
@@ -8017,7 +8016,7 @@ catch (util::Exception &e) {
 }
 
 bool NodeResolver::updateConnectionAndClusterInfo(ClusterInfo &clusterInfo) {
-	std::auto_ptr<NodeConnection> pendingConnection;
+	std::unique_ptr<NodeConnection> pendingConnection;
 	try {
 		util::SocketAddress address;
 		if (masterAddress_.isEmpty()) {
@@ -8246,7 +8245,7 @@ void NodeResolver::releaseMasterCache(bool forceClose) {
 	cachedAddressSet_.clear();
 
 	if (masterConnection_.get() != NULL) {
-		std::auto_ptr<NodeConnection> connection(masterConnection_.release());
+		std::unique_ptr<NodeConnection> connection(masterConnection_.release());
 
 		if (forceClose) {
 			connection.reset();
@@ -8713,7 +8712,7 @@ void GridStoreChannel::clearContext(Context &context, bool doClose) {
 		Context::ConnectionMap &activeConnections = context.activeConnections_;
 		while (!activeConnections.empty()) {
 			Context::ConnectionMap::iterator it = activeConnections.begin();
-			std::auto_ptr<NodeConnection> connection(it->second.second);
+			std::unique_ptr<NodeConnection> connection(it->second.second);
 			activeConnections.erase(it);
 			pool_.add(connection);
 		}
@@ -8835,7 +8834,7 @@ ArrayByteInStream GridStoreChannel::executeStatement(
 			const int64_t failoverTimeout = getFailoverTimeoutMillis(context);
 			if (failureMillis >= failoverTimeout) {
 				const GSChar *errorMessage = "";
-				std::auto_ptr<std::string> errorMessageStr;
+				std::unique_ptr<std::string> errorMessageStr;
 				try {
 					util::NormalOStringStream oss;
 					if (failoverTimeout > 0) {
@@ -9043,7 +9042,7 @@ void GridStoreChannel::updateConnection(
 	}
 
 	int64_t databaseId;
-	std::auto_ptr<NodeConnection> connection = pool_.resolve(
+	std::unique_ptr<NodeConnection> connection = pool_.resolve(
 			address, req, resp, config_.getConnectionConfig(mutex_),
 			context.loginInfo_, &databaseId, preferConnectionPool);
 	nodeResolver_.acceptDatabaseId(
@@ -10314,7 +10313,7 @@ void GSInterceptor::ParameterList::add(const Parameter &param) {
 
 	baseList_[size_] = param;
 
-	if (param.isSize()) {
+	if (param.isSize() && (size_ > 0)) {
 		Parameter &prevParam = baseList_[size_ - 1];
 		if (prevParam.isString()) {
 			prevParam.setNoString();
@@ -10608,7 +10607,7 @@ GSGridStore* GSGridStoreFactoryTag::getGridStore(
 
 	GridStoreChannel *channel;
 	if (it == data_->channelMap_.end()) {
-		std::auto_ptr<GridStoreChannel> channelPtr(
+		std::unique_ptr<GridStoreChannel> channelPtr(
 				new GridStoreChannel(data_->channelConfig_, source));
 		channel = channelPtr.get();
 		channel->setMonitoring(data_->monitoring_);
@@ -11487,7 +11486,7 @@ GSContainer* GSGridStoreTag::getContainer(
 	respIn >> containerId;
 
 	bool cached;
-	std::auto_ptr<ContainerKey> remoteKey =
+	std::unique_ptr<ContainerKey> remoteKey =
 			acceptRemoteContainerKey(&respIn, key, keyConverter, cached);
 
 	RowMapper::Reference mapper(
@@ -11651,7 +11650,7 @@ GSContainer* GSGridStoreTag::putContainer(
 	respIn >> containerId;
 
 	bool cached;
-	std::auto_ptr<ContainerKey> remoteKey =
+	std::unique_ptr<ContainerKey> remoteKey =
 			acceptRemoteContainerKey(&respIn, key, keyConverter, cached);
 
 	RowMapper::Reference mapper(
@@ -11739,7 +11738,7 @@ GSContainer* GSGridStoreTag::getContainer(
 	}
 
 	bool cached;
-	std::auto_ptr<ContainerKey> remoteKey =
+	std::unique_ptr<ContainerKey> remoteKey =
 			acceptRemoteContainerKey(NULL, key, keyConverter, cached);
 
 	const int32_t partitionId =
@@ -11821,7 +11820,7 @@ GSContainer* GSGridStoreTag::putContainer(
 	respIn >> containerId;
 
 	bool cached;
-	std::auto_ptr<ContainerKey> remoteKey =
+	std::unique_ptr<ContainerKey> remoteKey =
 			acceptRemoteContainerKey(&respIn, key, keyConverter, cached);
 
 	RowMapper::Reference mapper(
@@ -11906,7 +11905,7 @@ bool GSGridStoreTag::getRow(const GSChar *pathKey, void *rowObj) {
 	std::string rowKeyStr;
 	splitPathKey(pathKey, containerKey, rowKeyStr);
 
-	std::auto_ptr<GSContainer> container =
+	std::unique_ptr<GSContainer> container =
 			duplicateContainer(resolveContainer(containerKey));
 	const GSChar *rowKeyStrPtr = rowKeyStr.c_str();
 
@@ -11919,7 +11918,7 @@ bool GSGridStoreTag::putRow(const GSChar *pathKey, const void *rowObj) {
 	std::string rowKeyStr;
 	splitPathKey(pathKey, containerKey, rowKeyStr);
 
-	std::auto_ptr<GSContainer> container =
+	std::unique_ptr<GSContainer> container =
 			duplicateContainer(resolveContainer(containerKey));
 	const GSChar *rowKeyStrPtr = rowKeyStr.c_str();
 
@@ -11931,7 +11930,7 @@ bool GSGridStoreTag::removeRow(const GSChar *pathKey) {
 	std::string rowKeyStr;
 	splitPathKey(pathKey, containerKey, rowKeyStr);
 
-	std::auto_ptr<GSContainer> container =
+	std::unique_ptr<GSContainer> container =
 			duplicateContainer(resolveContainer(containerKey));
 	const GSChar *rowKeyStrPtr = rowKeyStr.c_str();
 
@@ -12538,7 +12537,7 @@ GSContainer* GSGridStoreTag::findContainerByCache(
 			mapperCache, mapperCache.duplicate(*schema->getMapper()));
 
 	const bool cached = true;
-	std::auto_ptr<ContainerKey> normalizedKeyPtr(
+	std::unique_ptr<ContainerKey> normalizedKeyPtr(
 			new ContainerKey(normalizedKey));
 
 	return new GSContainer(
@@ -12546,14 +12545,14 @@ GSContainer* GSGridStoreTag::findContainerByCache(
 			partitionId, schema->getContainerId(), normalizedKeyPtr, cached);
 }
 
-std::auto_ptr<ContainerKey> GSGridStoreTag::acceptRemoteContainerKey(
+std::unique_ptr<ContainerKey> GSGridStoreTag::acceptRemoteContainerKey(
 		ArrayByteInStream *in, const ContainerKey &localKey,
 		const ContainerKeyConverter &keyConverter, bool &cached) {
 	cached = false;
 	const ContainerKey &remoteKey =
 			(in == NULL ? localKey : keyConverter.get(*in, false));
 
-	std::auto_ptr<ContainerKey> normalizedRemoteKey(
+	std::unique_ptr<ContainerKey> normalizedRemoteKey(
 			new ContainerKey(remoteKey.toCaseSensitive(false)));
 	if (in != NULL && !(remoteKey == localKey) &&
 			!(*normalizedRemoteKey == localKey.toCaseSensitive(false))) {
@@ -12565,7 +12564,7 @@ std::auto_ptr<ContainerKey> GSGridStoreTag::acceptRemoteContainerKey(
 
 	if (!pathKeyOperationEnabled_ && context_.getContainerCache() == NULL) {
 		if (!channel_.isMonitoring()) {
-			return std::auto_ptr<ContainerKey>(NULL);
+			return std::unique_ptr<ContainerKey>(nullptr);
 		}
 	}
 	else {
@@ -12903,16 +12902,16 @@ const GSContainer& GSGridStoreTag::resolveContainer(
 	return *it->second;
 }
 
-std::auto_ptr<GSContainer> GSGridStoreTag::duplicateContainer(
+std::unique_ptr<GSContainer> GSGridStoreTag::duplicateContainer(
 		const GSContainer &src) {
 	RowMapper::Cache &cache = RowMapper::getDefaultCache();
 	RowMapper::Reference mapper(cache, cache.duplicate(src.getMapper()));
 
 	const bool cached = true;
-	std::auto_ptr<ContainerKey> containerKey(
+	std::unique_ptr<ContainerKey> containerKey(
 			new ContainerKey(*src.normalizedContainerKey_));
 
-	std::auto_ptr<GSContainer> dest(new GSContainer(
+	std::unique_ptr<GSContainer> dest(new GSContainer(
 			*this, mapper, src.getSchemaVersionId(),
 			src.getPartitionId(), src.getContainerId(),
 			containerKey, cached));
@@ -13403,7 +13402,7 @@ GSCollection* GSGridStoreTag::getContextControllerCollection(
 	const ContainerKeyConverter &keyConverter = context_.getKeyConverter();
 
 	const bool cached = false;
-	std::auto_ptr<ContainerKey> key(new ContainerKey(
+	std::unique_ptr<ContainerKey> key(new ContainerKey(
 			keyConverter.parse(CONTEXT_CONTROLLER_NAME, false)));
 
 	return new GSCollection(*this, mapper, -1, -1, -1, key, cached);
@@ -14154,7 +14153,7 @@ const Statement::Id GSContainerTag::FIXED_SESSION_MODE_STATEMENT_LIST[] = {
 GSContainerTag::GSContainerTag(
 		GSGridStore &store, RowMapper::Reference mapper,
 		int32_t schemaVerId, int32_t partitionId, int64_t containerId,
-		std::auto_ptr<ContainerKey> normalizedContainerKey, bool cached) :
+		std::unique_ptr<ContainerKey> &normalizedContainerKey, bool cached) :
 		resourceHeader_(GSResourceType::CONTAINER, &store, NULL),
 		referenceCount_(1),
 		store_(&store),
@@ -14162,7 +14161,7 @@ GSContainerTag::GSContainerTag(
 		schemaVerId_(schemaVerId),
 		partitionId_(partitionId),
 		containerId_(containerId),
-		normalizedContainerKey_(normalizedContainerKey),
+		normalizedContainerKey_(std::move(normalizedContainerKey)),
 		sessionId_(0),
 		transactionId_(1),
 		statementId_(0),
@@ -14748,7 +14747,7 @@ GSQuery* GSContainerTag::query(const GSChar *queryString) {
 		}
 	} formatter;
 
-	std::auto_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
+	std::unique_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
 	queryPtr->getParametersOutStream() << queryString;
 	return queryPtr.release();
 }
@@ -14918,7 +14917,7 @@ GSRowSet* GSContainerTag::acceptQueryResponse(
 		connectionId = getContext().getLastConnectionId();
 	}
 
-	std::auto_ptr<GSRowSet> rowSet;
+	std::unique_ptr<GSRowSet> rowSet;
 	try {
 		rowSet.reset(new GSRowSet(
 				*this, *rowSetMapper, rowCount, getResponseBuffer(),
@@ -15200,7 +15199,7 @@ GSQuery* GSContainerTag::queryByGeometry(
 	}
 	const RowMapper::MappingMode mode = getRowMappingMode();
 
-	std::auto_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
+	std::unique_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
 
 	XArrayByteOutStream paramOut = queryPtr->getParametersOutStream();
 	paramOut << mapper_->resolveColumnId(column);
@@ -15229,7 +15228,7 @@ GSQuery* GSContainerTag::queryByGeometry(const GSChar *column,
 	}
 	const RowMapper::MappingMode mode = getRowMappingMode();
 
-	std::auto_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
+	std::unique_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
 
 	XArrayByteOutStream paramOut = queryPtr->getParametersOutStream();
 	paramOut << mapper_->resolveColumnId(column);
@@ -15282,7 +15281,7 @@ GSAggregationResult* GSContainerTag::aggregateTimeSeries(
 		return NULL;
 	}
 
-	std::auto_ptr<GSAggregationResult> aggregationResult(
+	std::unique_ptr<GSAggregationResult> aggregationResult(
 			new GSAggregationResult(*this));
 	const bool rowGeneral = false;
 	RowMapper::getAggregationResultMapper().decode(
@@ -15399,7 +15398,7 @@ GSQuery* GSContainerTag::queryByTime(
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
-	std::auto_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
+	std::unique_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
 
 	XArrayByteOutStream paramOut = queryPtr->getParametersOutStream();
 	paramOut << wrapOptionalTimestamp(start);
@@ -15423,7 +15422,7 @@ GSQuery* GSContainerTag::queryByTime(
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_UNSUPPORTED_OPERATION, "");
 	}
 
-	std::auto_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
+	std::unique_ptr<GSQuery> queryPtr(new GSQuery(*this, formatter));
 
 	XArrayByteOutStream paramOut = queryPtr->getParametersOutStream();
 	paramOut << start;
@@ -16505,7 +16504,7 @@ bool GSContainerTag::filterIndexInfo(
 
 #ifdef __APPLE__
 	// NOTE: compare with nullptr instead of 0 (to compatible with newer clang)
-	if (filteredInfo.columnName <= nullptr && filteredInfo.columnNameCount == 1) {
+	if (filteredInfo.columnName == nullptr && filteredInfo.columnNameCount == 1) {
 		filteredInfo.columnName = filteredInfo.columnNameList[0];
 	}
 #else
@@ -17405,7 +17404,7 @@ void GSRowSetTag::nextAggregation(GSAggregationResult **aggregationResult) {
 	}
 
 	try {
-		std::auto_ptr<GSAggregationResult> result(
+		std::unique_ptr<GSAggregationResult> result(
 				new GSAggregationResult(*container_));
 		const bool rowGeneral = false;
 		mapper_.decode(cursor_, rowGeneral, result.get());
@@ -17555,7 +17554,7 @@ void GSRowSetTag::fetchFollowing() {
 
 void GSRowSetTag::executeFollowing() {
 	do {
-		std::auto_ptr<GSRowSet> rowSet(
+		std::unique_ptr<GSRowSet> rowSet(
 				container_->queryAndFetch(queryParameters_, false));
 
 		resultData_.swap(rowSet->resultData_);
@@ -17671,9 +17670,9 @@ void GSAggregationResultTag::close(
 	*aggregationResult = NULL;
 }
 
-std::auto_ptr<GSAggregationResult>
+std::unique_ptr<GSAggregationResult>
 GSAggregationResultTag::newStandaloneInstance() {
-	return std::auto_ptr<GSAggregationResult>(new GSAggregationResult());
+	return std::unique_ptr<GSAggregationResult>(new GSAggregationResult());
 }
 
 bool GSAggregationResultTag::getValue(void *value, GSType valueType) {
@@ -18294,7 +18293,7 @@ GSRowTag::GSRowTag(
 	}
 }
 
-GSRowTag::~GSRowTag() {
+GSRowTag::~GSRowTag() noexcept(false){
 	try {
 		clear(true);
 	}

@@ -688,7 +688,7 @@ public:
 			const Config &config, bool columnOrderIgnorable);
 	~RowMapper();
 
-	static std::auto_ptr<RowMapper> getInstance(
+	static std::unique_ptr<RowMapper> getInstance(
 			ArrayByteInStream &in, const Config &config,
 			RowTypeCategory category);
 
@@ -1019,7 +1019,7 @@ private:
 	static void makeKeyMapper(
 			const GSBinding &binding, RowTypeCategory rowTypeCategory,
 			size_t compositeKeyOffeset, bool general, const Config &config,
-			std::auto_ptr<RowMapper> &keyMapper);
+			std::unique_ptr<RowMapper> &keyMapper);
 
 	template<GSType T, typename M>
 	static const GSChar *maskNullString(const GSChar *src);
@@ -1111,7 +1111,7 @@ private:
 	ColumnIdMap columnIdMap_;
 	size_t compositeKeyOffeset_;
 	GSBinding binding_;
-	std::auto_ptr<RowMapper> keyMapper_;
+	std::unique_ptr<RowMapper> keyMapper_;
 
 	uint32_t varColumnCount_;
 	size_t nullsByteSize_;
@@ -1308,7 +1308,7 @@ private:
 class RowMapper::Reference {
 public:
 	Reference(Cache &cache, const RowMapper *mapper);
-	Reference(std::auto_ptr<RowMapper> mapper);
+	Reference(std::unique_ptr<RowMapper> mapper);
 	~Reference();
 
 	Reference(Reference &another);
@@ -1957,7 +1957,7 @@ struct NodeConnection::OptionalRequest {
 	int32_t fetchBytesSize_;
 	int32_t featureVersion_;
 	int32_t acceptableFeatureVersion_;
-	std::auto_ptr<ExtMap> extRequestMap_;
+	std::unique_ptr<ExtMap> extRequestMap_;
 	std::string applicationName_;
 	double storeMemoryAgingSwapRate_;
 	util::TimeZone timeZoneOffset_;
@@ -1996,7 +1996,7 @@ struct NodeConnection::Heartbeat {
 	int32_t orgStatementTypeNumber_;
 	int64_t orgStatementId_;
 	bool orgStatementFound_;
-	std::auto_ptr<StatementException> orgException_;
+	std::unique_ptr<StatementException> orgException_;
 	size_t orgRespPos_;
 	size_t orgRespSize_;
 };
@@ -2009,10 +2009,10 @@ public:
 	size_t getMaxSize();
 	void setMaxSize(size_t maxSize);
 
-	void add(std::auto_ptr<NodeConnection> connection);
-	std::auto_ptr<NodeConnection> pull(const util::SocketAddress &address);
+	void add(std::unique_ptr<NodeConnection> &connection);
+	std::unique_ptr<NodeConnection> pull(const util::SocketAddress &address);
 
-	std::auto_ptr<NodeConnection> resolve(
+	std::unique_ptr<NodeConnection> resolve(
 			const util::SocketAddress &address,
 			util::NormalXArray<uint8_t> &req,
 			util::NormalXArray<uint8_t> &resp,
@@ -2187,7 +2187,7 @@ private:
 	util::SocketAddress notificationAddress_;
 	util::SocketAddress masterAddress_;
 	NodeConnection::Config connectionConfig_;
-	std::auto_ptr<NodeConnection> masterConnection_;
+	std::unique_ptr<NodeConnection> masterConnection_;
 	util::NormalXArray<uint8_t> req_;
 	util::NormalXArray<uint8_t> resp_;
 	int64_t notificationReceiveTimeoutMillis_;
@@ -2520,7 +2520,7 @@ private:
 	util::NormalXArray<uint8_t> resp_;
 	int64_t lastSessionId_;
 	ConnectionId connectionId_;
-	std::auto_ptr<ContainerCache> containerCache_;
+	std::unique_ptr<ContainerCache> containerCache_;
 	PreferableHostMap preferableHosts_;
 
 	ResolverExecutor *resolverExecutor_;
@@ -3090,7 +3090,7 @@ private:
 			util::LockGuard<util::Mutex>&, bool monitoring);
 
 	GSResourceHeader resourceHeader_;
-	std::auto_ptr<Data> data_;
+	std::unique_ptr<Data> data_;
 
 	static GSGridStoreFactory *defaultFactory_;
 };
@@ -3446,7 +3446,7 @@ private:
 			const ContainerKeyConverter &keyConverter,
 			const GSBinding *binding, const GSContainerType *containerType,
 			bool general);
-	std::auto_ptr<ContainerKey> acceptRemoteContainerKey(
+	std::unique_ptr<ContainerKey> acceptRemoteContainerKey(
 			ArrayByteInStream *in, const ContainerKey &localKey,
 			const ContainerKeyConverter &keyConverter, bool &cached);
 
@@ -3477,7 +3477,7 @@ private:
 	static double checkCompressionRate(double rate);
 
 	const GSContainer& resolveContainer(const ContainerKey &containerKey);
-	std::auto_ptr<GSContainer> duplicateContainer(const GSContainer &src);
+	std::unique_ptr<GSContainer> duplicateContainer(const GSContainer &src);
 
 	static Statement::Id getContainerStatement(
 			Statement::Id statement, const GSContainerType *containerType);
@@ -3562,7 +3562,7 @@ public:
 
 	GSContainerTag(GSGridStore &store, RowMapper::Reference mapper,
 			int32_t schemaVerId, int32_t partitionId, int64_t containerId,
-			std::auto_ptr<ContainerKey> normalizedContainerKey, bool cached);
+			std::unique_ptr<ContainerKey> &normalizedContainerKey, bool cached);
 	~GSContainerTag();
 
 	bool isClosed() const;
@@ -3872,7 +3872,7 @@ private:
 	const int32_t schemaVerId_;
 	const int32_t partitionId_;
 	const int64_t containerId_;
-	std::auto_ptr<ContainerKey> normalizedContainerKey_;
+	std::unique_ptr<ContainerKey> normalizedContainerKey_;
 
 	int64_t sessionId_;
 	int64_t transactionId_;
@@ -3930,7 +3930,7 @@ struct GSContainerTag::PartialExecutionStatus {
 			const PartialExecutionStatus &next) const;
 
 	bool enabled_;
-	std::auto_ptr<EntryMap> entryMap_;
+	std::unique_ptr<EntryMap> entryMap_;
 };
 
 struct GSContainerTag::QueryFormatter {
@@ -4187,7 +4187,7 @@ public:
 	~GSAggregationResultTag();
 
 	static void close(GSAggregationResult **aggregationResult) throw();
-	static std::auto_ptr<GSAggregationResult> newStandaloneInstance();
+	static std::unique_ptr<GSAggregationResult> newStandaloneInstance();
 
 	bool getValue(void *value, GSType valueType);
 
@@ -4306,7 +4306,7 @@ private:
 	GSRowTag(
 			void *parentResource, RowMapper::Reference mapper,
 			size_t objectSize, bool forKey);
-	~GSRowTag();
+	~GSRowTag() noexcept(false);
 
 	GSRowTag(const GSRow&);
 	GSRow& operator=(const GSRow&);
@@ -4545,7 +4545,7 @@ private:
 	RowMapper::Reference mapper_;
 
 	RangeKeyEntry rangeKeyEntries_[RANGE_COUNT];
-	std::auto_ptr<DistinctKeySet> distinctKeys_;
+	std::unique_ptr<DistinctKeySet> distinctKeys_;
 
 	TinyRowKey keyStorage_;
 };
