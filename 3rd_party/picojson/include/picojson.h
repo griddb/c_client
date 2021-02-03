@@ -109,9 +109,9 @@ namespace picojson {
   typedef value::array array;
   typedef value::object object;
   
-  inline value::value() : type_(null_type) {}
+  inline value::value() : type_(null_type), u_() {}
   
-  inline value::value(int type, bool) : type_(type) {
+  inline value::value(int type, bool) : type_(type), u_() {
     switch (type) {
 #define INIT(p, v) case p##type: u_.p = v; break
       INIT(boolean_, false);
@@ -124,31 +124,31 @@ namespace picojson {
     }
   }
   
-  inline value::value(bool b) : type_(boolean_type) {
+  inline value::value(bool b) : type_(boolean_type), u_() {
     u_.boolean_ = b;
   }
   
-  inline value::value(double n) : type_(number_type) {
+  inline value::value(double n) : type_(number_type), u_() {
     u_.number_ = n;
   }
   
-  inline value::value(const std::string& s) : type_(string_type) {
+  inline value::value(const std::string& s) : type_(string_type), u_() {
     u_.string_ = new std::string(s);
   }
   
-  inline value::value(const array& a) : type_(array_type) {
+  inline value::value(const array& a) : type_(array_type), u_() {
     u_.array_ = new array(a);
   }
   
-  inline value::value(const object& o) : type_(object_type) {
+  inline value::value(const object& o) : type_(object_type), u_() {
     u_.object_ = new object(o);
   }
   
-  inline value::value(const char* s) : type_(string_type) {
+  inline value::value(const char* s) : type_(string_type), u_() {
     u_.string_ = new std::string(s);
   }
   
-  inline value::value(const char* s, size_t len) : type_(string_type) {
+  inline value::value(const char* s, size_t len) : type_(string_type), u_() {
     u_.string_ = new std::string(s, len);
   }
   
@@ -163,7 +163,7 @@ namespace picojson {
     }
   }
   
-  inline value::value(const value& x) : type_(x.type_) {
+  inline value::value(const value& x) : type_(x.type_), u_() {
     switch (type_) {
 #define INIT(p, v) case p##type: u_.p = v; break
       INIT(string_, new std::string(*x.u_.string_));

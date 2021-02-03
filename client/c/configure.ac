@@ -21,7 +21,7 @@ AC_DEFINE(GS_EXPERIMENTAL_TOOL_ENABLED,1)
 AC_DEFINE(GS_ERROR_COMMON_ONLY,1)
 AC_CANONICAL_HOST
 
-CF_COMMON="-Wall -finput-charset=UTF-8"
+CF_COMMON="-Wall -finput-charset=UTF-8 -Wno-unused-but-set-variable -Wno-unused-local-typedefs -Wno-unused-const-variable"
 CX_COMMON="$CF_COMMON"
 
 CF_OPTIMIZE=" -O3 -fno-tree-vectorize -DNDEBUG"
@@ -42,8 +42,8 @@ CF_STRICT=" \
 CX_STRICT="$CF_STRICT -Woverloaded-virtual -Weffc++\
  -Wsign-promo -Wsynth -Wold-style-cast" ])
 
-CFLAGS="$CF_ORG $CF_COMMON$CF_OPTIMIZE$CF_STRICT"
-CXXFLAGS="$CX_ORG $CX_COMMON$CX_OPTIMIZE$CX_STRICT"
+CFLAGS="-D_DEFAULT_SOURCE $CF_ORG $CF_COMMON$CF_OPTIMIZE$CF_STRICT"
+CXXFLAGS="$CX_ORG $CX_COMMON$CX_OPTIMIZE$CX_STRICT -std=c++11"
 
 BUILD_LINUX=false
 BUILD_MAC=false
