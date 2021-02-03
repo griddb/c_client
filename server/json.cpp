@@ -21,7 +21,6 @@
 
 #include "gs_error_common.h"
 #include "picojson.h"
-#include <cassert>
 
 struct JsonUtils::Impl {
 	static const picojson::value NULL_VALUE;
