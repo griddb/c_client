@@ -21,7 +21,7 @@ AC_DEFINE(GS_EXPERIMENTAL_TOOL_ENABLED,1)
 AC_DEFINE(GS_ERROR_COMMON_ONLY,1)
 AC_CANONICAL_HOST
 
-CF_COMMON="-Wall -finput-charset=UTF-8 -Wno-unused-but-set-variable -Wno-unused-local-typedefs"
+CF_COMMON="-Wall -finput-charset=UTF-8 -Wno-unused-but-set-variable -Wno-unused-local-typedefs -Wno-unused-const-variable"
 CX_COMMON="$CF_COMMON"
 
 CF_OPTIMIZE=" -O3 -fno-tree-vectorize -DNDEBUG"

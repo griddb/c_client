@@ -1931,7 +1931,9 @@ void Pipe::create(Pipe *&writeTerm, Pipe *&readTerm) {
 #else
 	int fd[2];
 
-	pipe(fd);
+	if (pipe(fd) < 0) {
+		UTIL_THROW_PLATFORM_ERROR(NULL);
+	};
 
 	writeTerm = NULL;
 	readTerm = NULL;
