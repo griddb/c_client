@@ -1,5 +1,5 @@
-%define griddb_name griddb_c_client
-%define griddb_ver 4.3.0
+%define griddb_name griddb-c-client
+%define griddb_ver 4.6.0
 %define griddb_instdir /usr/griddb_c_client-%{griddb_ver}
 # do not strip
 %define __spec_install_post /usr/lib/rpm/brp-compress
@@ -9,7 +9,7 @@
 Name:           %{griddb_name}
 Summary:        GridDB Community Edition
 Version:        %{griddb_ver}
-Release:        1.linux
+Release:        linux
 Group:          Applications/Databases
 Vendor:         Toshiba Digital Solutions Corporation
 License:        Apache-2.0
@@ -20,7 +20,7 @@ GridDB is a high performance, high scalability and high reliability database for
 The GridDB C Client provides a C interface for GridDB. 
 
 %prep
-%setup -q -n c_client
+%setup -q
 
 %build
 
@@ -56,7 +56,7 @@ install -c -m 644 3rd_party/yield/yield.txt                     %{buildroot}%{gr
 install -c -m 644 3rd_party/uuid/uuid/COPYING                   %{buildroot}%{griddb_instdir}/3rd_party/uuid
 install -c -m 644 3rd_party/omaha/COPYING                       %{buildroot}%{griddb_instdir}/3rd_party/omaha
 
-install -c -m 644 installer/SOURCES/RPM-README.md               %{buildroot}%{griddb_instdir}
+install -c -m 644 README.md                                     %{buildroot}%{griddb_instdir}
 install -c -m 644 client/c/sample/sample1.c                     %{buildroot}%{griddb_instdir}/sample
 
 # Install symbolic links
@@ -99,7 +99,7 @@ ln -sf %{griddb_instdir}/lib/gridstore.h                        %{buildroot}/usr
 %{griddb_instdir}/3rd_party/yield/yield.txt
 %{griddb_instdir}/3rd_party/uuid/COPYING
 %{griddb_instdir}/3rd_party/omaha/COPYING
-%{griddb_instdir}/RPM-README.md
+%{griddb_instdir}/README.md
 %{griddb_instdir}/sample/sample1.c
 /usr/lib64/libgridstore.so
 /usr/lib64/libgridstore.so.0
@@ -107,5 +107,5 @@ ln -sf %{griddb_instdir}/lib/gridstore.h                        %{buildroot}/usr
 /usr/include/gridstore.h
 
 %changelog
-* Thu Nov 28 2019 Toshiba Digital Solutions Corporation
-- 4.3.0
+* Tue Jun 1 2021 Toshiba Digital Solutions Corporation
+- 4.6.0

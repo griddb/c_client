@@ -2,6 +2,7 @@
 
 #%:
 #	dh $@
+C_CLIENT_VER = $(shell dpkg-parsechangelog | egrep '^Version:' | cut -f 2 -d ' ')
 
 configure: clean
 	cd client/c && \
@@ -11,14 +12,17 @@ configure: clean
 build: configure
 	cd client/c && \
 	make
-
-binary:
+install:
+	sed -i 's/C_CLIENT_VER/$(C_CLIENT_VER)/g' debian/griddb-c-client.install
+	sed -i 's/C_CLIENT_VER/$(C_CLIENT_VER)/g' debian/griddb-c-client.links
 	dh_install
 	dh_installdeb
+
+binary: install
 	dh_gencontrol
 	dh_link
 	dh_builddeb
 
 clean:
 
-.PHONY: clean configure build binary
+.PHONY: clean configure build install binary
