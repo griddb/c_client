@@ -1,14 +1,16 @@
-GridDB CƒNƒ‰ƒCƒAƒ“ƒg
+<img src="https://griddb.org/brand-resources/griddb-logo/png/color.png" align="center" height="240" alt="GridDB"/>
 
-## ŠT—v
+# GridDB Cã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆ
 
-GridDB CƒNƒ‰ƒCƒAƒ“ƒg‚ÍCŒ¾Œê—p‚ÌƒCƒ“ƒ^ƒtƒF[ƒX‚ğ’ñ‹Ÿ‚µ‚Ü‚·B  
-‚Ü‚½A‚±‚ÌƒŠƒ|ƒWƒgƒŠ‚É‚ÍŠÈ’P‚ÈƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ª‚ ‚è‚Ü‚·B  
-Ú×‚Í[C APIƒŠƒtƒ@ƒŒƒ“ƒX](http://griddb.github.io/docs-ja/manuals/GridDB_C_API_Reference.html)‚ğQÆ‚µ‚Ä‚­‚¾‚³‚¢B
+## æ¦‚è¦
 
-## “®ìŠÂ‹«
+GridDB Cã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆã¯Cè¨€èªç”¨ã®ã‚¤ãƒ³ã‚¿ãƒ•ã‚§ãƒ¼ã‚¹ã‚’æä¾›ã—ã¾ã™ã€‚  
+ã¾ãŸã€ã“ã®ãƒªãƒã‚¸ãƒˆãƒªã«ã¯ç°¡å˜ãªã‚µãƒ³ãƒ—ãƒ«ãƒ—ãƒ­ã‚°ãƒ©ãƒ ãŒã‚ã‚Šã¾ã™ã€‚  
+è©³ç´°ã¯[C APIãƒªãƒ•ã‚¡ãƒ¬ãƒ³ã‚¹](http://griddb.github.io/docs-ja/manuals/GridDB_C_API_Reference.html)ã‚’å‚ç…§ã—ã¦ãã ã•ã„ã€‚
 
-ˆÈ‰º‚ÌŠÂ‹«‚ÅCƒNƒ‰ƒCƒAƒ“ƒg‚Ìƒrƒ‹ƒh‚ÆƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ÌÀs‚ğŠm”F‚µ‚Ä‚¢‚Ü‚·B
+## å‹•ä½œç’°å¢ƒ
+
+ä»¥ä¸‹ã®ç’°å¢ƒã§Cã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆã®ãƒ“ãƒ«ãƒ‰ã¨ã‚µãƒ³ãƒ—ãƒ«ãƒ—ãƒ­ã‚°ãƒ©ãƒ ã®å®Ÿè¡Œã‚’ç¢ºèªã—ã¦ã„ã¾ã™ã€‚
 
     OS: CentOS 7.6(x64) (gcc 4.8.5), Windows 10(x64) (VS2017, CMake 3.15.2)
     GridDB server: V4.5 CE(Community Edition), CentOS 7.6(x64) (gcc 4.8.5)
@@ -22,25 +24,25 @@ GridDB CƒNƒ‰ƒCƒAƒ“ƒg‚ÍCŒ¾Œê—p‚ÌƒCƒ“ƒ^ƒtƒF[ƒX‚ğ’ñ‹Ÿ‚µ‚Ü‚·B
     OS: MacOS Catalina 10.15 (clang 11.0.3)
     GridDB server: V4.5 CE(Community Edition), CentOS 7.8(x64) (gcc 4.8.5)
 
-## ƒNƒCƒbƒNƒXƒ^[ƒg(CentOS, Ubuntu, openSUSE)
+## ã‚¯ã‚¤ãƒƒã‚¯ã‚¹ã‚¿ãƒ¼ãƒˆ(CentOS, Ubuntu, openSUSE)
 
-### ƒ\[ƒXƒR[ƒh‚Ì—˜—p
+### ã‚½ãƒ¼ã‚¹ã‚³ãƒ¼ãƒ‰ã®åˆ©ç”¨
 
-#### CƒNƒ‰ƒCƒAƒ“ƒg‚Ìƒrƒ‹ƒh
+#### Cã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆã®ãƒ“ãƒ«ãƒ‰
 
     $ cd client/c
     $ ./bootstrap.sh
     $ ./configure
     $ make 
     
-‚ğÀs‚·‚é‚ÆAbinƒtƒHƒ‹ƒ_‚Ì‰º‚ÉˆÈ‰º‚Ìƒtƒ@ƒCƒ‹‚âƒŠƒ“ƒN‚ªì¬‚³‚ê‚Ü‚·B
+ã‚’å®Ÿè¡Œã™ã‚‹ã¨ã€binãƒ•ã‚©ãƒ«ãƒ€ã®ä¸‹ã«ä»¥ä¸‹ã®ãƒ•ã‚¡ã‚¤ãƒ«ã‚„ãƒªãƒ³ã‚¯ãŒä½œæˆã•ã‚Œã¾ã™ã€‚
 
     libgridstore.so
 	libgridstore.so.0
 	libgridstore.so.0.0.0
 
-#### ƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ÌÀs
-–‘O‚ÉGridDBƒT[ƒo‚ğ‹N“®‚µ‚Ä‚¨‚­•K—v‚ª‚ ‚è‚Ü‚·B
+#### ã‚µãƒ³ãƒ—ãƒ«ãƒ—ãƒ­ã‚°ãƒ©ãƒ ã®å®Ÿè¡Œ
+äº‹å‰ã«GridDBã‚µãƒ¼ãƒã‚’èµ·å‹•ã—ã¦ãŠãå¿…è¦ãŒã‚ã‚Šã¾ã™ã€‚
 
     $ cp client/c/sample/sample1.c .
     $ gcc -I./client/c/include -L./bin sample1.c -lgridstore
@@ -49,27 +51,27 @@ GridDB CƒNƒ‰ƒCƒAƒ“ƒg‚ÍCŒ¾Œê—p‚ÌƒCƒ“ƒ^ƒtƒF[ƒX‚ğ’ñ‹Ÿ‚µ‚Ü‚·B
       <GridDB cluster name> <GridDB user> <GridDB password>
       -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
 
-(’Ç‰Áî•ñ)
-- client/c/includeƒtƒHƒ‹ƒ_‚Ì‰º‚ÉAƒrƒ‹ƒh‚Ég‚í‚ê‚égridstore.hƒtƒ@ƒCƒ‹‚ª‚ ‚è‚Ü‚·B  
-- client/c/sampleƒtƒHƒ‹ƒ_‚Ì‰º‚ÉAƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ª‚ ‚è‚Ü‚·B
+(è¿½åŠ æƒ…å ±)
+- client/c/includeãƒ•ã‚©ãƒ«ãƒ€ã®ä¸‹ã«ã€ãƒ“ãƒ«ãƒ‰ã«ä½¿ã‚ã‚Œã‚‹gridstore.hãƒ•ã‚¡ã‚¤ãƒ«ãŒã‚ã‚Šã¾ã™ã€‚  
+- client/c/sampleãƒ•ã‚©ãƒ«ãƒ€ã®ä¸‹ã«ã€ã‚µãƒ³ãƒ—ãƒ«ãƒ—ãƒ­ã‚°ãƒ©ãƒ ãŒã‚ã‚Šã¾ã™ã€‚
 
 
-### RPM/DEBƒtƒ@ƒCƒ‹‚Ì—˜—p
+### RPM/DEBãƒ•ã‚¡ã‚¤ãƒ«ã®åˆ©ç”¨
 
-#### ƒCƒ“ƒXƒg[ƒ‹
+#### ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«
 
 [CentOS, Ubuntu]
 
-ˆÈ‰º‚ÌURL‚ğQÆ‚µ‚Ä‚­‚¾‚³‚¢B  
+ä»¥ä¸‹ã®URLã‚’å‚ç…§ã—ã¦ãã ã•ã„ã€‚  
 https://software.opensuse.org/download/package?project=home:knonomura&package=griddb-c-client
 
 [openSUSE]
 
-ˆÈ‰º‚ÌURL‚ğQÆ‚µ‚Ä‚­‚¾‚³‚¢B  
+ä»¥ä¸‹ã®URLã‚’å‚ç…§ã—ã¦ãã ã•ã„ã€‚  
 https://software.opensuse.org//download.html?project=home%3Aknonomura&package=griddb-c-client-devel
 
-#### ƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ÌÀs
-–‘O‚ÉGridDBƒT[ƒo‚ğ‹N“®‚µ‚Ä‚¨‚­•K—v‚ª‚ ‚è‚Ü‚·B
+#### ã‚µãƒ³ãƒ—ãƒ«ãƒ—ãƒ­ã‚°ãƒ©ãƒ ã®å®Ÿè¡Œ
+äº‹å‰ã«GridDBã‚µãƒ¼ãƒã‚’èµ·å‹•ã—ã¦ãŠãå¿…è¦ãŒã‚ã‚Šã¾ã™ã€‚
 
     $ cp /usr/griddb_c_client-X.X.X/sample/sample1.c .
     $ gcc sample1.c -lgridstore
@@ -77,29 +79,29 @@ https://software.opensuse.org//download.html?project=home%3Aknonomura&package=gr
       <GridDB cluster name> <GridDB user> <GridDB password>
       -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
 
-(’Ç‰Áî•ñ)
-- /usr/includeƒtƒHƒ‹ƒ_‚Ì‰º‚ÉAƒrƒ‹ƒh‚Ég‚í‚ê‚égridstore.hƒtƒ@ƒCƒ‹‚ª‚ ‚è‚Ü‚·B  
-- /usr/lib64(CentOS, openSUSE)A/usr/lib/x86_64-linux-gnu(Ubuntu)ƒtƒHƒ‹ƒ_‚Ì‰º‚ÉAƒrƒ‹ƒh‚¨‚æ‚ÑÀs‚Ég‚í‚ê‚élibgridstore.soƒtƒ@ƒCƒ‹‚ª‚ ‚è‚Ü‚·B  
+(è¿½åŠ æƒ…å ±)
+- /usr/includeãƒ•ã‚©ãƒ«ãƒ€ã®ä¸‹ã«ã€ãƒ“ãƒ«ãƒ‰ã«ä½¿ã‚ã‚Œã‚‹gridstore.hãƒ•ã‚¡ã‚¤ãƒ«ãŒã‚ã‚Šã¾ã™ã€‚  
+- /usr/lib64(CentOS, openSUSE)ã€/usr/lib/x86_64-linux-gnu(Ubuntu)ãƒ•ã‚©ãƒ«ãƒ€ã®ä¸‹ã«ã€ãƒ“ãƒ«ãƒ‰ãŠã‚ˆã³å®Ÿè¡Œã«ä½¿ã‚ã‚Œã‚‹libgridstore.soãƒ•ã‚¡ã‚¤ãƒ«ãŒã‚ã‚Šã¾ã™ã€‚  
 
-## ƒNƒCƒbƒNƒXƒ^[ƒg(MacOS)
+## ã‚¯ã‚¤ãƒƒã‚¯ã‚¹ã‚¿ãƒ¼ãƒˆ(MacOS)
 
-### ƒ\[ƒXƒR[ƒh‚Ì—˜—p
+### ã‚½ãƒ¼ã‚¹ã‚³ãƒ¼ãƒ‰ã®åˆ©ç”¨
 
-#### CƒNƒ‰ƒCƒAƒ“ƒg‚Ìƒrƒ‹ƒh
+#### Cã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆã®ãƒ“ãƒ«ãƒ‰
 
     $ cd client/c
     $ ./bootstrap.sh
     $ ./configure
     $ make 
     
-‚ğÀs‚·‚é‚ÆAbinƒtƒHƒ‹ƒ_‚Ì‰º‚ÉˆÈ‰º‚Ìƒtƒ@ƒCƒ‹‚âƒŠƒ“ƒN‚ªì¬‚³‚ê‚Ü‚·B
+ã‚’å®Ÿè¡Œã™ã‚‹ã¨ã€binãƒ•ã‚©ãƒ«ãƒ€ã®ä¸‹ã«ä»¥ä¸‹ã®ãƒ•ã‚¡ã‚¤ãƒ«ã‚„ãƒªãƒ³ã‚¯ãŒä½œæˆã•ã‚Œã¾ã™ã€‚
 
     libgridstore.dylib
     libgridstore.0.dylib
     libgridstore.0.0.0.dylib
 
-#### ƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ÌÀs
-–‘O‚ÉGridDBƒT[ƒo‚ğ‹N“®‚µ‚Ä‚¨‚­•K—v‚ª‚ ‚è‚Ü‚·B
+#### ã‚µãƒ³ãƒ—ãƒ«ãƒ—ãƒ­ã‚°ãƒ©ãƒ ã®å®Ÿè¡Œ
+äº‹å‰ã«GridDBã‚µãƒ¼ãƒã‚’èµ·å‹•ã—ã¦ãŠãå¿…è¦ãŒã‚ã‚Šã¾ã™ã€‚
 
     $ cp client/c/sample/sample1.c .
     $ gcc -I./client/c/include -L./bin sample1.c -lgridstore
@@ -108,79 +110,79 @@ https://software.opensuse.org//download.html?project=home%3Aknonomura&package=gr
       <GridDB cluster name> <GridDB user> <GridDB password>
       -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
 
-(’Ç‰Áî•ñ)
-- client/c/includeƒtƒHƒ‹ƒ_‚Ì‰º‚ÉAƒrƒ‹ƒh‚Ég‚í‚ê‚égridstore.hƒtƒ@ƒCƒ‹‚ª‚ ‚è‚Ü‚·B  
-- client/c/sampleƒtƒHƒ‹ƒ_‚Ì‰º‚ÉAƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ª‚ ‚è‚Ü‚·B
+(è¿½åŠ æƒ…å ±)
+- client/c/includeãƒ•ã‚©ãƒ«ãƒ€ã®ä¸‹ã«ã€ãƒ“ãƒ«ãƒ‰ã«ä½¿ã‚ã‚Œã‚‹gridstore.hãƒ•ã‚¡ã‚¤ãƒ«ãŒã‚ã‚Šã¾ã™ã€‚  
+- client/c/sampleãƒ•ã‚©ãƒ«ãƒ€ã®ä¸‹ã«ã€ã‚µãƒ³ãƒ—ãƒ«ãƒ—ãƒ­ã‚°ãƒ©ãƒ ãŒã‚ã‚Šã¾ã™ã€‚
 
-## ƒNƒCƒbƒNƒXƒ^[ƒg(Windows)
+## ã‚¯ã‚¤ãƒƒã‚¯ã‚¹ã‚¿ãƒ¼ãƒˆ(Windows)
 
-### ƒ\[ƒXƒR[ƒh‚Ì—˜—p
+### ã‚½ãƒ¼ã‚¹ã‚³ãƒ¼ãƒ‰ã®åˆ©ç”¨
 
-#### CMake‚É‚æ‚éVSƒ\ƒŠƒ…[ƒVƒ‡ƒ“ƒtƒ@ƒCƒ‹‚Ì¶¬
+#### CMakeã«ã‚ˆã‚‹VSã‚½ãƒªãƒ¥ãƒ¼ã‚·ãƒ§ãƒ³ãƒ•ã‚¡ã‚¤ãƒ«ã®ç”Ÿæˆ
 
-* <CMAKE_PATH>\bin\cmake-gui.exe‚ğƒI[ƒvƒ“‚µ‚Ü‚·B
-* "Where is the source code"‚É <C_CLIENT_SRC_PATH>\client\c\sample ƒtƒHƒ‹ƒ_‚ğw’è‚µ‚Ü‚·B
-* "Where to build the binaries"‚Éƒ\ƒŠƒ…[ƒVƒ‡ƒ“ƒtƒ@ƒCƒ‹(*.sln , *.vcxproj)‚Ì¶¬æƒtƒHƒ‹ƒ_‚ğw’è‚µ‚Ü‚·B
-* Configureƒ{ƒ^ƒ“‚ğƒNƒŠƒbƒNŒãA "Specify the generator for this project"‚É"Visual Studio 15 2017 Win64"‚ğw’è‚µ‚Ü‚·B
-* Generateƒ{ƒ^ƒ“‚ğƒNƒŠƒbƒN‚·‚é‚Æƒtƒ@ƒCƒ‹‚ª¶¬‚³‚ê‚Ü‚·B
+* <CMAKE_PATH>\bin\cmake-gui.exeã‚’ã‚ªãƒ¼ãƒ—ãƒ³ã—ã¾ã™ã€‚
+* "Where is the source code"ã« <C_CLIENT_SRC_PATH>\client\c\sample ãƒ•ã‚©ãƒ«ãƒ€ã‚’æŒ‡å®šã—ã¾ã™ã€‚
+* "Where to build the binaries"ã«ã‚½ãƒªãƒ¥ãƒ¼ã‚·ãƒ§ãƒ³ãƒ•ã‚¡ã‚¤ãƒ«(*.sln , *.vcxproj)ã®ç”Ÿæˆå…ˆãƒ•ã‚©ãƒ«ãƒ€ã‚’æŒ‡å®šã—ã¾ã™ã€‚
+* Configureãƒœã‚¿ãƒ³ã‚’ã‚¯ãƒªãƒƒã‚¯å¾Œã€ "Specify the generator for this project"ã«"Visual Studio 15 2017 Win64"ã‚’æŒ‡å®šã—ã¾ã™ã€‚
+* Generateãƒœã‚¿ãƒ³ã‚’ã‚¯ãƒªãƒƒã‚¯ã™ã‚‹ã¨ãƒ•ã‚¡ã‚¤ãƒ«ãŒç”Ÿæˆã•ã‚Œã¾ã™ã€‚
 
-#### VS2017‚É‚æ‚éƒrƒ‹ƒh
+#### VS2017ã«ã‚ˆã‚‹ãƒ“ãƒ«ãƒ‰
 
-ƒ\ƒŠƒ…[ƒVƒ‡ƒ“ƒtƒ@ƒCƒ‹‚Ì¶¬æƒtƒHƒ‹ƒ_‚Ìclient.slnƒtƒ@ƒCƒ‹‚ğƒNƒŠƒbƒN‚µ‚ÄVS‚ğ‹N“®ŒãAclientƒ\ƒŠƒ…[ƒVƒ‡ƒ“‚ğƒrƒ‹ƒh‚µ‚Ä‚­‚¾‚³‚¢B
+ã‚½ãƒªãƒ¥ãƒ¼ã‚·ãƒ§ãƒ³ãƒ•ã‚¡ã‚¤ãƒ«ã®ç”Ÿæˆå…ˆãƒ•ã‚©ãƒ«ãƒ€ã®client.slnãƒ•ã‚¡ã‚¤ãƒ«ã‚’ã‚¯ãƒªãƒƒã‚¯ã—ã¦VSã‚’èµ·å‹•å¾Œã€clientã‚½ãƒªãƒ¥ãƒ¼ã‚·ãƒ§ãƒ³ã‚’ãƒ“ãƒ«ãƒ‰ã—ã¦ãã ã•ã„ã€‚
 
-<C_CLIENT_SRC_PATH>\bin\x64\ReleaseƒtƒHƒ‹ƒ_(ƒŠƒŠ[ƒXƒ‚[ƒh)A<C_CLIENT_SRC_PATH>\bin\x64\DebugƒtƒHƒ‹ƒ_(ƒfƒoƒbƒOƒ‚[ƒh)‚Ì‰º‚ÉˆÈ‰º‚Ìƒtƒ@ƒCƒ‹‚ªì¬‚³‚ê‚Ü‚·B
+<C_CLIENT_SRC_PATH>\bin\x64\Releaseãƒ•ã‚©ãƒ«ãƒ€(ãƒªãƒªãƒ¼ã‚¹ãƒ¢ãƒ¼ãƒ‰æ™‚)ã€<C_CLIENT_SRC_PATH>\bin\x64\Debugãƒ•ã‚©ãƒ«ãƒ€(ãƒ‡ãƒãƒƒã‚°ãƒ¢ãƒ¼ãƒ‰æ™‚)ã®ä¸‹ã«ä»¥ä¸‹ã®ãƒ•ã‚¡ã‚¤ãƒ«ãŒä½œæˆã•ã‚Œã¾ã™ã€‚
 
     gridstore_c.dll
     gridstore_c.lib
 
-### ƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ÌÀs
-–‘O‚ÉGridDBƒT[ƒo‚ğ‹N“®‚µ‚Ä‚¨‚­•K—v‚ª‚ ‚è‚Ü‚·B
+### ã‚µãƒ³ãƒ—ãƒ«ãƒ—ãƒ­ã‚°ãƒ©ãƒ ã®å®Ÿè¡Œ
+äº‹å‰ã«GridDBã‚µãƒ¼ãƒã‚’èµ·å‹•ã—ã¦ãŠãå¿…è¦ãŒã‚ã‚Šã¾ã™ã€‚
 
-ƒ\ƒŠƒ…[ƒVƒ‡ƒ“ƒtƒ@ƒCƒ‹‚Ì¶¬æƒtƒHƒ‹ƒ_‚Ìsample.slnƒtƒ@ƒCƒ‹‚ğƒNƒŠƒbƒN‚µ‚ÄVS‚ğ‹N“®ŒãAsampleƒvƒƒWƒFƒNƒg‚ğƒrƒ‹ƒh‚·‚é‚ÆA<C_CLIENT_SRC_PATH>\bin\x64\ReleaseƒtƒHƒ‹ƒ_(ƒŠƒŠ[ƒXƒ‚[ƒh)A<C_CLIENT_SRC_PATH>\bin\x64\DebugƒtƒHƒ‹ƒ_(ƒfƒoƒbƒOƒ‚[ƒh)‚Ì‰º‚Ésample.exeƒtƒ@ƒCƒ‹‚ª¶¬‚³‚ê‚Ü‚·B
+ã‚½ãƒªãƒ¥ãƒ¼ã‚·ãƒ§ãƒ³ãƒ•ã‚¡ã‚¤ãƒ«ã®ç”Ÿæˆå…ˆãƒ•ã‚©ãƒ«ãƒ€ã®sample.slnãƒ•ã‚¡ã‚¤ãƒ«ã‚’ã‚¯ãƒªãƒƒã‚¯ã—ã¦VSã‚’èµ·å‹•å¾Œã€sampleãƒ—ãƒ­ã‚¸ã‚§ã‚¯ãƒˆã‚’ãƒ“ãƒ«ãƒ‰ã™ã‚‹ã¨ã€<C_CLIENT_SRC_PATH>\bin\x64\Releaseãƒ•ã‚©ãƒ«ãƒ€(ãƒªãƒªãƒ¼ã‚¹ãƒ¢ãƒ¼ãƒ‰æ™‚)ã€<C_CLIENT_SRC_PATH>\bin\x64\Debugãƒ•ã‚©ãƒ«ãƒ€(ãƒ‡ãƒãƒƒã‚°ãƒ¢ãƒ¼ãƒ‰æ™‚)ã®ä¸‹ã«sample.exeãƒ•ã‚¡ã‚¤ãƒ«ãŒç”Ÿæˆã•ã‚Œã¾ã™ã€‚
 
     > sample.exe sample1 en <GridDB notification address(default is 239.0.0.1)> <GridDB notification port(default is 31999)>
       <GridDB cluster name> <GridDB user> <GridDB password>
       -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
 
-(’Ç‰Áî•ñ)
-- client/c/includeƒtƒHƒ‹ƒ_‚Ì‰º‚ÉAƒrƒ‹ƒh‚Ég‚í‚ê‚égridstore.hƒtƒ@ƒCƒ‹‚ª‚ ‚è‚Ü‚·B  
-- client/c/sampleƒtƒHƒ‹ƒ_‚Ì‰º‚ÉAƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ª‚ ‚è‚Ü‚·B
+(è¿½åŠ æƒ…å ±)
+- client/c/includeãƒ•ã‚©ãƒ«ãƒ€ã®ä¸‹ã«ã€ãƒ“ãƒ«ãƒ‰ã«ä½¿ã‚ã‚Œã‚‹gridstore.hãƒ•ã‚¡ã‚¤ãƒ«ãŒã‚ã‚Šã¾ã™ã€‚  
+- client/c/sampleãƒ•ã‚©ãƒ«ãƒ€ã®ä¸‹ã«ã€ã‚µãƒ³ãƒ—ãƒ«ãƒ—ãƒ­ã‚°ãƒ©ãƒ ãŒã‚ã‚Šã¾ã™ã€‚
 
-### MSIƒtƒ@ƒCƒ‹‚Ì—˜—p
+### MSIãƒ•ã‚¡ã‚¤ãƒ«ã®åˆ©ç”¨
 
-#### ƒCƒ“ƒXƒg[ƒ‹
+#### ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«
 
-MSIƒpƒbƒP[ƒW(https://github.com/griddb/c_client/releases) ‚ğƒ_ƒEƒ“ƒ[ƒh‚µ‚ÄÀs‚µ‚Ä‚­‚¾‚³‚¢BC:/Program Files/GridDB/C Client/X.X.XƒtƒHƒ‹ƒ_‚Ì‰º‚ÉƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚Ü‚·B
+MSIãƒ‘ãƒƒã‚±ãƒ¼ã‚¸(https://github.com/griddb/c_client/releases) ã‚’ãƒ€ã‚¦ãƒ³ãƒ­ãƒ¼ãƒ‰ã—ã¦å®Ÿè¡Œã—ã¦ãã ã•ã„ã€‚C:/Program Files/GridDB/C Client/X.X.Xãƒ•ã‚©ãƒ«ãƒ€ã®ä¸‹ã«ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã•ã‚Œã¾ã™ã€‚
 
-#### ƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚Ìì¬Aƒrƒ‹ƒh
+#### ã‚µãƒ³ãƒ—ãƒ«ãƒ—ãƒ­ã‚°ãƒ©ãƒ ã®ä½œæˆã€ãƒ“ãƒ«ãƒ‰
 
-ˆÈ‰º‚ÍAVS2017‚Ìê‡‚Ìè‡‚Å‚·B
-* x64‚ÌƒvƒƒWƒFƒNƒg‚ğì¬B[\¬ƒ}ƒl[ƒWƒƒ] - [ƒAƒNƒeƒBƒuƒ\ƒŠƒ…[ƒVƒ‡ƒ“ƒvƒ‰ƒbƒgƒtƒH[ƒ€] - [V‹Kì¬]‚Å "x64"‚ğ‘I‘ğ‚µ‚Ü‚·B
-* ƒvƒƒWƒFƒNƒg‚Ìƒ\[ƒX ƒtƒ@ƒCƒ‹‚Ésample1.cƒtƒ@ƒCƒ‹‚ğ’Ç‰Á‚µ‚Ü‚·B
-* IncludeƒfƒBƒŒƒNƒgƒŠ‚Ìİ’èB[\¬ƒvƒƒpƒeƒB] - [C/C++] - [‘S”Ê] - [’Ç‰Á‚ÌƒCƒ“ƒNƒ‹[ƒhƒfƒBƒŒƒNƒgƒŠ]‚É gridstore.h ‚ª‘¶İ‚·‚éƒfƒBƒŒƒNƒgƒŠ‚ğw’è‚µ‚Ü‚·B
-* ƒCƒ“ƒ|[ƒgƒ‰ƒCƒuƒ‰ƒŠ(gridstore_c.lib)‚Ìİ’èB[ƒŠƒ“ƒJ[] - [“ü—Í] - [’Ç‰Á‚ÌˆË‘¶ƒtƒ@ƒCƒ‹] ‚É’Ç‰Á‚µ‚Ü‚·B
-* ƒvƒƒWƒFƒNƒg‚ğƒrƒ‹ƒh‚µ‚Ü‚·B
+ä»¥ä¸‹ã¯ã€VS2017ã®å ´åˆã®æ‰‹é †ã§ã™ã€‚
+* x64ã®ãƒ—ãƒ­ã‚¸ã‚§ã‚¯ãƒˆã‚’ä½œæˆã€‚[æ§‹æˆãƒãƒãƒ¼ã‚¸ãƒ£] - [ã‚¢ã‚¯ãƒ†ã‚£ãƒ–ã‚½ãƒªãƒ¥ãƒ¼ã‚·ãƒ§ãƒ³ãƒ—ãƒ©ãƒƒãƒˆãƒ•ã‚©ãƒ¼ãƒ ] - [æ–°è¦ä½œæˆ]ã§ "x64"ã‚’é¸æŠã—ã¾ã™ã€‚
+* ãƒ—ãƒ­ã‚¸ã‚§ã‚¯ãƒˆã®ã‚½ãƒ¼ã‚¹ ãƒ•ã‚¡ã‚¤ãƒ«ã«sample1.cãƒ•ã‚¡ã‚¤ãƒ«ã‚’è¿½åŠ ã—ã¾ã™ã€‚
+* Includeãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒªã®è¨­å®šã€‚[æ§‹æˆãƒ—ãƒ­ãƒ‘ãƒ†ã‚£] - [C/C++] - [å…¨èˆ¬] - [è¿½åŠ ã®ã‚¤ãƒ³ã‚¯ãƒ«ãƒ¼ãƒ‰ãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒª]ã« gridstore.h ãŒå­˜åœ¨ã™ã‚‹ãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒªã‚’æŒ‡å®šã—ã¾ã™ã€‚
+* ã‚¤ãƒ³ãƒãƒ¼ãƒˆãƒ©ã‚¤ãƒ–ãƒ©ãƒª(gridstore_c.lib)ã®è¨­å®šã€‚[ãƒªãƒ³ã‚«ãƒ¼] - [å…¥åŠ›] - [è¿½åŠ ã®ä¾å­˜ãƒ•ã‚¡ã‚¤ãƒ«] ã«è¿½åŠ ã—ã¾ã™ã€‚
+* ãƒ—ãƒ­ã‚¸ã‚§ã‚¯ãƒˆã‚’ãƒ“ãƒ«ãƒ‰ã—ã¾ã™ã€‚
 
-#### ƒTƒ“ƒvƒ‹ƒvƒƒOƒ‰ƒ€‚ÌÀs
-–‘O‚ÉGridDBƒT[ƒo‚ğ‹N“®‚µ‚Ä‚¨‚­•K—v‚ª‚ ‚è‚Ü‚·B
+#### ã‚µãƒ³ãƒ—ãƒ«ãƒ—ãƒ­ã‚°ãƒ©ãƒ ã®å®Ÿè¡Œ
+äº‹å‰ã«GridDBã‚µãƒ¼ãƒã‚’èµ·å‹•ã—ã¦ãŠãå¿…è¦ãŒã‚ã‚Šã¾ã™ã€‚
 
     > sample.exe <GridDB notification address(default is 239.0.0.1)> <GridDB notification port(default is 31999)>
       <GridDB cluster name> <GridDB user> <GridDB password>
       -->Person: name=name02 status=false count=2 lob=[65, 66, 67, 68, 69, 70, 71, 72, 73, 74]
 
-## ƒhƒLƒ…ƒƒ“ƒg
-  Ú×‚ÍˆÈ‰º‚ÌƒhƒLƒ…ƒƒ“ƒg‚ğQÆ‚µ‚Ä‚­‚¾‚³‚¢B
-  - [C APIƒŠƒtƒ@ƒŒƒ“ƒX](http://griddb.github.io/docs-ja/manuals/GridDB_C_API_Reference.html)
+## ãƒ‰ã‚­ãƒ¥ãƒ¡ãƒ³ãƒˆ
+  è©³ç´°ã¯ä»¥ä¸‹ã®ãƒ‰ã‚­ãƒ¥ãƒ¡ãƒ³ãƒˆã‚’å‚ç…§ã—ã¦ãã ã•ã„ã€‚
+  - [C APIãƒªãƒ•ã‚¡ãƒ¬ãƒ³ã‚¹](http://griddb.github.io/docs-ja/manuals/GridDB_C_API_Reference.html)
 
-¦CƒNƒ‰ƒCƒAƒ“ƒg(Community Edition)‚Å‚Í‹óŠÔŒ^‚Í—˜—p‚Å‚«‚Ü‚¹‚ñB  
+â€»Cã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆ(Community Edition)ã§ã¯ç©ºé–“å‹ã¯åˆ©ç”¨ã§ãã¾ã›ã‚“ã€‚  
 
-## ƒRƒ~ƒ…ƒjƒeƒB
+## ã‚³ãƒŸãƒ¥ãƒ‹ãƒ†ã‚£
   * Issues  
-    ¿–âA•s‹ï‡•ñ‚Íissue‹@”\‚ğ‚²—˜—p‚­‚¾‚³‚¢B
+    è³ªå•ã€ä¸å…·åˆå ±å‘Šã¯issueæ©Ÿèƒ½ã‚’ã”åˆ©ç”¨ãã ã•ã„ã€‚
   * PullRequest  
-    GridDB Contributor License Agreement(CLA_rev1.1.pdf)‚É“¯ˆÓ‚µ‚Ä’¸‚­•K—v‚ª‚ ‚è‚Ü‚·B
-    PullRequest‹@”\‚ğ‚²—˜—p‚Ìê‡‚ÍGridDB Contributor License Agreement‚É“¯ˆÓ‚µ‚½‚à‚Ì‚Æ‚İ‚È‚µ‚Ü‚·B
+    GridDB Contributor License Agreement(CLA_rev1.1.pdf)ã«åŒæ„ã—ã¦é ‚ãå¿…è¦ãŒã‚ã‚Šã¾ã™ã€‚
+    PullRequestæ©Ÿèƒ½ã‚’ã”åˆ©ç”¨ã®å ´åˆã¯GridDB Contributor License Agreementã«åŒæ„ã—ãŸã‚‚ã®ã¨ã¿ãªã—ã¾ã™ã€‚
 
-## ƒ‰ƒCƒZƒ“ƒX
-  CƒNƒ‰ƒCƒAƒ“ƒg‚Ìƒ‰ƒCƒZƒ“ƒX‚ÍApache License, version 2.0‚Å‚·B  
-  ƒT[ƒhƒp[ƒeƒB‚Ìƒ\[ƒX‚Æƒ‰ƒCƒZƒ“ƒX‚É‚Â‚¢‚Ä‚Í3rd_party/3rd_party.md‚ğQÆ‚­‚¾‚³‚¢B
+## ãƒ©ã‚¤ã‚»ãƒ³ã‚¹
+  Cã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆã®ãƒ©ã‚¤ã‚»ãƒ³ã‚¹ã¯Apache License, version 2.0ã§ã™ã€‚  
+  ã‚µãƒ¼ãƒ‰ãƒ‘ãƒ¼ãƒ†ã‚£ã®ã‚½ãƒ¼ã‚¹ã¨ãƒ©ã‚¤ã‚»ãƒ³ã‚¹ã«ã¤ã„ã¦ã¯3rd_party/3rd_party.mdã‚’å‚ç…§ãã ã•ã„ã€‚
