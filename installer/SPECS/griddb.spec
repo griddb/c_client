@@ -16,8 +16,8 @@ License:        Apache-2.0
 Source:         %{name}-%{version}.tar.gz
 
 %description
-GridDB is a high performance, high scalability and high reliability database for big data.
-The GridDB C Client provides a C interface for GridDB. 
+GridDB is Database for IoT with both NoSQL interface and SQL Interface.
+The GridDB C Client provides NoSQL interface for C language.
 
 %prep
 %setup -q
