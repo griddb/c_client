@@ -1,0 +1,49 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+C_CLIENT_VER = 4.6.0
+
+configure: clean
+	cd client/c && \
+	./bootstrap.sh && \
+	./configure
+
+build: configure
+	cd client/c && \
+	make CC=gcc-7 CXX=g++-7
+
+override_dh_install:
+	dh_install bin/libgridstore.so.0.0.0                                   usr/griddb_c_client-$(C_CLIENT_VER)/lib
+	dh_install client/c/include/gridstore.h                                usr/griddb_c_client-$(C_CLIENT_VER)/lib
+	dh_install 3rd_party/3rd_party.md                                      usr/griddb_c_client-$(C_CLIENT_VER)/3rd_party
+	dh_install 3rd_party/Apache_License-2.0.txt                            usr/griddb_c_client-$(C_CLIENT_VER)/3rd_party
+	dh_install 3rd_party/BSD_License.txt                                   usr/griddb_c_client-$(C_CLIENT_VER)/3rd_party
+	dh_install 3rd_party/MIT_License.txt                                   usr/griddb_c_client-$(C_CLIENT_VER)/3rd_party
+	dh_install 3rd_party/ebb/LICENSE                                       usr/griddb_c_client-$(C_CLIENT_VER)/3rd_party/ebb
+	dh_install 3rd_party/picojson/org/include/README.mkdn                  usr/griddb_c_client-$(C_CLIENT_VER)/3rd_party/picojson
+	dh_install 3rd_party/purewell/purewell.txt                             usr/griddb_c_client-$(C_CLIENT_VER)/3rd_party/purewell
+	dh_install 3rd_party/sha2/README                                       usr/griddb_c_client-$(C_CLIENT_VER)/3rd_party/sha2
+	dh_install 3rd_party/yield/yield.txt                                   usr/griddb_c_client-$(C_CLIENT_VER)/3rd_party/yield
+	dh_install 3rd_party/uuid/uuid/COPYING                                 usr/griddb_c_client-$(C_CLIENT_VER)/3rd_party/uuid
+	dh_install 3rd_party/omaha/COPYING                                     usr/griddb_c_client-$(C_CLIENT_VER)/3rd_party/omaha
+	dh_install installer/SOURCES/DEB-README.md                             usr/griddb_c_client-$(C_CLIENT_VER)
+	dh_install client/c/sample/sample1.c                                   usr/griddb_c_client-$(C_CLIENT_VER)/sample
+
+override_dh_link:
+	dh_link usr/griddb_c_client-$(C_CLIENT_VER)/lib/libgridstore.so.0.0.0  usr/lib/x86_64-linux-gnu/libgridstore.so.0.0.0
+	dh_link usr/griddb_c_client-$(C_CLIENT_VER)/lib/libgridstore.so.0.0.0  usr/lib/x86_64-linux-gnu/libgridstore.so.0
+	dh_link usr/griddb_c_client-$(C_CLIENT_VER)/lib/libgridstore.so.0.0.0  usr/lib/x86_64-linux-gnu/libgridstore.so
+	dh_link usr/griddb_c_client-$(C_CLIENT_VER)/lib/gridstore.h            usr/include/gridstore.h
+
+binary: install
+	dh_installdeb
+	dh_gencontrol
+	dh_link
+	dh_builddeb
+
+clean:
+
+.PHONY: clean configure build binary
+
