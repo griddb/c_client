@@ -28,7 +28,7 @@ override_dh_install:
 	dh_install 3rd_party/yield/yield.txt                                   usr/griddb_c_client-$(C_CLIENT_VER)/3rd_party/yield
 	dh_install 3rd_party/uuid/uuid/COPYING                                 usr/griddb_c_client-$(C_CLIENT_VER)/3rd_party/uuid
 	dh_install 3rd_party/omaha/COPYING                                     usr/griddb_c_client-$(C_CLIENT_VER)/3rd_party/omaha
-	dh_install installer/SOURCES/DEB-README.md                             usr/griddb_c_client-$(C_CLIENT_VER)
+	dh_install README.md                                                   usr/griddb_c_client-$(C_CLIENT_VER)
 	dh_install client/c/sample/sample1.c                                   usr/griddb_c_client-$(C_CLIENT_VER)/sample
 
 override_dh_link:
