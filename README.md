@@ -12,17 +12,17 @@ Please refer to [C API Reference](http://griddb.github.io/docs-en/manuals/GridDB
 
 Library building and program execution are checked in the environment below.
 
-    OS: CentOS 7.6(x64) (gcc 4.8.5), Windows 10(x64) (VS2017, CMake 3.15.2)
-    GridDB server: V4.5 CE(Community Edition), CentOS 7.6(x64) (gcc 4.8.5)
+    OS: CentOS 7.9/8.3(x64) (gcc 10), Windows 10(x64) (VS2017, CMake 3.15.2)
+    GridDB server: V4.6 CE(Community Edition), CentOS 7.9(x64) (gcc 4.8.5)
 
-    OS: Ubuntu 18.04(x64) (gcc 7.5)
-    GridDB server: V4.5 CE(Community Edition), Ubuntu 18.04(x64) (gcc 4.8.5)
+    OS: Ubuntu 20.04(x64) (gcc 10)
+    GridDB server: V4.6 CE(Community Edition), Ubuntu 18.04(x64) (gcc 4.8.5)
 
-    OS: openSUSE 15.1(x64) (gcc 7.5)
-    GridDB server: V4.5 CE(Community Edition), openSUSE 15.1(x64) (gcc 4.8.5)
+    OS: openSUSE 15.1(x64) (gcc 10)
+    GridDB server: V4.6 CE(Community Edition), openSUSE 15.1(x64) (gcc 4.8.5)
 
     OS: MacOS Catalina 10.15 (clang 11.0.3)
-    GridDB server: V4.5 CE(Community Edition), CentOS 7.8(x64) (gcc 4.8.5)
+    GridDB server: V4.6 CE(Community Edition), CentOS 7.9(x64) (gcc 4.8.5)
 
 ## Quick start (CentOS, Ubuntu, openSUSE)
 
