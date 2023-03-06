@@ -72,16 +72,23 @@
 #define GS_DEPRECATION_IGNORABLE 1
 #endif
 
+#ifndef GS_CLIENT_LOGGING_ENABLED
+#define GS_CLIENT_LOGGING_ENABLED 0
+#endif
 
 #include "util/container.h"
-#include "util/net.h"
-#include "gridstore.h"
+#include "socket_wrapper.h"
+#include "client_ext.h"
 #include "authentication.h"
 #include "service_address.h"
 #include "container_key_utils.h"
 #include "geometry_coder.h"
 #include "gs_error_common.h"
 #include "uuid/uuid.h"
+
+#if GS_CLIENT_LOGGING_ENABLED
+#include "util/trace.h"
+#endif
 
 
 #ifdef GS_DLL_INSIDE
@@ -378,8 +385,13 @@ private:
 typedef TimestampUtils TimestampUtil;
 
 struct Properties {
+	typedef std::vector<GSPropertyEntry> EntryList;
+
+	Properties();
 	Properties(const Properties &properties);
 	Properties(const GSPropertyEntry *properties, const size_t *propertyCount);
+
+	bool containsKey(const GSChar *name) const;
 
 	bool getInteger(const GSChar *name, int32_t &value) const;
 	bool getDouble(const GSChar *name, double &value) const;
@@ -399,6 +411,8 @@ struct Properties {
 
 	static int32_t timeoutToInt32Seconds(int64_t value);
 	static int32_t timeoutToInt32Millis(int64_t value);
+
+	const GSPropertyEntry* toEntryList(EntryList &list) const;
 
 	typedef std::map<std::string, std::string> PropertyMap;
 	PropertyMap propertyMap_;
@@ -1596,6 +1610,7 @@ void RowMapper::ContainerInfoRef<false>::clearColumnInfoList() throw();
 template<>
 void RowMapper::ContainerInfoRef<false>::clearIndexInfoList() throw();
 
+
 struct ContainerKey {
 	ContainerKey();
 	ContainerKey toCaseSensitive(bool caseSensitive) const;
@@ -1733,10 +1748,41 @@ public:
 	struct ClientId;
 	struct Config;
 	struct LoginInfo;
+	struct UserTypeUtils;
 	struct OptionalRequest;
 	class OptionalRequestSource;
 	struct Heartbeat;
+	struct SocketFactoryMap;
 	static const int32_t EE_MAGIC_NUMBER;
+
+	enum SocketType {
+		SOCKET_TYPE_PLAIN,
+		SOCKET_TYPE_SECURE,
+
+		END_SOCKET_TYPE
+	};
+	struct SocketFactoryRefMap {
+		SocketFactoryRefMap();
+		bool isEmpty() const;
+
+		typedef SocketFactory* (Factories)[END_SOCKET_TYPE];
+		Factories factories_;
+	};
+	typedef uint32_t SocketTypeFlags;
+
+	enum AuthType {
+		AUTH_TYPE_INTERNAL,
+		AUTH_TYPE_EXTERNAL_LDAP,
+
+		END_AUTH_TYPE
+	};
+
+	enum ConnectionRoute {
+		CONNECTION_ROUTE_DEFAULT,
+		CONNECTION_ROUTE_PUBLIC,
+
+		END_CONNECTION_ROUTE
+	};
 
 	NodeConnection(const util::SocketAddress &address, const Config &config);
 	~NodeConnection();
@@ -1823,16 +1869,29 @@ private:
 	void putConnectRequest(XArrayByteOutStream &reqOut);
 	void acceptConnectResponse(ArrayByteInStream &respIn);
 
+	void putControlInfo(XArrayByteOutStream &reqOut);
+	void acceptControlInfo(ArrayByteInStream &respIn);
+
+	AuthType resolveAuthType(AuthType specifiedType, const std::string &user);
+	ConnectionRoute resolveConnectionRoute(ConnectionRoute specifiedRoute, const std::string &user);
+
+	void changeTransportMethod(SocketTypeFlags nextTypes);
+	static void createSocket(
+			const SocketFactoryRefMap &factoryMap, SocketType type,
+			AbstractSocket &socket);
+
 	static bool isStatementIdLarge(bool firstStatement);
 	static int64_t getStatementId(
 			ArrayByteInStream &respIn, bool firstStatement);
 
-	util::Socket socket_;
+	AbstractSocket socket_;
 	util::SocketAddress address_;
 	const int64_t statementTimeoutMillis_;
 	const int64_t heartbeatTimeoutMillis_;
 	int32_t alternativeVersion_;
 	bool alternativeVersionEnabled_;
+	SocketTypeFlags acceptableSocketTypes_;
+	SocketFactoryRefMap socketFactories_;
 	Auth::Mode authMode_;
 	int32_t remoteProtocolVersion_;
 	int64_t statementId_;
@@ -1840,6 +1899,8 @@ private:
 	std::string authenticatedUser_;
 	std::string authenticatedPasswordDigest_;
 	std::string authenticatedDatabase_;
+	AuthType authType_;
+	ConnectionRoute connectionRoute_;
 	bool responseUnacceptable_;
 	bool authenticated_;
 	bool ownerMode_;
@@ -1873,6 +1934,7 @@ struct NodeConnection::Config {
 	static const int32_t HEARTBEAT_TIMEOUT_DEFAULT;
 
 	Config();
+	void set(const Config &config, bool withSocketConfig);
 	bool set(const Properties &properties);
 	void setAlternativeVersion(int32_t alternativeVersion);
 
@@ -1882,20 +1944,37 @@ struct NodeConnection::Config {
 	bool statementTimeoutEnabled_;
 	int32_t alternativeVersion_;
 	bool alternativeVersionEnabled_;
+	SocketTypeFlags acceptableSocketTypes_;
+	SocketFactoryRefMap socketFactories_;
 };
 
 struct NodeConnection::LoginInfo {
+public:
 	LoginInfo(
 			const GSChar *user, const GSChar *password, bool ownerMode,
 			const GSChar *clusterName, const GSChar *dbName,
 			int64_t transactionTimeoutMillis, const GSChar *applicationName,
 			double storeMemoryAgingSwapRate,
-			const util::TimeZone &timeZoneOffset);
+			const util::TimeZone &timeZoneOffset,
+			AuthType authType = AUTH_TYPE_INTERNAL,
+			ConnectionRoute connectionRoute = CONNECTION_ROUTE_DEFAULT);
 	void setPassword(const GSChar *password);
+
+	bool isPublicConnection() {
+		return (connectionRoute_ == CONNECTION_ROUTE_PUBLIC);
+	}
+
+	static AuthType parseAuthType(const GSChar *typeStr);
+	static const GSChar* formatAuthType(AuthType type);
+
+	static ConnectionRoute parseConnectionRoute(const GSChar *typeStr);
+	static const GSChar* formatConnectionRoute(ConnectionRoute type);
+	void putConnectionOption(XArrayByteOutStream& req);
 
 	std::allocator<uint8_t> alloc_;
 	std::string user_;
 	Auth::PasswordDigest passwordDigest_;
+	std::string password_;
 	std::string database_;
 	bool ownerMode_;
 	std::string clusterName_;
@@ -1904,6 +1983,24 @@ struct NodeConnection::LoginInfo {
 	std::string applicationName_;
 	double storeMemoryAgingSwapRate_;
 	util::TimeZone timeZoneOffset_;
+	AuthType authType_;
+	ConnectionRoute connectionRoute_;
+
+private:
+	struct AuthTypeList {
+		static const GSChar *PROPERTY_STRING_LIST[END_AUTH_TYPE];
+	};
+	struct ConnectionRouteList {
+		static const GSChar *PROPERTY_STRING_LIST[END_CONNECTION_ROUTE];
+	};
+};
+
+struct NodeConnection::UserTypeUtils {
+	static const GSChar ADMIN_USER[];
+	static const GSChar SYSTEM_USER[];
+	static const GSChar SPECIAL_USER_SYMBOL[];
+
+	static bool checkAdmin(const std::string &user);
 };
 
 struct NodeConnection::OptionalRequest {
@@ -1925,7 +2022,9 @@ struct NodeConnection::OptionalRequest {
 		ACCEPTABLE_FEATURE_VERSION = 11005,
 		APPLICATION_NAME = 11009,
 		STORE_MEMORY_AGING_SWAP_RATE = 11010,
-		TIME_ZONE_OFFSET = 11011
+		TIME_ZONE_OFFSET = 11011,
+		AUTHENTICATION_TYPE = 11012,
+		CONNECTION_ROUTE = 11013
 	};
 
 	enum FeatureVersion {
@@ -1961,6 +2060,8 @@ struct NodeConnection::OptionalRequest {
 	std::string applicationName_;
 	double storeMemoryAgingSwapRate_;
 	util::TimeZone timeZoneOffset_;
+	AuthType authType_;
+	ConnectionRoute connectionRoute_;
 
 private:
 	struct Formatter;
@@ -1999,6 +2100,10 @@ struct NodeConnection::Heartbeat {
 	std::unique_ptr<StatementException> orgException_;
 	size_t orgRespPos_;
 	size_t orgRespSize_;
+};
+
+struct NodeConnection::SocketFactoryMap {
+	SocketFactory factories_[END_SOCKET_TYPE];
 };
 
 class NodeConnectionPool {
@@ -2063,12 +2168,15 @@ public:
 	template<typename T> class ClusterInfoEntry;
 	struct ClusterInfo;
 
-	NodeResolver(NodeConnectionPool &pool, bool passive,
+	NodeResolver(
+			NodeConnectionPool &pool, bool passive,
 			const util::SocketAddress &address,
 			const NodeConnection::Config &connectionConfig,
 			const ServiceAddressResolver::Config &sarConfig,
 			const std::vector<util::SocketAddress> &memberList,
-			const AddressConfig &addressConfig);
+			const AddressConfig &addressConfig,
+			const util::SocketAddress &notificationInterfaceAddress =
+					util::SocketAddress());
 
 	void setConnectionConfig(const NodeConnection::Config &connectionConfig);
 	void setNotificationReceiveTimeoutMillis(int64_t timeout);
@@ -2096,18 +2204,27 @@ public:
 
 	void close();
 
+	void setServiceType(GSChar* type);
+
+	static const GSChar* resolveServiceType(const NodeConnection::LoginInfo &loginInfo) {
+		return (const_cast<NodeConnection::LoginInfo*>(&loginInfo)->isPublicConnection() ?
+			DEFAULT_PUBLIC_SERVICE_TYPE : DEFAULT_SERVICE_TYPE);
+	}
+
 	static util::SocketAddress getAddressProperties(
 			const Properties &props, bool *passive,
 			ServiceAddressResolver::Config &sarConfig,
 			std::vector<util::SocketAddress> &memberList,
-			const AddressConfig *addressConfig);
+			const AddressConfig *addressConfig,
+			util::SocketAddress *notificationInterfaceAddress);
 
 	static util::SocketAddress getNotificationProperties(
 			const Properties &props, const GSChar *host,
 			const bool *ipv6Expected,
 			ServiceAddressResolver::Config &sarConfig,
 			std::vector<util::SocketAddress> &memberList,
-			const AddressConfig &addressConfig);
+			const AddressConfig &addressConfig,
+			util::SocketAddress *notificationInterfaceAddress);
 
 	static util::SocketAddress getNotificationAddress(
 			const GSChar *host, const bool *ipv6Expected,
@@ -2124,9 +2241,12 @@ public:
 
 	static void makeServiceAddressResolver(
 			ServiceAddressResolver &resolver,
-			const ServiceAddressResolver::Config &sarConfig,
 			const std::vector<util::SocketAddress> &memberList,
 			const AddressConfig &addressConfig);
+
+	static ServiceAddressResolver::Config makeServiceAddressResolverConfig(
+			const ServiceAddressResolver::Config &src,
+			const NodeConnection::Config &connectionConfig);
 
 private:
 	static const bool IPV6_ENABLED_DEFAULT;
@@ -2138,6 +2258,7 @@ private:
 	static const GSChar *const DEFAULT_NOTIFICATION_ADDRESS;
 	static const GSChar *const DEFAULT_NOTIFICATION_ADDRESS_V6;
 	static const GSChar *const DEFAULT_SERVICE_TYPE;
+	static const GSChar* const DEFAULT_PUBLIC_SERVICE_TYPE;
 
 	static AddressConfig DEFAULT_ADDRESS_CONFIG;
 	static DefaultProtocolConfig DEFAULT_PROTOCOL_CONFIG;
@@ -2179,12 +2300,15 @@ private:
 
 	void updateConnectionPoolSize();
 
+	const util::SocketAddress* findNotificationInterfaceAddress() const;
+
 	static const GSChar* findLastChar(
 			const GSChar *begin, const GSChar *end, int32_t ch);
 
 	NodeConnectionPool &pool_;
 	bool ipv6Enabled_;
 	util::SocketAddress notificationAddress_;
+	util::SocketAddress notificationInterfaceAddress_;
 	util::SocketAddress masterAddress_;
 	NodeConnection::Config connectionConfig_;
 	std::unique_ptr<NodeConnection> masterConnection_;
@@ -2224,12 +2348,15 @@ public:
 
 struct NodeResolver::AddressConfig {
 	AddressConfig();
+	AddressConfig(const GSChar* type);
 
 	int32_t notificationPort_;
 	const GSChar *notificationAddress_;
 	const GSChar *notificationAddressV6_;
 	const GSChar *serviceType_;
 	bool alwaysMaster_;
+
+	const GSChar *notificationIntrefaceAddress_;
 };
 
 template<typename T>
@@ -2277,16 +2404,27 @@ class GridStoreChannel {
 public:
 	struct Config {
 		Config();
+
+		void set(util::Mutex &mutex, const Config &config);
 		bool set(Properties properties);
+
 		int64_t getFailoverTimeoutMillis(util::Mutex &mutex);
 		int64_t getFailoverRetryIntervalMillis(util::Mutex &mutex);
 		NodeConnection::Config getConnectionConfig(util::Mutex &mutex);
+
+		Config create(
+				const Properties &transProps,
+				NodeConnection::SocketFactoryMap &socketFactories) const;
+		NodeConnection::Config createConnectionConfig(
+				const Properties &transProps,
+				NodeConnection::SocketFactoryMap &socketFactories) const;
 
 		NodeConnection::Config connectionConfig_;
 		int64_t failoverTimeoutMillis_;
 		int64_t failoverRetryIntervalMillis_;
 		int64_t notificationReceiveTimeoutMillis_;
 		int32_t maxConnectionPoolSize_;
+		util::LibraryFunctions::ProviderFunc transportProvider_;
 	};
 
 	struct Key {
@@ -2294,12 +2432,14 @@ public:
 
 		bool passive_;
 		util::SocketAddress address_;
+		util::SocketAddress notificationInterfaceAddress_;
 		std::string clusterName_;
 
 		std::string providerURL_;
 		int64_t providerTimeoutMillis_;
 		ServiceAddressResolver::Config sarConfig_;
 		std::vector<util::SocketAddress> memberList_;
+		Properties transProps_;
 	};
 
 	struct KeyLess {
@@ -2315,6 +2455,7 @@ public:
 	struct LocatedSchema;
 	struct SessionInfo;
 	class ContainerCache;
+	class TransportProvider;
 
 	static bool v1ProtocolCompatibleSpecified_;
 	static bool v1ProtocolCompatible_;
@@ -2327,11 +2468,12 @@ public:
 	static bool v40ContainerHashCompatible_;
 	static bool v40SchemaCompatible_;
 
-	GridStoreChannel(const Config &config, const Source &source);
+	GridStoreChannel(const Config &config,const Source &source);
 
 	NodeConnectionPool& getConnectionPool();
 	GSInterceptorManager* getInterceptorManager() throw();
 	void apply(const Config &config);
+	NodeConnection::Config getConnectionConfig();
 	int64_t getFailoverTimeoutMillis(const Context &context);
 	void setStatementRetryMode(int32_t statementRetryMode);
 	void setMonitoring(bool monitoring);
@@ -2403,8 +2545,9 @@ private:
 	static bool isConnectionDependentStatement(Statement::Id statement);
 	static bool isContainerKeyComposed();
 
-	NodeConnectionPool pool_;
+	NodeConnection::SocketFactoryMap socketFactories_;
 	Config config_;
+	NodeConnectionPool pool_;
 	int32_t statementRetryMode_;
 	util::Atomic<bool> monitoring_;
 	const Key key_;
@@ -2450,11 +2593,18 @@ struct GridStoreChannel::Source {
 	NodeResolver::ClusterInfo createClusterInfo() const;
 	Context createContext() const;
 
-	void set(const Properties &properties);
+	void set(const Properties &properties, const Config &baseConfig);
 
 	static double resolveStoreMemoryAgingSwapRate(
 			const Properties &properties);
 	static util::TimeZone resolveTimeZoneOffset(const Properties &properties);
+	static NodeConnection::AuthType resolveAuthType(
+			const Properties &properties);
+	static NodeConnection::ConnectionRoute resolveConnectionRoute(
+			const Properties &properties);
+	static Properties resolveTransportProperties(
+			const Properties &properties,
+			util::LibraryFunctions::ProviderFunc transProvider);
 
 	Key key_;
 	int32_t partitionCount_;
@@ -2627,6 +2777,39 @@ private:
 	SessionKeyMap sessionKeyMap_;
 	SessionCache sessionCache_;
 	uint64_t lastSessionCacheId_;
+};
+
+class GridStoreChannel::TransportProvider {
+public:
+	TransportProvider();
+	void initialize(util::LibraryFunctions::ProviderFunc provider);
+
+	void filterProperties(const Properties &src, Properties &transProps);
+	bool isPlainSocketAllowed(const Properties &props);
+	bool createSecureSocketFactory(
+			const Properties props, SocketFactory &factory);
+
+private:
+	typedef ExtTransportProvider::Functions Functions;
+	typedef util::LibraryFunctionTable<Functions> FuncTableRef;
+
+	class PropertiesRef {
+	public:
+		explicit PropertiesRef(FuncTableRef &funcTable);
+		~PropertiesRef();
+
+		void clear() throw();
+		ExtTranportPropertiesTag*& get() throw();
+
+	private:
+		PropertiesRef(const PropertiesRef&);
+		PropertiesRef& operator=(const PropertiesRef&);
+
+		FuncTableRef &funcTable_;
+		ExtTranportPropertiesTag *obj_;
+	};
+
+	FuncTableRef funcTable_;
 };
 
 struct GridStoreChannel::ResolverExecutor {
@@ -3043,19 +3226,32 @@ struct GSGridStoreFactoryTag {
 public:
 	friend struct GSResourceHeader;
 
+	struct LoaderOption {
+		LoaderOption();
+
+		bool configEnabled_;
+		bool extensionEnabled_;
+	};
+
 	GSGridStoreFactoryTag() throw();
 	~GSGridStoreFactoryTag();
 
 	static bool isAlive() throw();
 
-	static GSGridStoreFactory& getDefaultFactory() throw();
+	static GSGridStoreFactory& getDefaultFactory(
+			const LoaderOption &option = LoaderOption()) throw();
 	static void close(GSGridStoreFactory **factory, bool allRelated) throw();
+
+	void loadDefault(const LoaderOption &option) throw();
 
 	GSGridStore* getGridStore(
 			const GSPropertyEntry *properties, const size_t *propertyCount);
 	void setProperties(
 			const GSPropertyEntry *properties, const size_t *propertyCount,
 			bool forInitial = false);
+
+	NodeConnection::Config getConnectionConfig(const Properties &props);
+	void setTransportProvider(util::LibraryFunctions::ProviderFunc provider);
 
 	struct Initializer {
 	public:
@@ -3069,14 +3265,29 @@ public:
 private:
 	typedef std::map<GridStoreChannel::Key, GridStoreChannel*,
 			GridStoreChannel::KeyLess> ChannelMap;
+	typedef const char8_t *(LibraryNameInfo)[2];
 
+	typedef GridStoreChannel::TransportProvider TransportProvider;
+
+	typedef ExtGridStoreFactory::Functions Functions;
+	typedef util::LibraryFunctionTable<
+			Functions>::Builder<Functions::END_FUNC> FuncTable;
+
+	struct FuncInitializer {
+		explicit FuncInitializer(FuncTable &table);
+	};
+
+	class ReentranceChecker;
+	class ErrorHolder;
 	class ConfigLoader;
+	class ExtensionLoader;
 	struct Data;
 
 	GSGridStoreFactoryTag(const GSGridStoreFactory&);
 	GSGridStoreFactory& operator=(const GSGridStoreFactory&);
 
-	void prepareConfigFile() throw();
+	bool prepareConfigFile() throw();
+	bool prepareExtension() throw();
 
 	void setPropertiesInternal(
 			util::LockGuard<util::Mutex> &guard, bool forInitial,
@@ -3085,14 +3296,70 @@ private:
 	void setLoggingProperties(
 			util::LockGuard<util::Mutex> &guard, const Properties &properties,
 			bool forInitial);
+#if GS_CLIENT_LOGGING_ENABLED
+	util::TraceOption::OutputType extractOutputType(const Properties &properties);
+	void setLoggingLevel(const Properties &properties);
+	void setLoggingLevel(const std::string &logLevel, const std::string &errorMessage);
+	void setLoggingRotationMode(const Properties &properties);
+	void setLoggingOutputDirectoryPath(const Properties &properties);
+	void setLoggingOutputFileName(const Properties &properties);
+	void appendFileNum(std::string &fileName);
+	void setLoggingMaxRotationFileCount(const Properties &properties);
+	void setLoggingMaxRotationFileSize(const Properties &properties);
+#endif
+
+	void setTransportProviderInternal(
+			util::LockGuard<util::Mutex> *guard,
+			util::LibraryFunctions::ProviderFunc provider);
 
 	void setMonitoring(
 			util::LockGuard<util::Mutex>&, bool monitoring);
+
+	void checkLoaded(util::LockGuard<util::Mutex>&);
+
+	static int32_t provideFunctions(
+			const void *const **funcList, size_t *funcCount) throw();
+
+	static int32_t setTransportProviderExternal(
+			GSGridStoreFactory *factory,
+			util::LibraryFunctions::ProviderFunc provider,
+			UtilExceptionTag **ex) throw();
+
+	static FuncTable FUNC_TABLE;
+	static FuncInitializer FUNC_TABLE_INITIALIZER;
 
 	GSResourceHeader resourceHeader_;
 	std::unique_ptr<Data> data_;
 
 	static GSGridStoreFactory *defaultFactory_;
+};
+
+class GSGridStoreFactoryTag::ReentranceChecker {
+public:
+	class Scope {
+	public:
+		Scope(ReentranceChecker &checker, int64_t expectedCount);
+		~Scope();
+
+	private:
+		ReentranceChecker *checker_;
+		int64_t expectedCount_;
+	};
+
+private:
+	util::Atomic<int64_t> counter_;
+};
+
+class GSGridStoreFactoryTag::ErrorHolder {
+public:
+	ErrorHolder() throw();
+
+	void handleError(std::exception&) throw();
+	void checkError();
+
+private:
+	bool errorOccurred_;
+	UTIL_UNIQUE_PTR<ErrorStack> initialError_;
 };
 
 class GSGridStoreFactoryTag::ConfigLoader {
@@ -3104,7 +3371,8 @@ public:
 	void applyFactoryConfig(Properties &props);
 	void applyStoreConfig(Properties &props);
 
-	void handleConfigError(std::exception&) throw();
+	void handleConfigError(std::exception &e) throw();
+	void checkConfigError();
 
 private:
 	typedef Properties::PropertyMap PropertyMap;
@@ -3113,6 +3381,7 @@ private:
 
 	static void applyConfig(const Properties *src, Properties &dest);
 
+	void acceptFile(const char8_t *path);
 	void acceptFileData(std::string &buf, bool eof, uint64_t &lineNumber);
 	void acceptFileLine(const char8_t *line, size_t size);
 	void acceptProperty(const char8_t *name, const char8_t *value);
@@ -3122,9 +3391,8 @@ private:
 	static const char8_t CONFIG_FILE_NAME[];
 
 	bool configFileEnabled_;
-	bool errorOccurred_;
 	bool prepared_;
-	UTIL_UNIQUE_PTR<ErrorStack> initialError_;
+	ErrorHolder initialError_;
 	UTIL_UNIQUE_PTR<Properties> factoryProps_;
 	UTIL_UNIQUE_PTR<Properties> storeProps_;
 };
@@ -3143,6 +3411,7 @@ struct GSGridStoreFactoryTag::Data {
 
 	UTIL_UNIQUE_PTR<GSInterceptor> callLogger_;
 
+	ReentranceChecker reentranceChecker_;
 	util::Mutex mutex_;
 };
 

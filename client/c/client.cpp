@@ -28,6 +28,17 @@
 #error
 #endif
 
+#if GS_CLIENT_LOGGING_ENABLED
+#include "client_logging.h"
+#ifndef GS_CLIENT_CONFIG_FILE_ENABLED
+#define GS_CLIENT_CONFIG_FILE_ENABLED 1
+#endif
+#endif
+
+#ifndef GS_CLIENT_CONFIG_FILE_ENABLED
+#define GS_CLIENT_CONFIG_FILE_ENABLED 0
+#endif
+
 #ifndef GS_CLIENT_CONFIG_FILE_LOGGING_ONLY
 #define GS_CLIENT_CONFIG_FILE_LOGGING_ONLY 1
 #endif
@@ -43,8 +54,6 @@
 #ifndef GS_CLIENT_DISABLE_DEFAULT_FACTORY
 #define GS_CLIENT_DISABLE_DEFAULT_FACTORY 0
 #endif
-
-
 
 #ifndef GS_CLIENT_ENABLE_PROFILER
 #define GS_CLIENT_ENABLE_PROFILER 0
@@ -922,6 +931,9 @@ util::TimeZone TimestampUtils::resolveZone(const int64_t &offsetMillis) {
 }
 
 
+Properties::Properties() {
+}
+
 Properties::Properties(const Properties &properties) :
 		propertyMap_(properties.propertyMap_) {
 }
@@ -970,6 +982,11 @@ Properties::Properties(
 		}
 		propertyMap_.insert(PropertyMap::value_type(i->name, i->value));
 	}
+}
+
+bool Properties::containsKey(const GSChar *name) const {
+	assert(name != NULL);
+	return (propertyMap_.find(name) != propertyMap_.end());
 }
 
 bool Properties::getInteger(const GSChar *name, int32_t &value) const {
@@ -1139,6 +1156,17 @@ int32_t Properties::timeoutToInt32Millis(int64_t value) {
 	else {
 		return static_cast<int32_t>(value);
 	}
+}
+
+const GSPropertyEntry* Properties::toEntryList(EntryList &list) const {
+	for (PropertyMap::const_iterator it = propertyMap_.begin();
+			it != propertyMap_.end(); ++it) {
+		GSPropertyEntry entry = { NULL, NULL };
+		entry.name = it->first.c_str();
+		entry.value = it->second.c_str();
+		list.push_back(entry);
+	}
+	return (list.empty() ? NULL : &list[0]);
 }
 
 
@@ -4542,7 +4570,6 @@ void RowMapper::decodeField(
 			GS_CLIENT_THROW_ERROR(
 					GS_ERROR_CC_UNSUPPORTED_OPERATION,
 					"GEOMETRY is not a supported type");
-
 			cursor.endVarData();
 			break;
 		}
@@ -4634,7 +4661,6 @@ void RowMapper::clearFieldGeneral(
 	GSRow::FieldClearer clearer;
 	invokeTypedOperation(*static_cast<GSRow*>(rowObj), clearer, entry);
 }
-
 
 template<typename Alloc>
 void RowMapper::deallocateStringArray(
@@ -4793,9 +4819,6 @@ RowMapper::Initializer::~Initializer() {
 		cache_ = NULL;
 	}
 }
-
-
-
 
 
 
@@ -6153,10 +6176,14 @@ NodeConnection::NodeConnection(
 		heartbeatTimeoutMillis_(config.heartbeatTimeoutMillis_),
 		alternativeVersion_(config.alternativeVersion_),
 		alternativeVersionEnabled_(config.alternativeVersionEnabled_),
+		acceptableSocketTypes_(config.acceptableSocketTypes_),
+		socketFactories_(config.socketFactories_),
 		authMode_(Auth::Challenge::getDefaultMode()),
 		remoteProtocolVersion_(0),
 		statementId_(0),
 		heartbeatReceiveCount_(0),
+		authType_(AUTH_TYPE_INTERNAL),
+		connectionRoute_(CONNECTION_ROUTE_DEFAULT),
 		responseUnacceptable_(false),
 		authenticated_(false),
 		ownerMode_(false),
@@ -6167,6 +6194,7 @@ NodeConnection::NodeConnection(
 				"Invalid address (address=" << address_ << ")");
 	}
 
+	createSocket(socketFactories_, SOCKET_TYPE_PLAIN, socket_);
 	socket_.open(address_.getFamily(), util::Socket::TYPE_STREAM);
 	if (tcpNoDelayEnabled_) {
 		socket_.setNoDelay(true);
@@ -6639,6 +6667,8 @@ bool NodeConnection::loginInternal(
 	XArrayByteOutStream reqOut =
 			XArrayByteOutStream(NormalXArrayOutStream(req));
 
+	const AuthType authType =
+			resolveAuthType(loginInfo.authType_, loginInfo.user_);
 	if (isOptionalRequestEnabled()) {
 		OptionalRequest request;
 		request.transactionTimeout_ = loginInfo.transactionTimeoutSecs_;
@@ -6649,16 +6679,24 @@ bool NodeConnection::loginInternal(
 		request.applicationName_ = loginInfo.applicationName_;
 		request.storeMemoryAgingSwapRate_ = loginInfo.storeMemoryAgingSwapRate_;
 		request.timeZoneOffset_ = loginInfo.timeZoneOffset_;
+		request.authType_ = authType;
+		request.connectionRoute_ = loginInfo.connectionRoute_;
 		request.format(reqOut);
 	}
 
-	std::allocator<uint8_t> alloc;
-	Auth::String digestStr(alloc);
-	Auth::Challenge::build(
-			authMode_, challenge, loginInfo.passwordDigest_, &digestStr);
-
 	reqOut << loginInfo.user_;
-	reqOut << digestStr;
+
+	std::allocator<uint8_t> alloc;
+	if (authType == AUTH_TYPE_EXTERNAL_LDAP) {
+		reqOut << loginInfo.password_;
+	}
+	else {
+		Auth::String digestStr(alloc);
+		Auth::Challenge::build(
+				authMode_, challenge, loginInfo.passwordDigest_, &digestStr);
+		reqOut << digestStr;
+	}
+
 	reqOut << Properties::timeoutToInt32Seconds(statementTimeoutMillis_);
 	reqOut << ClientUtil::toGSBool(loginInfo.ownerMode_);
 
@@ -6776,9 +6814,14 @@ void NodeConnection::readFully(void *buf, size_t length) {
 		try {
 			throw;
 		}
-		catch (util::PlatformException &e2) {
+		catch (util::Exception &e2) {
+			const size_t depth = e2.getMaxDepth();
+			util::NormalOStringStream oss;
+			oss << e2.getField(util::Exception::FIELD_TYPE_NAME, depth);
 			const bool timeoutOccurred =
-					util::Socket::isTimeoutError(e2.getErrorCode());
+					oss.str() == "util::PlatformException" &&
+					util::Socket::isTimeoutError(e2.getErrorCode(depth));
+
 			if (!timeoutOccurred || r < length) {
 				responseUnacceptable_ = true;
 			}
@@ -6883,6 +6926,7 @@ void NodeConnection::putConnectRequest(XArrayByteOutStream &reqOut) {
 				isIPV6Enabled(), true));
 	reqOut << (alternativeVersionEnabled_ ?
 			alternativeVersion_ : getProtocolVersion());
+	putControlInfo(reqOut);
 }
 
 void NodeConnection::acceptConnectResponse(ArrayByteInStream &respIn) {
@@ -6899,6 +6943,141 @@ void NodeConnection::acceptConnectResponse(ArrayByteInStream &respIn) {
 					version << ")");
 		}
 	}
+
+	if (respIn.base().remaining() > 0) {
+		int8_t authType;
+		respIn >> authType;
+		authType_ = static_cast<AuthType>(authType);
+	}
+
+	acceptControlInfo(respIn);
+}
+
+void NodeConnection::putControlInfo(XArrayByteOutStream &reqOut) {
+	uint32_t bodySize = 0;
+
+	const size_t headPos = reqOut.base().position();
+	reqOut << bodySize;
+
+	const size_t bodyPos = reqOut.base().position();
+	reqOut << ClientUtil::toGSBool(
+			(acceptableSocketTypes_ & (1 << SOCKET_TYPE_PLAIN)) != 0);
+	reqOut << ClientUtil::toGSBool(
+			(acceptableSocketTypes_ & (1 << SOCKET_TYPE_SECURE)) != 0);
+
+	const size_t endPos = reqOut.base().position();
+	reqOut.base().position(headPos);
+	bodySize = static_cast<uint32_t>(endPos - bodyPos);
+	reqOut << bodySize;
+	reqOut.base().position(endPos);
+}
+
+void NodeConnection::acceptControlInfo(ArrayByteInStream &respIn) {
+	SocketTypeFlags respTypes = 0;
+	do {
+		if (respIn.base().remaining() <= 0) {
+			respTypes |= (1 << SOCKET_TYPE_PLAIN);
+			break;
+		}
+
+		uint32_t bodySize;
+		respIn >> bodySize;
+
+		const size_t endPos = respIn.base().position() + static_cast<size_t>(
+				std::min<uint64_t>(respIn.base().remaining(), bodySize));
+
+		GSBool plainAcceptable;
+		GSBool secureAcceptable;
+		respIn >> plainAcceptable;
+		respIn >> secureAcceptable;
+
+		respTypes |= ((ClientUtil::toBool(plainAcceptable) ? 1 : 0) <<
+				SOCKET_TYPE_PLAIN);
+		respTypes |= ((ClientUtil::toBool(secureAcceptable) ? 1 : 0) <<
+				SOCKET_TYPE_SECURE);
+
+		respIn.base().position(endPos);
+	}
+	while (false);
+
+	const SocketTypeFlags nextTypes = (acceptableSocketTypes_ & respTypes);
+	if (nextTypes == 0) {
+		GS_CLIENT_THROW_ERROR(
+				GS_ERROR_CC_ILLEGAL_CONFIG,
+				"Requested security options not supported (" <<
+				"requested={plain:" << ((acceptableSocketTypes_ &
+						(1 << SOCKET_TYPE_PLAIN)) != 0) <<
+				", secure:" << ((acceptableSocketTypes_ &
+						(1 << SOCKET_TYPE_SECURE)) != 0) << "}, " <<
+				"supported={plain:" << ((respTypes &
+						(1 << SOCKET_TYPE_PLAIN)) != 0) <<
+				", secure:" << ((respTypes &
+						(1 << SOCKET_TYPE_SECURE)) != 0) << "})");
+	}
+	else if (!socketFactories_.isEmpty()) {
+		changeTransportMethod(nextTypes);
+	}
+}
+
+NodeConnection::AuthType NodeConnection::resolveAuthType(
+		AuthType specifiedType, const std::string &user) {
+	const bool nonInternalSpecified =
+			(specifiedType != END_AUTH_TYPE &&
+			specifiedType != AUTH_TYPE_INTERNAL);
+	const AuthType type = authType_;
+
+	if (type == AUTH_TYPE_INTERNAL || specifiedType == AUTH_TYPE_INTERNAL) {
+		if (nonInternalSpecified) {
+			GS_CLIENT_THROW_ERROR(
+					GS_ERROR_CC_ILLEGAL_CONFIG,
+					"Unavailable authentication type for target node ("
+					"authentication=" <<
+					LoginInfo::formatAuthType(specifiedType) <<
+					", user=" << user << ", address=" << address_ << ")");
+		}
+		return AUTH_TYPE_INTERNAL;
+	}
+
+	if (UserTypeUtils::checkAdmin(user)) {
+		if (nonInternalSpecified) {
+			GS_CLIENT_THROW_ERROR(
+					GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY,
+					"Illegal authentication type for admin user ("
+					"authentication=" <<
+					LoginInfo::formatAuthType(specifiedType) <<
+					", user=" << user << ")");
+		}
+		return AUTH_TYPE_INTERNAL;
+	}
+
+	return type;
+}
+
+void NodeConnection::changeTransportMethod(SocketTypeFlags nextTypes) {
+	const SocketFactoryRefMap socketFactories = socketFactories_;
+	socketFactories_ = SocketFactoryRefMap();
+
+	if ((nextTypes & (1 << SOCKET_TYPE_SECURE)) == 0) {
+		acceptableSocketTypes_ = (1 << SOCKET_TYPE_PLAIN);
+		return;
+	}
+	acceptableSocketTypes_ = (1 << SOCKET_TYPE_SECURE);
+
+	createSocket(socketFactories, SOCKET_TYPE_SECURE, socket_);
+}
+
+void NodeConnection::createSocket(
+		const SocketFactoryRefMap &factoryMap, SocketType type,
+		AbstractSocket &socket) {
+	SocketFactory *factory = factoryMap.factories_[type];
+	if (factory == NULL) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+
+	util::Socket localSocket;
+	localSocket.attach(socket.detach());
+	factory->create(socket);
+	socket.attach(localSocket.detach());
 }
 
 bool NodeConnection::isStatementIdLarge(bool firstStatement) {
@@ -6980,7 +7159,20 @@ NodeConnection::Config::Config() :
 		heartbeatTimeoutMillis_(HEARTBEAT_TIMEOUT_DEFAULT),
 		statementTimeoutEnabled_(false),
 		alternativeVersion_(-1),
-		alternativeVersionEnabled_(false) {
+		alternativeVersionEnabled_(false),
+		acceptableSocketTypes_(0) {
+}
+
+void NodeConnection::Config::set(const Config &config, bool withSocketConfig) {
+	const SocketTypeFlags acceptableSocketTypes = acceptableSocketTypes_;
+	const SocketFactoryRefMap socketFactories = socketFactories_;
+
+	*this = config;
+
+	if (!withSocketConfig) {
+		acceptableSocketTypes_ = acceptableSocketTypes;
+		socketFactories_ = socketFactories;
+	}
 }
 
 bool NodeConnection::Config::set(const Properties &properties) {
@@ -7029,9 +7221,11 @@ NodeConnection::LoginInfo::LoginInfo(
 		const GSChar *clusterName, const GSChar *dbName,
 		int64_t transactionTimeoutMillis, const GSChar *applicationName,
 		double storeMemoryAgingSwapRate,
-		const util::TimeZone &timeZoneOffset) :
+		const util::TimeZone &timeZoneOffset, AuthType authType,
+		ConnectionRoute connectionRoute) :
 		user_(user),
 		passwordDigest_(Auth::Challenge::makeDigest(alloc_, user, password)),
+		password_(password),
 		database_(dbName),
 		ownerMode_(ownerMode),
 		clusterName_(clusterName),
@@ -7039,12 +7233,100 @@ NodeConnection::LoginInfo::LoginInfo(
 				Properties::timeoutToInt32Seconds(transactionTimeoutMillis)),
 		applicationName_(applicationName),
 		storeMemoryAgingSwapRate_(storeMemoryAgingSwapRate),
-		timeZoneOffset_(timeZoneOffset) {
+		timeZoneOffset_(timeZoneOffset),
+		authType_(authType),
+		connectionRoute_(connectionRoute) {
 }
 
 void NodeConnection::LoginInfo::setPassword(const GSChar *password) {
 	passwordDigest_ =
 			Auth::Challenge::makeDigest(alloc_, user_.c_str(), password);
+	password_ = password;
+}
+
+NodeConnection::AuthType NodeConnection::LoginInfo::parseAuthType(
+		const GSChar *typeStr) {
+	assert(typeStr != NULL);
+
+	for (ptrdiff_t i = 0; i < END_AUTH_TYPE; i++) {
+		if (strcmp(typeStr, AuthTypeList::PROPERTY_STRING_LIST[i]) == 0) {
+			return static_cast<AuthType>(i);
+		}
+	}
+
+	GS_CLIENT_THROW_ERROR(
+			GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY,
+			"Unknown authenthcation type (value=" << typeStr << ")");
+}
+
+const GSChar* NodeConnection::LoginInfo::formatAuthType(AuthType type) {
+	const ptrdiff_t index = static_cast<ptrdiff_t>(type);
+	assert(index >= 0 && index < END_AUTH_TYPE);
+
+	const GSChar *typeStr = AuthTypeList::PROPERTY_STRING_LIST[type];
+	assert(typeStr != NULL);
+
+	return typeStr;
+}
+
+NodeConnection::ConnectionRoute NodeConnection::LoginInfo::parseConnectionRoute(
+		const GSChar *routeStr) {
+	assert(routeStr != NULL);
+
+	for (ptrdiff_t i = 1; i < END_CONNECTION_ROUTE; i++) {
+		if (strcmp(routeStr, ConnectionRouteList::PROPERTY_STRING_LIST[i]) == 0) {
+			return static_cast<ConnectionRoute>(i);
+		}
+	}
+
+	GS_CLIENT_THROW_ERROR(
+			GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY,
+			"Unknown connection route (value=" << routeStr << ")");
+}
+
+const GSChar* NodeConnection::LoginInfo::formatConnectionRoute(ConnectionRoute route) {
+	const ptrdiff_t index = static_cast<ptrdiff_t>(route);
+	assert(index >= 0 && index < END_CONNECTION_ROUTE);
+
+	const GSChar *routeStr = ConnectionRouteList::PROPERTY_STRING_LIST[route];
+	assert(routeStr != NULL);
+
+	return routeStr;
+}
+
+void NodeConnection::LoginInfo::putConnectionOption(XArrayByteOutStream& reqOut) {
+	if (connectionRoute_ == CONNECTION_ROUTE_DEFAULT) {
+		tryPutEmptyOptionalRequest(reqOut);
+	}
+	else {
+		if (isOptionalRequestEnabled()) {
+			OptionalRequest optionalRequest;
+			optionalRequest.connectionRoute_ = connectionRoute_;
+			optionalRequest.format(reqOut);
+		}
+	}
+}
+
+
+const GSChar *NodeConnection::LoginInfo::AuthTypeList::PROPERTY_STRING_LIST[
+		END_AUTH_TYPE] = {
+	"INTERNAL",
+	"LDAP"
+};
+
+const GSChar *NodeConnection::LoginInfo::ConnectionRouteList::PROPERTY_STRING_LIST[END_CONNECTION_ROUTE] = {
+	"DEFAULT",
+	"PUBLIC"
+};
+
+
+const GSChar NodeConnection::UserTypeUtils::ADMIN_USER[] = "admin";
+const GSChar NodeConnection::UserTypeUtils::SYSTEM_USER[] = "system";
+const GSChar NodeConnection::UserTypeUtils::SPECIAL_USER_SYMBOL[] = "#";
+
+bool NodeConnection::UserTypeUtils::checkAdmin(const std::string &user) {
+	return (user == ADMIN_USER || user == SYSTEM_USER ||
+			user.find(SPECIAL_USER_SYMBOL) != std::string::npos);
 }
 
 
@@ -7061,7 +7343,8 @@ NodeConnection::OptionalRequest::OptionalRequest() :
 		fetchBytesSize_(0),
 		featureVersion_(-1),
 		acceptableFeatureVersion_(-1),
-		storeMemoryAgingSwapRate_(-1) {
+		storeMemoryAgingSwapRate_(-1),
+		authType_(AUTH_TYPE_INTERNAL) {
 }
 
 NodeConnection::OptionalRequest::OptionalRequest(
@@ -7080,7 +7363,8 @@ NodeConnection::OptionalRequest::OptionalRequest(
 		fetchBytesSize_(0),
 		featureVersion_(-1),
 		acceptableFeatureVersion_(-1),
-		storeMemoryAgingSwapRate_(-1) {
+		storeMemoryAgingSwapRate_(-1),
+		authType_(AUTH_TYPE_INTERNAL) {
 }
 
 void NodeConnection::OptionalRequest::putExt(
@@ -7193,6 +7477,16 @@ void NodeConnection::OptionalRequest::format(
 		reqOut << timeZoneOffset_.getOffsetMillis();
 	}
 
+	if (authType_ != AUTH_TYPE_INTERNAL) {
+		formatter.putType(AUTHENTICATION_TYPE);
+		reqOut << static_cast<int8_t>(authType_);
+	}
+
+	if (connectionRoute_ == CONNECTION_ROUTE_PUBLIC) {
+		formatter.putType(CONNECTION_ROUTE);
+		reqOut << static_cast<int8_t>(connectionRoute_);
+	}
+
 	if (extRequestMap_.get() != NULL) {
 		for (ExtMap::const_iterator it = extRequestMap_->begin();
 				it != extRequestMap_->end(); ++it) {
@@ -7262,6 +7556,22 @@ void NodeConnection::OptionalRequest::Formatter::putBodySize(
 	reqOut.base().position(headPos);
 	reqOut << ClientUtil::sizeValueToInt32(endPos - bodyPos);
 	reqOut.base().position(endPos);
+}
+
+
+NodeConnection::SocketFactoryRefMap::SocketFactoryRefMap() {
+	std::fill(
+			factories_, factories_ + END_SOCKET_TYPE,
+			static_cast<SocketFactory*>(NULL));
+}
+
+bool NodeConnection::SocketFactoryRefMap::isEmpty() const {
+	for (size_t i = 0; i < END_SOCKET_TYPE; i++) {
+		if (factories_[i] != NULL) {
+			return false;
+		}
+	}
+	return true;
 }
 
 
@@ -7445,19 +7755,23 @@ const GSChar *const NodeResolver::DEFAULT_NOTIFICATION_ADDRESS =
 const GSChar *const NodeResolver::DEFAULT_NOTIFICATION_ADDRESS_V6 =
 		"ff12::1";
 const GSChar *const NodeResolver::DEFAULT_SERVICE_TYPE = "transaction";
+const GSChar* const NodeResolver::DEFAULT_PUBLIC_SERVICE_TYPE = "transactionPublic";
 
 NodeResolver::AddressConfig NodeResolver::DEFAULT_ADDRESS_CONFIG;
 NodeResolver::DefaultProtocolConfig NodeResolver::DEFAULT_PROTOCOL_CONFIG;
 
-NodeResolver::NodeResolver(NodeConnectionPool &pool, bool passive,
+NodeResolver::NodeResolver(
+		NodeConnectionPool &pool, bool passive,
 		const util::SocketAddress &address,
 		const NodeConnection::Config &connectionConfig,
 		const ServiceAddressResolver::Config &sarConfig,
 		const std::vector<util::SocketAddress> &memberList,
-		const AddressConfig &addressConfig) :
+		const AddressConfig &addressConfig,
+		const util::SocketAddress &notificationInterfaceAddress) :
 		pool_(pool),
 		ipv6Enabled_(address.getFamily() == util::SocketAddress::FAMILY_INET6),
 		notificationAddress_(passive ? address : util::SocketAddress()),
+		notificationInterfaceAddress_(notificationInterfaceAddress),
 		masterAddress_(passive ? util::SocketAddress() : address),
 		connectionConfig_(connectionConfig),
 		notificationReceiveTimeoutMillis_(NOTIFICATION_RECEIVE_TIMEOUT),
@@ -7466,19 +7780,21 @@ NodeResolver::NodeResolver(NodeConnectionPool &pool, bool passive,
 		connectionTrialCounter_(0),
 		connectionFailedPreviously_(false),
 		preferableConnectionPoolSize_(pool.getMaxSize()),
-		serviceAddressResolver_(alloc_, sarConfig),
+		serviceAddressResolver_(
+				alloc_,
+				makeServiceAddressResolverConfig(sarConfig, connectionConfig)),
 		providerCheckInterval_(100, 1),
 		lastSelectedMember_(-1),
 		alwaysMaster_(addressConfig.alwaysMaster_),
 		protocolConfig_(&DEFAULT_PROTOCOL_CONFIG) {
 	makeServiceAddressResolver(
-			serviceAddressResolver_, sarConfig, memberList, addressConfig);
+			serviceAddressResolver_, memberList, addressConfig);
 }
 
 void NodeResolver::setConnectionConfig(
 		const NodeConnection::Config &connectionConfig) {
 	util::LockGuard<util::Mutex> guard(mutex_);
-	connectionConfig_ = connectionConfig;
+	connectionConfig_.set(connectionConfig, false);
 }
 
 void NodeResolver::setNotificationReceiveTimeoutMillis(int64_t timeout) {
@@ -7512,14 +7828,15 @@ util::SocketAddress NodeResolver::getAddressProperties(
 		const Properties &props, bool *passive,
 		ServiceAddressResolver::Config &sarConfig,
 		std::vector<util::SocketAddress> &memberList,
-		const AddressConfig *addressConfig) {
+		const AddressConfig *addressConfig,
+		util::SocketAddress *notificationInterfaceAddress) {
 	assert(passive != NULL);
 	*passive = false;
 
 	if (addressConfig == NULL) {
 		return getAddressProperties(
 				props, passive, sarConfig, memberList,
-				&DEFAULT_ADDRESS_CONFIG);
+				&DEFAULT_ADDRESS_CONFIG, notificationInterfaceAddress);
 	}
 
 	const GSChar *host = props.getString("host");
@@ -7544,7 +7861,7 @@ util::SocketAddress NodeResolver::getAddressProperties(
 
 	util::SocketAddress address = getNotificationProperties(
 			props, host, ipv6EnabledPtr, sarConfig, memberList,
-			*addressConfig);
+			*addressConfig, notificationInterfaceAddress);
 
 	const GSChar *portKey = (*passive ? "notificationPort" : "port");
 	int32_t port;
@@ -7571,6 +7888,10 @@ util::SocketAddress NodeResolver::getAddressProperties(
 		address.setPort(static_cast<uint16_t>(port));
 	}
 
+	if (!notificationInterfaceAddress->isEmpty()) {
+		notificationInterfaceAddress->setPort(address.getPort());
+	}
+
 	return address;
 }
 
@@ -7579,14 +7900,22 @@ util::SocketAddress NodeResolver::getNotificationProperties(
 		const bool *ipv6Expected,
 		ServiceAddressResolver::Config &sarConfig,
 		std::vector<util::SocketAddress> &memberList,
-		const AddressConfig &addressConfig) {
+		const AddressConfig &addressConfig,
+		util::SocketAddress *notificationInterfaceAddress) {
+	assert(notificationInterfaceAddress != NULL);
+	*notificationInterfaceAddress = util::SocketAddress();
 
 	props.checkExclusiveProperties(
 			"notificationProvider",
 			"notificationMember",
 			"notificationAddress");
+	props.checkExclusiveProperties(
+			"notificationProvider",
+			"notificationMember",
+			"notificationInterfaceAddress");
 	props.checkExclusiveProperties("notificationProvider", "host");
 	props.checkExclusiveProperties("notificationMember", "host");
+	props.checkExclusiveProperties("notificationInterfaceAddress", "host");
 
 	const GSChar *const notificationProvider =
 			props.getString("notificationProvider");
@@ -7594,6 +7923,8 @@ util::SocketAddress NodeResolver::getNotificationProperties(
 			props.getString("notificationMember");
 	const GSChar *const notificationAddress =
 			props.getString("notificationAddress");
+	const GSChar *const notificationInterfaceAddressStr =
+			props.getString("notificationInterfaceAddress");
 
 	if (notificationProvider != NULL) {
 		sarConfig.providerURL_ = notificationProvider;
@@ -7610,6 +7941,12 @@ util::SocketAddress NodeResolver::getNotificationProperties(
 	}
 
 	if (host == NULL) {
+		if (notificationInterfaceAddressStr != NULL) {
+			*notificationInterfaceAddress = resolveAddress(
+					notificationInterfaceAddressStr, NULL,
+					"notificationInterfaceAddress");
+		}
+
 		return getNotificationAddress(
 				notificationAddress, ipv6Expected, addressConfig,
 				"notificationAddress");
@@ -7897,9 +8234,9 @@ void NodeResolver::invalidateMaster(ClusterInfo &clusterInfo) {
 
 void NodeResolver::makeServiceAddressResolver(
 		ServiceAddressResolver &resolver,
-		const ServiceAddressResolver::Config &sarConfig,
 		const std::vector<util::SocketAddress> &memberList,
 		const AddressConfig &addressConfig) {
+	const ServiceAddressResolver::Config &sarConfig = resolver.getConfig();
 	if (sarConfig.providerURL_ == NULL && memberList.empty()) {
 		return;
 	}
@@ -7918,6 +8255,17 @@ void NodeResolver::makeServiceAddressResolver(
 		}
 		resolver.validate();
 	}
+}
+
+ServiceAddressResolver::Config NodeResolver::makeServiceAddressResolverConfig(
+		const ServiceAddressResolver::Config &src,
+		const NodeConnection::Config &connectionConfig) {
+	ServiceAddressResolver::Config dest = src;
+	const NodeConnection::SocketFactoryRefMap::Factories &factories =
+			connectionConfig.socketFactories_.factories_;
+	dest.plainSocketFactory_ = factories[NodeConnection::SOCKET_TYPE_PLAIN];
+	dest.secureSocketFactory_ = factories[NodeConnection::SOCKET_TYPE_SECURE];
+	return dest;
 }
 
 void NodeResolver::prepareConnectionAndClusterInfo(
@@ -8057,7 +8405,7 @@ bool NodeResolver::updateConnectionAndClusterInfo(ClusterInfo &clusterInfo) {
 			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 		}
 
-		const NodeConnection::LoginInfo &loginInfo = clusterInfo.loginInfo_;
+		NodeConnection::LoginInfo &loginInfo = clusterInfo.loginInfo_;
 		int64_t databaseId;
 		NodeConnection *connection = masterConnection_.get();
 		if (connection == NULL) {
@@ -8073,7 +8421,7 @@ bool NodeResolver::updateConnectionAndClusterInfo(ClusterInfo &clusterInfo) {
 		NodeConnection::fillRequestHead(ipv6Enabled_, req_);
 		XArrayByteOutStream reqOut =
 				XArrayByteOutStream(NormalXArrayOutStream(req_));
-		NodeConnection::tryPutEmptyOptionalRequest(reqOut);
+		loginInfo.putConnectionOption(reqOut);
 
 		if (masterResolvable) {
 			reqOut << ClientUtil::toGSBool(true);
@@ -8144,7 +8492,8 @@ void NodeResolver::updateMasterInfo(ClusterInfo &clusterInfo) try {
 	socket.setReuseAddress(true);
 	socket.bind(
 			util::SocketAddress(NULL, notificationAddress_.getPort(), family));
-	socket.joinMulticastGroup(notificationAddress_);
+	socket.joinMulticastGroup(
+			notificationAddress_, findNotificationInterfaceAddress());
 
 	resp_.resize(4 * 7 + getInetAddressSize() * 2 + 1);
 	int64_t receivedSize;
@@ -8345,7 +8694,8 @@ const NodeResolver::NodeAddressList* NodeResolver::getNodeAddressList(
 	try {
 		XArrayByteOutStream reqOut =
 				XArrayByteOutStream(NormalXArrayOutStream(req_));
-		NodeConnection::tryPutEmptyOptionalRequest(reqOut);
+		clusterInfo.loginInfo_.putConnectionOption(reqOut);
+
 		ArrayByteInStream respIn = masterConnection_->executeStatementDirect(
 				protocolConfig_->getNormalStatementType(
 						Statement::GET_PARTITION_ADDRESS),
@@ -8469,6 +8819,15 @@ void NodeResolver::updateConnectionPoolSize() {
 			std::max(preferableConnectionPoolSize_, cachedAddressSet_.size()));
 }
 
+const util::SocketAddress*
+NodeResolver::findNotificationInterfaceAddress() const {
+	if (notificationInterfaceAddress_.isEmpty()) {
+		return NULL;
+	}
+
+	return &notificationInterfaceAddress_;
+}
+
 const GSChar* NodeResolver::findLastChar(
 		const GSChar *begin, const GSChar *end, int32_t ch) {
 	assert(begin <= end);
@@ -8510,6 +8869,14 @@ NodeResolver::AddressConfig::AddressConfig() :
 		notificationAddressV6_(DEFAULT_NOTIFICATION_ADDRESS_V6),
 		serviceType_(DEFAULT_SERVICE_TYPE),
 		alwaysMaster_(false) {
+}
+
+NodeResolver::AddressConfig::AddressConfig(const GSChar* type) :
+	notificationPort_(DEFAULT_NOTIFICATION_PORT),
+	notificationAddress_(DEFAULT_NOTIFICATION_ADDRESS),
+	notificationAddressV6_(DEFAULT_NOTIFICATION_ADDRESS_V6),
+	serviceType_(type),
+	alwaysMaster_(false) {
 }
 
 template<typename T>
@@ -8625,14 +8992,15 @@ const size_t GridStoreChannel::MAPPER_CACHE_SIZE = 32;
 
 GridStoreChannel::GridStoreChannel(
 		const Config &config, const Source &source) :
-		config_(config),
+		config_(config.create(source.key_.transProps_, socketFactories_)),
 		statementRetryMode_(0),
 		key_(source.key_),
 		nodeResolver_(
 				pool_, key_.passive_, key_.address_,
-				config.connectionConfig_,
+				config_.connectionConfig_,
 				key_.sarConfig_, key_.memberList_,
-				NodeResolver::AddressConfig()),
+				NodeResolver::AddressConfig(NodeResolver::resolveServiceType(source.loginInfo_)),
+				key_.notificationInterfaceAddress_),
 		reqHeadLength_(NodeConnection::getRequestHeadLength(
 				ClientUtil::isIPV6Address(key_.address_))),
 		interceptorManager_(source.interceptorManager_) {
@@ -8649,6 +9017,15 @@ GSInterceptorManager* GridStoreChannel::getInterceptorManager() throw() {
 	return interceptorManager_;
 }
 
+NodeConnection::Config GridStoreChannel::getConnectionConfig() {
+	NodeConnection::Config connectionConfig;
+	{
+		util::LockGuard<util::Mutex> guard(mutex_);
+		connectionConfig = config_.connectionConfig_;
+	}
+	return connectionConfig;
+}
+
 void GridStoreChannel::apply(const Config &config) {
 	nodeResolver_.setConnectionConfig(config.connectionConfig_);
 	nodeResolver_.setNotificationReceiveTimeoutMillis(
@@ -8656,8 +9033,7 @@ void GridStoreChannel::apply(const Config &config) {
 	nodeResolver_.setPreferableConnectionPoolSize(
 			config.maxConnectionPoolSize_);
 
-	util::LockGuard<util::Mutex> guard(mutex_);
-	config_ = config;
+	config_.set(mutex_, config);
 }
 
 int64_t GridStoreChannel::getFailoverTimeoutMillis(const Context &context) {
@@ -9076,7 +9452,18 @@ GridStoreChannel::Config::Config() :
 		failoverRetryIntervalMillis_(FAILOVER_RETRY_INTERVAL),
 		notificationReceiveTimeoutMillis_(
 				NodeResolver::NOTIFICATION_RECEIVE_TIMEOUT),
-		maxConnectionPoolSize_(-1) {
+		maxConnectionPoolSize_(-1),
+		transportProvider_(NULL) {
+}
+
+void GridStoreChannel::Config::set(util::Mutex &mutex, const Config &config) {
+	util::LockGuard<util::Mutex> guard(mutex);
+
+	NodeConnection::Config connectionConfig = connectionConfig_;
+	connectionConfig.set(config.connectionConfig_, false);
+
+	*this = config;
+	connectionConfig_ = connectionConfig;
 }
 
 bool GridStoreChannel::Config::set(Properties properties) {
@@ -9139,6 +9526,49 @@ NodeConnection::Config GridStoreChannel::Config::getConnectionConfig(
 	return connectionConfig_;
 }
 
+GridStoreChannel::Config GridStoreChannel::Config::create(
+		const Properties &transProps,
+		NodeConnection::SocketFactoryMap &socketFactories) const {
+	Config dest = *this;
+	dest.connectionConfig_ = createConnectionConfig(transProps, socketFactories);
+	return dest;
+}
+
+NodeConnection::Config GridStoreChannel::Config::createConnectionConfig(
+		const Properties &transProps,
+		NodeConnection::SocketFactoryMap &socketFactories) const {
+	NodeConnection::Config dest = connectionConfig_;
+
+	typedef NodeConnection::SocketType SocketType;
+	NodeConnection::SocketTypeFlags typeFlags = 0;
+	NodeConnection::SocketFactoryRefMap factories;
+
+	TransportProvider provider;
+	provider.initialize(transportProvider_);
+
+	{
+		const SocketType type = NodeConnection::SOCKET_TYPE_PLAIN;
+		factories.factories_[type] = &socketFactories.factories_[type];
+		if (provider.isPlainSocketAllowed(transProps)) {
+			typeFlags |= 1 << type;
+		}
+	}
+
+	{
+		const SocketType type = NodeConnection::SOCKET_TYPE_SECURE;
+		if (provider.createSecureSocketFactory(
+				transProps, socketFactories.factories_[type])) {
+			factories.factories_[type] = &socketFactories.factories_[type];
+			typeFlags |= 1 << type;
+		}
+	}
+
+	dest.acceptableSocketTypes_ = typeFlags;
+	dest.socketFactories_ = factories;
+
+	return dest;
+}
+
 
 GridStoreChannel::Key::Key() : passive_(false) {
 }
@@ -9152,6 +9582,13 @@ bool GridStoreChannel::KeyLess::operator()(
 	else if (!SocketAddressEqual()(key1.address_, key2.address_)) {
 		return SocketAddressLess()(key1.address_, key2.address_);
 	}
+	else if (!SocketAddressEqual()(
+			key1.notificationInterfaceAddress_,
+			key2.notificationInterfaceAddress_)) {
+		return SocketAddressLess()(
+				key1.notificationInterfaceAddress_,
+				key2.notificationInterfaceAddress_);
+	}
 	else if (key1.clusterName_ != key2.clusterName_) {
 		return key1.clusterName_ < key2.clusterName_;
 	}
@@ -9164,6 +9601,10 @@ bool GridStoreChannel::KeyLess::operator()(
 	else if (key1.sarConfig_.addressFamily_ !=
 			key2.sarConfig_.addressFamily_) {
 		return key1.sarConfig_.addressFamily_ < key2.sarConfig_.addressFamily_;
+	}
+	else if (key1.transProps_.propertyMap_ !=
+			key2.transProps_.propertyMap_) {
+		return key1.transProps_.propertyMap_ < key2.transProps_.propertyMap_;
 	}
 
 	{
@@ -9265,7 +9706,8 @@ void GridStoreChannel::LocalConfig::set(const Properties &properties) {
 
 GridStoreChannel::Source::Source() :
 		partitionCount_(0),
-		loginInfo_("", "", false, "", "", -1, "", -1, util::TimeZone()),
+		loginInfo_("", "", false, "", "", -1, "", -1, util::TimeZone(),
+		NodeConnection::AUTH_TYPE_INTERNAL, NodeConnection::CONNECTION_ROUTE_DEFAULT),
 		interceptorManager_(NULL) {
 }
 
@@ -9286,13 +9728,18 @@ GridStoreChannel::Context GridStoreChannel::Source::createContext() const {
 	return Context(localConfig_, loginInfo_, createClusterInfo());
 }
 
-void GridStoreChannel::Source::set(const Properties &properties) {
+void GridStoreChannel::Source::set(
+		const Properties &properties, const Config &baseConfig) {
 	bool passive;
 	ServiceAddressResolver::Config sarConfig;
 	std::vector<util::SocketAddress> memberList;
 
+	util::SocketAddress notificationInterfaceAddress;
 	const util::SocketAddress address = NodeResolver::getAddressProperties(
-			properties, &passive, sarConfig, memberList, NULL);
+			properties, &passive, sarConfig, memberList, NULL,
+			&notificationInterfaceAddress);
+	const Properties &transProps = resolveTransportProperties(
+			properties, baseConfig.transportProvider_);
 
 	std::string providerURL;
 	if (sarConfig.providerURL_ != NULL) {
@@ -9347,6 +9794,7 @@ void GridStoreChannel::Source::set(const Properties &properties) {
 
 	key_.passive_ = passive;
 	key_.address_ = address;
+	key_.notificationInterfaceAddress_ = notificationInterfaceAddress;
 	key_.clusterName_.swap(clusterName);
 
 	key_.providerURL_.swap(providerURL);
@@ -9357,6 +9805,7 @@ void GridStoreChannel::Source::set(const Properties &properties) {
 		key_.sarConfig_.providerURL_ = key_.providerURL_.c_str();
 	}
 	key_.memberList_.swap(memberList);
+	key_.transProps_ = transProps;
 
 	partitionCount_ = partitionCount;
 	localConfig_ = localConfig;
@@ -9369,7 +9818,9 @@ void GridStoreChannel::Source::set(const Properties &properties) {
 			localConfig.transactionTimeoutMillis_,
 			applicationName.c_str(),
 			resolveStoreMemoryAgingSwapRate(properties),
-			resolveTimeZoneOffset(properties));
+			resolveTimeZoneOffset(properties),
+			resolveAuthType(properties),
+			resolveConnectionRoute(properties));
 }
 
 double GridStoreChannel::Source::resolveStoreMemoryAgingSwapRate(
@@ -9412,6 +9863,41 @@ util::TimeZone GridStoreChannel::Source::resolveTimeZoneOffset(
 				"Illegal time zone format (name=" << name <<
 				", value=" << value << ")");
 	}
+}
+
+NodeConnection::AuthType GridStoreChannel::Source::resolveAuthType(
+		const Properties &properties) {
+	const char8_t *name = "authentication";
+
+	std::string value;
+	if (!properties.getString(name, value)) {
+		return NodeConnection::END_AUTH_TYPE;
+	}
+
+	return NodeConnection::LoginInfo::parseAuthType(value.c_str());
+}
+
+NodeConnection::ConnectionRoute GridStoreChannel::Source::resolveConnectionRoute(
+		const Properties &properties) {
+	const char8_t *name = "connectionRoute";
+
+	std::string value;
+	if (!properties.getString(name, value)) {
+		return NodeConnection::CONNECTION_ROUTE_DEFAULT;
+	}
+
+	return NodeConnection::LoginInfo::parseConnectionRoute(value.c_str());
+}
+
+Properties GridStoreChannel::Source::resolveTransportProperties(
+		const Properties &properties,
+		util::LibraryFunctions::ProviderFunc transProvider) {
+	TransportProvider transProviderObj;
+	transProviderObj.initialize(transProvider);
+
+	Properties transProps;
+	transProviderObj.filterProperties(properties, transProps);
+	return transProps;
 }
 
 
@@ -9791,6 +10277,128 @@ void GridStoreChannel::ContainerCache::takeAllSessions(
 
 	sessionKeyMap_.clear();
 	sessionCache_.clear();
+}
+
+
+GridStoreChannel::TransportProvider::TransportProvider() :
+		funcTable_("TransportProvider") {
+}
+
+void GridStoreChannel::TransportProvider::initialize(
+		util::LibraryFunctions::ProviderFunc provider) {
+	if (provider != NULL) {
+		funcTable_.assign(provider);
+	}
+}
+
+void GridStoreChannel::TransportProvider::filterProperties(
+		const Properties &src, Properties &transProps) {
+	if (funcTable_.isEmpty()) {
+		const char8_t *const *keyIt =
+				ExtTransportProvider::getReservedTransportPropertyKeys();
+		for (; *keyIt != NULL; ++keyIt) {
+			if (src.containsKey(*keyIt)) {
+				GS_CLIENT_THROW_ERROR(
+						GS_ERROR_CC_ILLEGAL_PROPERTY_ENTRY,
+						"Unacceptable property specified because of "
+						"lack of extra library (key=" << *keyIt << ")");
+			}
+		}
+		return;
+	}
+
+	Properties::EntryList srcEntryListBase;
+	const GSPropertyEntry *srcEntryList = src.toEntryList(srcEntryListBase);
+
+	const GSPropertyEntry *destEntryList;
+	size_t destSize;
+	PropertiesRef destRef(funcTable_);
+
+	UtilExceptionTag *ex;
+	GS_COMMON_CHECK_LIBRARY_ERROR(
+			funcTable_.resolve<Functions::FUNC_FILTER_PROPERTIES>()(
+					srcEntryList, srcEntryListBase.size(),
+					&destEntryList, &destSize, &destRef.get(), &ex),
+			funcTable_, ex, "");
+
+	transProps = Properties(destEntryList, &destSize);
+}
+
+bool GridStoreChannel::TransportProvider::isPlainSocketAllowed(
+		const Properties &props) {
+	if (funcTable_.isEmpty()) {
+		return true;
+	}
+
+	Properties::EntryList propEntryListBase;
+	const GSPropertyEntry *propEntryList =
+			props.toEntryList(propEntryListBase);
+
+	int32_t allowed;
+	UtilExceptionTag *ex;
+	GS_COMMON_CHECK_LIBRARY_ERROR(
+			funcTable_.resolve<Functions::FUNC_IS_PLAIN_SOCKET_ALLOWED>()(
+					propEntryList, propEntryListBase.size(), &allowed, &ex),
+			funcTable_, ex, "");
+
+	return !!allowed;
+}
+
+bool GridStoreChannel::TransportProvider::createSecureSocketFactory(
+		const Properties props, SocketFactory &factory) {
+	if (funcTable_.isEmpty()) {
+		return false;
+	}
+
+	Properties::EntryList propEntryListBase;
+	const GSPropertyEntry *propEntryList =
+			props.toEntryList(propEntryListBase);
+
+	SocketFactoryTag *factoryObj;
+	util::LibraryFunctions::ProviderFunc provider;
+	UtilExceptionTag *ex;
+	GS_COMMON_CHECK_LIBRARY_ERROR(
+			funcTable_.resolve<Functions::FUNC_CREATE_SECURE_SOCKET_FACTORY>()(
+					propEntryList, propEntryListBase.size(),
+					&factoryObj, &provider, &ex),
+			funcTable_, ex, "");
+
+	if (factoryObj == NULL) {
+		return false;
+	}
+
+	factory.assign(provider, factoryObj);
+	return true;
+}
+
+
+GridStoreChannel::TransportProvider::PropertiesRef::PropertiesRef(
+		FuncTableRef &funcTable) :
+		funcTable_(funcTable),
+		obj_(NULL) {
+}
+
+GridStoreChannel::TransportProvider::PropertiesRef::~PropertiesRef() {
+	clear();
+}
+
+void GridStoreChannel::TransportProvider::PropertiesRef::clear() throw() {
+	if (obj_ == NULL) {
+		return;
+	}
+
+	try {
+		funcTable_.resolve<Functions::FUNC_CLOSE_PROPERTIES>()(obj_);
+	}
+	catch (...) {
+		assert(false);
+	}
+	obj_ = NULL;
+}
+
+ExtTranportPropertiesTag*&
+GridStoreChannel::TransportProvider::PropertiesRef::get() throw() {
+	return obj_;
 }
 
 
@@ -10530,6 +11138,9 @@ void (*const volatile
 
 UTIL_THREAD_LOCAL size_t GSInterceptorManager::CheckerScope::counter_ = 0;
 
+GSGridStoreFactoryTag::FuncTable GSGridStoreFactoryTag::FUNC_TABLE;
+GSGridStoreFactoryTag::FuncInitializer
+GSGridStoreFactoryTag::FUNC_TABLE_INITIALIZER(FUNC_TABLE);
 
 GSGridStoreFactory *GSGridStoreFactoryTag::defaultFactory_ = NULL;
 
@@ -10562,8 +11173,9 @@ bool GSGridStoreFactoryTag::isAlive() throw() {
 	return (defaultFactory_ != NULL);
 }
 
-GSGridStoreFactory& GSGridStoreFactoryTag::getDefaultFactory() throw() {
-	defaultFactory_->prepareConfigFile();
+GSGridStoreFactory& GSGridStoreFactoryTag::getDefaultFactory(
+		const LoaderOption &option) throw() {
+	defaultFactory_->loadDefault(option);
 	return *defaultFactory_;
 }
 
@@ -10590,18 +11202,29 @@ void GSGridStoreFactoryTag::close(
 	*factory = NULL;
 }
 
+void GSGridStoreFactoryTag::loadDefault(const LoaderOption &option) throw() {
+	if (option.configEnabled_) {
+		if (!prepareConfigFile()) {
+			return;
+		}
+	}
+}
+
 GSGridStore* GSGridStoreFactoryTag::getGridStore(
 		const GSPropertyEntry *properties, const size_t *propertyCount) {
 	if (data_.get() == NULL) {
 		return NULL;
 	}
+
+	ReentranceChecker::Scope checkerScope(data_->reentranceChecker_, 0);
 	util::LockGuard<util::Mutex> guard(data_->mutex_);
+	checkLoaded(guard);
 
 	Properties propertiesObj(properties, propertyCount);
 	data_->configLoader_.applyStoreConfig(propertiesObj);
 
 	GridStoreChannel::Source source;
-	source.set(propertiesObj);
+	source.set(propertiesObj, data_->channelConfig_);
 	source.interceptorManager_ = &data_->interceptorManager_;
 	ChannelMap::iterator it = data_->channelMap_.find(source.getKey());
 
@@ -10630,29 +11253,75 @@ void GSGridStoreFactoryTag::setProperties(
 		return;
 	}
 
+	ReentranceChecker::Scope checkerScope(data_->reentranceChecker_, 0);
 	util::LockGuard<util::Mutex> guard(data_->mutex_);
+	checkLoaded(guard);
 	setPropertiesInternal(guard, forInitial, properties, propertyCount);
 }
 
-void GSGridStoreFactoryTag::prepareConfigFile() throw() try {
+NodeConnection::Config GSGridStoreFactoryTag::getConnectionConfig(
+		const Properties &props) {
 	if (data_.get() == NULL) {
-		return;
-	}
-	util::LockGuard<util::Mutex> guard(data_->mutex_);
-	if (data_->configLoader_.isPrepared()) {
-		return;
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
 	}
 
-	const size_t count = 0;
+	Properties transProps;
+	TransportProvider transProvider;
+	{
+		ReentranceChecker::Scope checkerScope(data_->reentranceChecker_, 0);
+		util::LockGuard<util::Mutex> guard(data_->mutex_);
+		checkLoaded(guard);
+		transProvider.initialize(data_->channelConfig_.transportProvider_);
+	}
+	transProvider.filterProperties(props, transProps);
+
+	Properties::EntryList propEntryListBase;
+	const GSPropertyEntry *propEntryList =
+			transProps.toEntryList(propEntryListBase);
+	const size_t propCount = propEntryListBase.size();
+	UTIL_UNIQUE_PTR<GSGridStore> store(
+			getGridStore(propEntryList, &propCount));
+	if (store.get() == NULL) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+
+	return store->getChannel().getConnectionConfig();
+}
+
+void GSGridStoreFactoryTag::setTransportProvider(
+		util::LibraryFunctions::ProviderFunc provider) {
+	ReentranceChecker::Scope checkerScope(data_->reentranceChecker_, 0);
+	util::LockGuard<util::Mutex> guard(data_->mutex_);
+	checkLoaded(guard);
+
+	setTransportProviderInternal(&guard, provider);
+}
+
+bool GSGridStoreFactoryTag::prepareConfigFile() throw() {
 	try {
-		setPropertiesInternal(guard, true, NULL, &count);
+		if (data_.get() == NULL) {
+			return false;
+		}
+
+		ReentranceChecker::Scope checkerScope(data_->reentranceChecker_, 0);
+		util::LockGuard<util::Mutex> guard(data_->mutex_);
+		if (data_->configLoader_.isPrepared()) {
+			return true;
+		}
+
+		const size_t count = 0;
+		try {
+			setPropertiesInternal(guard, true, NULL, &count);
+		}
+		catch (...) {
+			std::exception e;
+			data_->configLoader_.handleConfigError(e);
+		}
+		return true;
 	}
 	catch (...) {
-		std::exception e;
-		data_->configLoader_.handleConfigError(e);
+		return false;
 	}
-}
-catch (...) {
 }
 
 void GSGridStoreFactoryTag::setPropertiesInternal(
@@ -10694,9 +11363,202 @@ void GSGridStoreFactoryTag::setPropertiesInternal(
 void GSGridStoreFactoryTag::setLoggingProperties(
 		util::LockGuard<util::Mutex> &guard, const Properties &properties,
 		bool forInitial) {
+#if GS_CLIENT_LOGGING_ENABLED
+	if (!forInitial) {
+		return;
+	}
+
+	util::TraceOption::OutputType outputType = extractOutputType(properties);
+	if (outputType == util::TraceOption::OUTPUT_NONE) {
+		return;
+	}
+	setLoggingLevel(properties);
+	if (outputType == util::TraceOption::OUTPUT_ROTATION_FILES) {
+		setLoggingRotationMode(properties);
+		setLoggingOutputDirectoryPath(properties);
+		setLoggingOutputFileName(properties);
+		setLoggingMaxRotationFileCount(properties);
+		setLoggingMaxRotationFileSize(properties);
+	}
+	util::TraceManager& traceManager = util::TraceManager::getInstance();
+	traceManager.setOutputType(outputType);
+
+	const bool enabled = true;
+	data_->interceptorManager_.activate(data_->callLogger_->getId(), enabled);
+	setMonitoring(guard, enabled);
+#else
 	static_cast<void>(guard);
 	static_cast<void>(properties);
 	static_cast<void>(forInitial);
+#endif
+}
+
+#if GS_CLIENT_LOGGING_ENABLED
+util::TraceOption::OutputType GSGridStoreFactoryTag::extractOutputType(
+		const Properties &properties) {
+	std::string outputType;
+	if (!properties.getString("trace.outputType", outputType)) {
+		return util::TraceOption::OUTPUT_NONE;
+	}
+	if (outputType.empty()) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG,
+			"The property trace.outputType is empty");
+	}
+
+	if (outputType == "NONE") {
+		return util::TraceOption::OUTPUT_NONE;
+	}
+	else if (outputType == "ROTATION_FILES") {
+		return util::TraceOption::OUTPUT_ROTATION_FILES;
+	}
+	else if (outputType == "STDOUT") {
+		return util::TraceOption::OUTPUT_STDOUT;
+	}
+	else if (outputType == "STDERR") {
+		return util::TraceOption::OUTPUT_STDERR;
+	}
+	else if (outputType == "STDOUT_AND_STDERR") {
+		return util::TraceOption::OUTPUT_STDOUT_AND_STDERR;
+	}
+	else {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG,
+				"Unsupported output type");
+	}
+}
+
+void GSGridStoreFactoryTag::setLoggingLevel(const Properties &properties) {
+	std::string apiCallLogLevel;
+	std::string allLogLevel;
+	if (properties.getString("trace.level.apiCall", apiCallLogLevel)) {
+		if (properties.getString("trace.level.all", allLogLevel)) {
+			if (allLogLevel.empty()) {
+				GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG,
+						"The property trace.level.all is not correct");
+			}
+		}
+		setLoggingLevel(apiCallLogLevel, "The property trace.level.apiCall is not correct");
+		return;
+	}
+
+	if (properties.getString("trace.level.all", allLogLevel)) {
+		setLoggingLevel(allLogLevel, "The property trace.level.all is not correct");
+		return;
+	}
+
+	util::TraceManager& traceManager = util::TraceManager::getInstance();
+	traceManager.setMinOutputLevel(util::TraceOption::LEVEL_INFO);
+}
+
+void GSGridStoreFactoryTag::setLoggingLevel(
+		const std::string &logLevel, const std::string &errorMessage) {
+	util::TraceManager& traceManager = util::TraceManager::getInstance();
+	int32_t outputLevel;
+	if (traceManager.stringToOutputLevel(logLevel, outputLevel)) {
+		traceManager.setMinOutputLevel(outputLevel);
+		return;
+	}
+
+	GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG, errorMessage);
+}
+
+void GSGridStoreFactoryTag::setLoggingRotationMode(const Properties &properties) {
+	static_cast<void>(properties);
+
+	util::TraceManager& traceManager = util::TraceManager::getInstance();
+	traceManager.setRotationMode(util::TraceOption::ROTATION_DAILY);
+}
+
+void GSGridStoreFactoryTag::setLoggingOutputDirectoryPath(const Properties &properties) {
+	util::TraceManager& traceManager = util::TraceManager::getInstance();
+
+	std::string outputDirectoryPath;
+	if (!properties.getString("trace.outputDirectoryPath", outputDirectoryPath)) {
+		traceManager.setRotationFilesDirectory("log");
+		return;
+	}
+	if (outputDirectoryPath.empty()) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG,
+			"The property trace.outputDirectoryPath is empty");
+	}
+	traceManager.setRotationFilesDirectory(outputDirectoryPath.c_str());
+}
+
+void GSGridStoreFactoryTag::setLoggingOutputFileName(const Properties &properties) {
+	util::TraceManager& traceManager = util::TraceManager::getInstance();
+
+	std::string outputFileName;
+	if (!properties.getString("trace.outputFileName", outputFileName)) {
+		outputFileName = "griddb_c_client";
+		appendFileNum(outputFileName);
+		traceManager.setRotationFileName(outputFileName.c_str());
+		return;
+	}
+	if (outputFileName.empty()) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG,
+			"The property trace.outputFileName is empty");
+	}
+
+	appendFileNum(outputFileName);
+	traceManager.setRotationFileName(outputFileName.c_str());
+}
+
+void GSGridStoreFactoryTag::appendFileNum(std::string &fileName) {
+	for (size_t i = 1; i <= 32; i++) {
+		util::NormalOStringStream oss;
+		oss << "-" << i;
+
+		std::string tmpFilePath = fileName + oss.str();
+		CallLogger*	callLogger = static_cast<CallLogger*>(data_->callLogger_.get());
+		if (callLogger->createLockFile(tmpFilePath)) {
+			fileName.append(oss.str());
+			return;
+		}
+	}
+	GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR,
+		"Failed to create a lock file for logging");
+}
+
+void GSGridStoreFactoryTag::setLoggingMaxRotationFileCount(const Properties &properties) {
+	util::TraceManager& traceManager = util::TraceManager::getInstance();
+
+	int32_t maxRotationFileCount;
+	if (!properties.getInteger("trace.maxRotationFileCount", maxRotationFileCount)) {
+		traceManager.setMaxRotationFileCount(7); 
+		return;
+	}
+	if (maxRotationFileCount < 1 || maxRotationFileCount > 999) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG,
+			"The property trace.maxRotationFileCount is out of range (1-999)");
+	}
+	traceManager.setMaxRotationFileCount(maxRotationFileCount);
+}
+
+void GSGridStoreFactoryTag::setLoggingMaxRotationFileSize(const Properties &properties) {
+	util::TraceManager& traceManager = util::TraceManager::getInstance();
+
+	int32_t maxRotationFileSize;
+	if (!properties.getInteger("trace.maxRotationFileSize", maxRotationFileSize)) {
+		traceManager.setMaxRotationFileSize(1024 * 1024);
+		return;
+	}
+	if (maxRotationFileSize < 1024 || maxRotationFileSize > 1024 * 1024 * 1024) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG,
+			"The property trace.maxRotationFileSize is out of range (1024-1024*1024*1024)");
+	}
+	traceManager.setMaxRotationFileSize(maxRotationFileSize);
+}
+#endif 
+
+void GSGridStoreFactoryTag::setTransportProviderInternal(
+		util::LockGuard<util::Mutex> *guard,
+		util::LibraryFunctions::ProviderFunc provider) {
+	if (data_.get() == NULL) {
+		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+	}
+
+	ReentranceChecker::Scope checkerScope(
+			data_->reentranceChecker_, (guard == NULL ? 2 : 1));
+	data_->channelConfig_.transportProvider_ = provider;
 }
 
 void GSGridStoreFactoryTag::setMonitoring(
@@ -10706,6 +11568,36 @@ void GSGridStoreFactoryTag::setMonitoring(
 			it != data_->channelMap_.end(); ++it) {
 		it->second->setMonitoring(monitoring);
 	}
+}
+
+void GSGridStoreFactoryTag::checkLoaded(util::LockGuard<util::Mutex>&) {
+	data_->configLoader_.checkConfigError();
+}
+
+int32_t GSGridStoreFactoryTag::provideFunctions(
+		const void *const **funcList, size_t *funcCount) throw() {
+	return FUNC_TABLE.getFunctionList(funcList, funcCount);
+}
+
+int32_t GSGridStoreFactoryTag::setTransportProviderExternal(
+		GSGridStoreFactory *factory,
+		util::LibraryFunctions::ProviderFunc provider,
+		UtilExceptionTag **ex) throw() {
+	try {
+		GSGridStoreFactory &factoryObj = util::LibraryFunctions::deref(factory);
+		factoryObj.setTransportProviderInternal(NULL, provider);
+		return util::LibraryFunctions::succeed(ex);
+	}
+	catch (...) {
+		std::exception e;
+		return GS_COMMON_LIBRARY_EXCEPTION_CONVERT(e, ex, "");
+	}
+}
+
+
+GSGridStoreFactoryTag::LoaderOption::LoaderOption() :
+		configEnabled_(true),
+		extensionEnabled_(true) {
 }
 
 
@@ -10728,32 +11620,48 @@ GSGridStoreFactoryTag::Initializer::~Initializer() {
 }
 
 
-const char8_t GSGridStoreFactoryTag::ConfigLoader::CONFIG_FILE_NAME[] =
-		"gs_client.properties";
 
-GSGridStoreFactoryTag::ConfigLoader::ConfigLoader() :
-		configFileEnabled_(false),
-		errorOccurred_(false),
-		prepared_(false) {
+GSGridStoreFactory::FuncInitializer::FuncInitializer(FuncTable &table) {
+	table.set<Functions::FUNC_EXCEPTION_PROVIDER>(
+			util::LibraryException::getDefaultProvider());
+	table.set<Functions::FUNC_SET_TRANSPORT_PROVIDER>(
+			&setTransportProviderExternal);
 }
 
-bool GSGridStoreFactoryTag::ConfigLoader::isPrepared() const {
-	return prepared_;
+
+GSGridStoreFactory::ReentranceChecker::Scope::Scope(
+		ReentranceChecker &checker, int64_t expectedCount) :
+		checker_(NULL),
+		expectedCount_(expectedCount) {
+	const bool inside = (expectedCount > 0);
+	if (inside) {
+		if (++checker.counter_ != expectedCount) {
+			assert(false);
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		}
+		checker_ = &checker;
+	}
+	else {
+		if (checker.counter_ > 0) {
+			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_INTERNAL_ERROR, "");
+		}
+	}
 }
 
-void GSGridStoreFactoryTag::ConfigLoader::applyFactoryConfig(
-		Properties &props) {
-	prepare();
-	applyConfig(factoryProps_.get(), props);
+GSGridStoreFactory::ReentranceChecker::Scope::~Scope() {
+	if (checker_ != NULL) {
+		const int64_t ret = --checker_->counter_;
+		assert(ret + 1 == expectedCount_);
+		static_cast<void>(ret);
+	}
 }
 
-void GSGridStoreFactoryTag::ConfigLoader::applyStoreConfig(Properties &props) {
-	prepare();
-	applyConfig(storeProps_.get(), props);
+
+GSGridStoreFactoryTag::ErrorHolder::ErrorHolder() throw() :
+		errorOccurred_(false) {
 }
 
-void GSGridStoreFactoryTag::ConfigLoader::handleConfigError(
-		std::exception&) throw() {
+void GSGridStoreFactoryTag::ErrorHolder::handleError(std::exception&) throw() {
 	if (errorOccurred_) {
 		return;
 	}
@@ -10772,7 +11680,7 @@ void GSGridStoreFactoryTag::ConfigLoader::handleConfigError(
 	}
 }
 
-void GSGridStoreFactoryTag::ConfigLoader::prepare() {
+void GSGridStoreFactoryTag::ErrorHolder::checkError() {
 	if (errorOccurred_) {
 		if (initialError_.get() != NULL && initialError_->getSize() > 0) {
 			try {
@@ -10785,6 +11693,46 @@ void GSGridStoreFactoryTag::ConfigLoader::prepare() {
 		}
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_ILLEGAL_CONFIG, "");
 	}
+}
+
+
+const char8_t GSGridStoreFactoryTag::ConfigLoader::CONFIG_FILE_NAME[] =
+		"gs_client.properties";
+
+GSGridStoreFactoryTag::ConfigLoader::ConfigLoader() :
+		configFileEnabled_(false),
+		prepared_(false) {
+#if GS_CLIENT_CONFIG_FILE_ENABLED
+	configFileEnabled_ = true;
+#endif
+}
+
+bool GSGridStoreFactoryTag::ConfigLoader::isPrepared() const {
+	return prepared_;
+}
+
+void GSGridStoreFactoryTag::ConfigLoader::applyFactoryConfig(
+		Properties &props) {
+	prepare();
+	applyConfig(factoryProps_.get(), props);
+}
+
+void GSGridStoreFactoryTag::ConfigLoader::applyStoreConfig(Properties &props) {
+	prepare();
+	applyConfig(storeProps_.get(), props);
+}
+
+void GSGridStoreFactoryTag::ConfigLoader::handleConfigError(
+		std::exception &e) throw() {
+	initialError_.handleError(e);
+}
+
+void GSGridStoreFactoryTag::ConfigLoader::checkConfigError() {
+	initialError_.checkError();
+}
+
+void GSGridStoreFactoryTag::ConfigLoader::prepare() {
+	initialError_.checkError();
 
 	if (prepared_) {
 		return;
@@ -10987,13 +11935,15 @@ std::string GSGridStoreFactoryTag::ConfigLoader::unescape(
 	return dest;
 }
 
-
 GSGridStoreFactoryTag::Data::Data() :
 		monitoring_(false) {
 	setUpInterceptors();
 }
 
 void GSGridStoreFactoryTag::Data::setUpInterceptors() {
+#if GS_CLIENT_LOGGING_ENABLED
+	callLogger_.reset(new CallLogger(interceptorManager_));
+#endif
 }
 
 

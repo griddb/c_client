@@ -400,6 +400,13 @@ typedef int64_t GSTimestamp;
 		@ref GSGridStore インスタンスを取得する必要があります。
 	@par
 		この型のポインタを第一引数とする関数は、すべてスレッド安全です。
+	@par
+		追加の環境設定を行うことで、次の機能を使用できるようになります。
+	@par SSL接続
+		アドバンスド機能用ライブラリを使用できるよう設定することで、クラスタ
+		もしくはアドレスプロバイダへのTCP接続においてSSL接続を選択できるように
+		なります。アドバンスド機能用ライブラリの設定方法については、GridDB
+		機能リファレンスを参照してください。
 
 	@EN
 	@ingroup Group_GSGridStoreFactory
@@ -440,7 +447,7 @@ typedef struct GSGridStoreFactoryTag GSGridStoreFactory;
 		できません。コンテナ名は、ベースコンテナ名単独、もしくは、ベースコンテナ名の
 		後ろにノードアフィニティ名をアットマーク「@」で連結した形式で表記します。
 		その他、コンテナの定義において使用できるコンテナ名の文字種や長さには制限が
-		あります。具体的には、GridDBテクニカルリファレンスを参照してください。
+		あります。具体的には、GridDB機能リファレンスを参照してください。
 		特に記載のない限り、コンテナ名を指定する操作では、ASCIIの大文字・小文字
 		表記の違いは区別されません。
 	@par
@@ -488,7 +495,7 @@ typedef struct GSGridStoreFactoryTag GSGridStoreFactory;
 		database. A container name is represented by only a
 		base container name or by connecting the base name and
 		a node affinity name with '@'. See the GridDB
-		Technical Reference for the details. In the
+		Features Reference for the details. In the
 		operations specifying a container name, uppercase and
 		lowercase ASCII characters are identified as the same
 		unless otherwise noted.
@@ -555,7 +562,7 @@ typedef struct GSGridStoreTag GSGridStore;
 		1つのコンテナのカラム間で、ASCIIの大文字・小文字表記だけが異なる名前
 		のものを複数定義することはできません。その他、コンテナ定義における
 		カラム名の文字種や長さ、カラム数には制限があります。具体的には、GridDB
-		テクニカルリファレンスを参照してください。特に記載のない限り、カラム名を
+		機能リファレンスを参照してください。特に記載のない限り、カラム名を
 		指定する操作では、ASCIIの大文字・小文字表記の違いは区別されません。
 	@par
 		カラムの型と、ロウオブジェクト内の各値の型との対応は、それぞれ次の通りです。
@@ -583,8 +590,8 @@ typedef struct GSGridStoreTag GSGridStore;
 		TIMESTAMP配列 | @ref GSTimestamp*
 	@par
 		フィールドの値の表現範囲やサイズには制限があります。
-		具体的には、付録の章の値の範囲の説明、ならびに、GridDBテクニカル
-		リファレンスを参照してください。制限に反する値をコンテナに格納することは
+		具体的には、付録の章の値の範囲の説明、ならびに、GridDB機能リファレンスを
+		参照してください。制限に反する値をコンテナに格納することは
 		できません。
 	@par
 		ロウキーとして許可されている型や、ロウキーに対応するカラムの有無、
@@ -661,7 +668,7 @@ typedef struct GSGridStoreTag GSGridStore;
 		upper- and lowercase letters cannot be defined in a
 		table. Further the allowed characters, the length of
 		column names and the number of columns are limited.
-		See the GridDB Technical Reference for the details.
+		See the GridDB Features Reference for the details.
 		In the operations specifying column names, ASCII
 		uppercase and lowercase characters are identified as
 		same unless otherwise noted.
@@ -692,7 +699,7 @@ typedef struct GSGridStoreTag GSGridStore;
 		TIMESTAMP Array | @ref GSTimestamp*
 	@par
 		The column value has limitations for rage and size. Please refer
-		to appendix and GridDB Technical Reference and for more detail.
+		to appendix and GridDB Features Reference and for more detail.
 		Cannot store a value exceeding these limitations.
 	@par
 		A limitation about a row key type, presence of column corresponding to
@@ -3163,13 +3170,13 @@ typedef struct GSTimeSeriesPropertiesTag {
 		@brief カラム別圧縮設定(@c compressionList)のエントリ数です。
 		@par
 			1つの時系列に対してパラメータ設定できるカラム の上限数については、
-			GridDBテクニカルリファレンスを参照してください。
+			GridDB機能リファレンスを参照してください。
 			上限を超えたオプションを指定して時系列を作成することはできません。
 
 		@EN
 		@brief Number of entries of compression settings by column (@c compressionList).
 		@par
-			Refer to the GridDB Technical Reference for the maximum number of columns
+			Refer to the GridDB Features Reference for the maximum number of columns
 			that can set one of TimeSeries parameters.
 			A TimeSeries with the option that exceeds the upper limit cannot be created.
 
@@ -3205,7 +3212,7 @@ typedef struct GSTimeSeriesPropertiesTag {
 			解放するための条件を制御できます。期限に到達したロウデータが
 			分割数に相当する期間だけ集まった時点で解放しようとします。
 		@par
-			分割数の上限については、GridDBテクニカルリファレンスを参照
+			分割数の上限については、GridDB機能リファレンスを参照
 			してください。上限を超えたオプションを指定して時系列を作成
 			することはできません。
 		@par
@@ -3229,7 +3236,7 @@ typedef struct GSTimeSeriesPropertiesTag {
 			shall be released at the point they are collected only when the period
 			equivalent to the division number is reached.
 		@par
-			Refer to the GridDB Technical Reference for the division number upper limit.
+			Refer to the GridDB Features Reference for the division number upper limit.
 			A TimeSeries with the option that exceeds the upper limit cannot be created.
 		@par
 			If the value is negative, it indicates the division number has not been set.
@@ -3990,7 +3997,7 @@ typedef struct GSContainerInfoTag {
 			高くなります。
 		@par
 			コンテナの定義において使用できるデータアフィニティ文字列の文字種や
-			長さには制限があります。具体的には、GridDBテクニカルリファレンスを参照
+			長さには制限があります。具体的には、GridDB機能リファレンスを参照
 			してください。ただし、文字列を設定した時点で必ずしもすべての制限を
 			検査するとは限りません。特に記載のない限り、データアフィニティ文字列が
 			使用される操作では、ASCIIの大文字・小文字表記の違いが区別されます。
@@ -4012,12 +4019,12 @@ typedef struct GSContainerInfoTag {
 		@par
 			An empty string is not acceptable. A data affinity string must be composed
 			of characters same as a Container name. See "System limiting values" in the
-			GridDB Technical Reference for the maximum length of the string. A Container with
+			GridDB Features Reference for the maximum length of the string. A Container with
 			a Container name longer than the maximum length cannot be created.
 		@par
 			There are the limitations, allowed characters
 			and maximum length, for the data affinity
-			string. See the GridDB Technical Reference for
+			string. See the GridDB Features Reference for
 			the details. All the restrictions may not be
 			checked when setting the string. The data
 			affinity string is case sensitive unless
@@ -4965,7 +4972,8 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<td>host</td>
 		<td>接続先ホスト名。IPアドレス(IPV4のみ)も可。
 		マスタを手動指定する場合は必須。マスタを自動検出する場合は設定しない。
-		notificationMemberおよびnotificationProviderと同時に指定することはできない</td>
+		@c notificationMember および@c notificationProvider プロパティと同時に
+		指定することはできない</td>
 		</tr>
 		<tr>
 		<td>port</td>
@@ -4973,8 +4981,10 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		マスタを手動指定する場合は必須。マスタを自動検出する場合は設定しない</td>
 		</tr>
 		<tr><td>notificationAddress</td>
-		<td>マスタ自動検出に用いられる通知情報を受信するためのIPアドレス(IPV4のみ)。
-		省略時はデフォルトのアドレスを使用</td>
+		<td>マスタ自動検出に用いられる通知情報を受信するためのIPアドレス
+		(IPv4のみ)。省略時はデフォルトのアドレスを使用。
+		@c notificationMember および@c notificationProvider プロパティと同時に
+		指定することはできない</td>
 		</tr>
 		<tr>
 		<td>notificationPort</td>
@@ -4991,8 +5001,8 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<tr>
 		<td>database</td>
 		<td>接続先のデータベース名。省略時は全てのユーザがアクセス可能な「public」
-		データベースに自動接続される。接続ユーザは接続データベースに属するコンテナを
-		操作できる。</td>
+		データベースに自動接続される。接続ユーザは接続データベースに属する
+		コンテナを操作できる。</td>
 		</tr>
 		<tr>
 		<td>user</td>
@@ -5004,14 +5014,17 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		</tr>
 		<tr>
 		<td>consistency</td>
-		<td>以下のいずれかの一貫性レベル。デフォルトでは@c IMMEDIATE を適用
-		- @c IMMEDIATE
-			- 他のクライアントからの更新結果は、該当トランザクションの完了後
-				即座に反映される
-		- @c EVENTUAL
-			- 他のクライアントからの更新結果は、該当トランザクションが完了した後
-				でも反映されない場合がある。
-				@ref GSContainer に対する更新操作は実行できない
+		<td>一貫性レベル。次のいずれかの文字列を指定できる。
+		<dl>
+		<dt>@c "IMMEDIATE"</dt>
+		<dd>他のクライアントからの更新結果は、該当トランザクションの完了後即座に
+		反映される</dd>
+		<dt>@c "EVENTUAL"</dt>
+		<dd>他のクライアントからの更新結果は、該当トランザクションが完了した
+		後でも反映されない場合がある。@ref Container に対する更新操作は
+		実行できない</dd>
+		</dl>
+		省略時は@c "IMMEDIATE" が指定されたものとみなされる
 		</td>
 		</tr>
 		<tr>
@@ -5045,15 +5058,15 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<td>固定リスト方式を使用して構成されたクラスタに接続する場合に、
 		クラスタノードのアドレス・ポートのリストを次のように指定する。
 		<pre>(アドレス1):(ポート1),(アドレス2):(ポート2),...</pre>
-		notificationAddressおよびnotificationProviderと同時に指定する
-		ことはできない。バージョン2.9よりサポート</td>
+		@c notificationAddress および@c notificationProvider プロパティと同時に
+		指定することはできない。バージョン2.9よりサポート</td>
 		</tr>
 		<tr>
 		<td>notificationProvider</td>
 		<td>プロバイダ方式を使用して構成されたクラスタに接続する場合に、
 		アドレスプロバイダのURLを指定する。
-		notificationAddressおよびnotificationMemberと同時に指定する
-		ことはできない。バージョン2.9よりサポート</td>
+		@c notificationAddress および@c notificationMember プロパティと同時に
+		指定することはできない。バージョン2.9よりサポート</td>
 		</tr>
 		<tr>
 		<td>applicationName</td>
@@ -5074,12 +5087,56 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		夏時間を持たないタイムゾーンに限定される。
 		バージョン4.3よりサポート</td>
 		</tr>
+		<tr>
+		<td>authentication</td>
+		<td>認証種別。次のいずれかの文字列を指定できる。
+		<dl>
+		<dt>@c "INTERNAL"</dt>
+		<dd>クラスタ上で管理されているアカウント情報に基づいた、内部認証</dd>
+		<dt>@c "LDAP"</dt>
+		<dd>クラスタ外にあるLDAPサーバで管理されているアカウント情報に基づいた、
+		外部認証。LDAP接続設定のないクラスタに接続する場合、もしくは、
+		管理ユーザを使用する場合は指定できない</dd>
+		</dl>
+		省略時は自動的に認証種別が選択される。原則として指定は不要。
+		非管理ユーザについて内部認証と外部認証を併用するクラスタへの接続の際に、
+		内部認証を用いる場合などに指定する。
+		バージョン4.5よりサポート</td>
+		</tr>
+		<tr>
+		<td>sslMode</td>
+		<td>クラスタへの接続においてSSLの使用有無の判断に用いられるモード。
+		次のいずれかの文字列を指定できる。
+		<dl>
+		<dt>@c "DISABLED"</dt>
+		<dd>SSLを常に使用しない</dd>
+		<dt>@c "PREFERRED"</dt>
+		<dd>可能な限りSSLを使用する。SSL接続・非SSL接続共に使用できる場合は
+		SSL接続を使用する</dd>
+		<dt>@c "VERIFY"</dt>
+		<dd>SSLを常に使用する。サーバ検証あり</dd>
+		</dl>
+		SSL接続を選択できる環境設定(詳細: @ref GSGridStoreFactory)の場合のみ
+		指定できる。それ以外の場合は、プロパティの値によらず指定できない。
+		SSL接続を選択できる場合、省略時は@c "PREFERRED" が指定されたものと
+		みなされる。バージョン4.5よりサポート。VERIFYはバージョン4.6よりサポート。</td>
+		</tr>
+		<tr>
+		<td>connectionRoute</td>
+		<td>クラスタ接続時における通信経路。次の文字列を指定できる。
+		<dl>
+		<dt>@c "PUBLIC"</dt>
+		<dd>クラスタの外部通信経路が設定されている場合に、外部通信経路を経由した接続を行う</dd>
+		</dl>
+		省略時は通常のクラスタ通信経路を用いた接続が行われる。外部接続が必要な場合のみ指定する。
+		バージョン5.1.1よりサポート</td>
+		</tr>
 		</table>
 	@par
 		クラスタ名、データベース名、ユーザ名、パスワードについては、
 		ASCIIの大文字・小文字表記の違いがいずれも区別されます。その他、
 		これらの定義に使用できる文字種や長さの上限などの制限については、
-		GridDBテクニカルリファレンスを参照してください。ただし、制限に反する
+		GridDB機能リファレンスを参照してください。ただし、制限に反する
 		文字列をプロパティ値として指定した場合、各ノードへの接続のタイミングまで
 		エラーが検知されないことや、認証情報の不一致など別のエラーになる
 		ことがあります。
@@ -5132,11 +5189,11 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<tr>
 		<td>host</td>
 		<td>A destination host name.
-		An IP address (IPV4 only) is also available.
+		An IP address (IPv4 only) is also available.
 		Mandatory for manually setting a master.
 		For autodetection of a master, omit the setting.
-		This property cannot be specified with neither notificationMember nor
-		notificationProvider properties at the same time.</td>
+		This property cannot be specified with neither @c notificationMember nor
+		@c notificationProvider properties at the same time.</td>
 		</tr>
 		<tr>
 		<td>port</td>
@@ -5146,7 +5203,7 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		For autodetection of a master, omit the setting.</td>
 		</tr>
 		<tr><td>notificationAddress</td>
-		<td>An IP address (IPV4 only) for receiving a notification used for
+		<td>An IP address (IPv4 only) for receiving a notification used for
 		autodetection of a master.
 		A default address is used if omitted.</td>
 		</tr>
@@ -5227,16 +5284,16 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		to cluster which is configured with FIXED_LIST mode, and specified as
 		follows.
 		<pre>(Address1):(Port1),(Address2):(Port2),...</pre>
-		This property cannot be specified with neither notificationAddress nor
-		notificationProvider properties at the same time.
+		This property cannot be specified with neither @c notificationAddress nor
+		@c notificationProvider properties at the same time.
 		This property is supported on version 2.9 or later.</td>
 		</tr>
 		<tr>
 		<td>notificationProvider</td>
 		<td>A URL of address provider. It is used to connect to cluster which is
 		configured with PROVIDER mode.
-		This property cannot be specified with neither notificationAddress nor
-		notificationMember properties at the same time.
+		This property cannot be specified with neither @c notificationAddress nor
+		@c notificationMember properties at the same time.
 		This property is supported on version 2.9 or later.</td>
 		</tr>
 		<tr>
@@ -5263,7 +5320,7 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		</table>
 	@par
 		Cluster names, database names, user names and passwords
-		are case-sensitive. See the GridDB Technical Reference for
+		are case-sensitive. See the GridDB Features Reference for
 		the details of the limitations, such as allowed characters
 		and maximum length. When a name violating
 		the limitations has been specified as a property
@@ -7376,7 +7433,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowKeyByStore(
 	@par
 		一度に大量のロウを取得しようとした場合、GridDBノードが管理する
 		通信バッファのサイズの上限に到達し、失敗することがあります。
-		上限サイズについては、GridDBテクニカルリファレンスを参照してください。
+		上限サイズについては、GridDB機能リファレンスを参照してください。
 	@par
 		この操作によりエラーが発生した場合、エラー情報には@c container
 		パラメータが含まれることがあります。エラーに関するパラメータの詳細は、
@@ -7452,7 +7509,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateRowKeyByStore(
 		If the system tries to acquire a large number of Rows all at once, the
 		upper limit of the communication buffer size managed by the GridDB node
 		may be reached, possibly resulting in a failure.
-		Refer to the GridDB Technical Reference for the upper limit
+		Refer to the GridDB Features Reference for the upper limit
 		size.
 	@par
 		If an error occurs in this operation, the error information may contain
@@ -7728,7 +7785,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutMultipleContainerRows(
 	@par
 		一度に大量のロウを取得しようとした場合、GridDBノードが管理する
 		通信バッファのサイズの上限に到達し、失敗することがあります。
-		上限サイズについては、GridDBテクニカルリファレンスを参照してください。
+		上限サイズについては、GridDB機能リファレンスを参照してください。
 	@par
 		この操作によりエラーが発生した場合、エラー情報には@c container
 		パラメータが含まれることがあります。エラーに関するパラメータの詳細は、
@@ -7825,7 +7882,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutMultipleContainerRows(
 		If the system tries to acquire a large number of Rows all at once, the
 		upper limit of the communication buffer size managed by the GridDB node
 		may be reached, possibly resulting in a failure.
-		Refer to the GridDB Technical Reference for the upper limit size.
+		Refer to the GridDB Features Reference for the upper limit size.
 	@par
 		If an error occurs in this operation, the error information may contain
 		@c container parameter. For the details of the parameters related to
@@ -8272,7 +8329,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		トリガ種別や通知条件などの違いによらず、1つのコンテナのトリガ間で、
 		ASCIIの大文字・小文字表記を含め同一の名前のものを複数定義することは
 		できません。その他、トリガの定義において使用できるトリガ名の文字種や
-		長さには制限があります。具体的には、GridDBテクニカルリファレンスを
+		長さには制限があります。具体的には、GridDB機能リファレンスを
 		参照してください。特に記載のない限り、トリガ名を指定する操作では、
 		ASCIIの大文字・小文字表記の違いが区別されます。
 
@@ -8378,7 +8435,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		@ref gsDropTrigger により削除することが推奨されます。
 	@par
 		一つのコンテナに対して設定できるトリガの最大数、ならびに、トリガの各種
-		設定値の上限については、GridDBテクニカルリファレンスを参照してください。
+		設定値の上限については、GridDB機能リファレンスを参照してください。
 
 	@param [in] container
 		設定対象の@ref GSContainer
@@ -8417,7 +8474,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		notification conditions, in a container cannot be
 		defined. And there are the limitations, the allowed characters
 		and the length, on the trigger names. See the GridDB
-		Technical Reference for the details. Trigger names are
+		Features Reference for the details. Trigger names are
 		case-sensitive unless otherwise noted.
 
 	@par Trigger type
@@ -8526,7 +8583,7 @@ GS_DLL_PUBLIC GS_DEPRECATED_FUNC(
 		a trigger having an invalid notification destination URI is recommended
 		to be deleted by using @ref gsDropTrigger.
 	@par
-		Refer to the GridDB Technical Reference for the maximum number
+		Refer to the GridDB Features Reference for the maximum number
 		of triggers that can be set for a single Container and the upper limit
 		of the values for various trigger settings.
 
@@ -8634,7 +8691,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndexDetailV4_3(
 		1つのコンテナの索引間で、ASCIIの大文字・小文字表記だけが異なる
 		名前のものを複数定義することはできません。その他、索引の定義において
 		使用できる索引名の文字種や長さには制限があります。具体的には、
-		GridDBテクニカルリファレンスを参照してください。特に記載のない限り、
+		GridDB機能リファレンスを参照してください。特に記載のない限り、
 		索引名を指定する操作では、ASCIIの大文字・小文字表記の違いは
 		区別されません。
 	@par
@@ -8723,7 +8780,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsCreateIndexDetailV4_3(
 		with the same name in the target container. Only ASCII alphanumeric characters
 		and underscores ("_") are allowed in index names. However, numbers cannot be used
 		at the beginning. Please also note that the name is case-insensitive.
-		Please refer to the GridDB Technical Reference for the upper limit of name length.
+		Please refer to the GridDB Features Reference for the upper limit of name length.
 	@par
 		If an existing index with the same name exists, you must specify @ref GSIndexInfo
 		of the same setting that satisfies the conditions described below. In this case
@@ -14641,7 +14698,7 @@ GS_DLL_PUBLIC void GS_API_CALL gsCloseQuery(GSQuery **query);
 	@par
 		一度に大量のロウを取得しようとした場合、GridDBノードが管理する
 		通信バッファのサイズの上限に到達し、失敗することがあります。
-		上限サイズについては、GridDBテクニカルリファレンスを参照してください。
+		上限サイズについては、GridDB機能リファレンスを参照してください。
 	@param [in] query
 		処理対象の@ref GSQuery
 	@param [in] forUpdate
@@ -14680,7 +14737,7 @@ GS_DLL_PUBLIC void GS_API_CALL gsCloseQuery(GSQuery **query);
 		If the system tries to acquire a large number of Rows all at once, the
 		upper limit of the communication buffer size managed by the GridDB node
 		may be reached, possibly resulting in a failure.
-		Refer to the GridDB Technical Reference for the upper limit
+		Refer to the GridDB Features Reference for the upper limit
 		size.
 	@param [in] query
 		@ref GSQuery to be processed
@@ -18090,7 +18147,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionBackupHosts(
 	@param [in] partitionIndex
 		パーティションインデックス。@c 0 以上パーティション数未満の値。
 	@param [in] host
-		優先的に選択されるホストのアドレス。IPアドレス(IPV4のみ)も可。
+		優先的に選択されるホストのアドレス。IPアドレス(IPv4のみ)も可。
 		@c NULL の場合、設定が解除される
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- @c controller 引数に@c NULL が指定された場合
@@ -18112,7 +18169,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionBackupHosts(
 		the partition index, from @c 0 to the number of partitions minus one
 	@param [in] host
 		the address of the host to be prioritized in the selection. IP address
-		(IPV4 only) is also available. For @c NULL, the setting is cancelled
+		(IPv4 only) is also available. For @c NULL, the setting is cancelled
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
 		- if @c NULL is specified to @c controller
