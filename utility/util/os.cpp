@@ -288,5 +288,124 @@ timespec FileLib::calculateTimeoutSpec(clockid_t clockId, uint32_t timeoutMillis
 }
 #endif
 
+#ifdef _WIN32
+void FileLib::getFileStatus(
+		const BY_HANDLE_FILE_INFORMATION &info, FileStatus *status) {
+	status->accessTime_ = getUnixTime(info.ftLastAccessTime);
+	status->attributes_ = info.dwFileAttributes;
+	status->creationTime_ = getUnixTime(info.ftCreationTime);
+	status->hardLinkCount_ = info.nNumberOfLinks;
+	status->modificationTime_ = getUnixTime(info.ftLastWriteTime);
+	ULARGE_INTEGER size;
+	size.HighPart = info.nFileSizeHigh;
+	size.LowPart = info.nFileSizeLow;
+	status->size_ = size.QuadPart;
+}
+
+void FileLib::getFileStatus(
+		const WIN32_FILE_ATTRIBUTE_DATA &data, FileStatus *status) {
+	status->accessTime_ = getUnixTime(data.ftLastAccessTime);
+	status->attributes_ = data.dwFileAttributes;
+	status->creationTime_ = getUnixTime(data.ftCreationTime);
+	status->hardLinkCount_ = 1;
+	status->modificationTime_ = getUnixTime(data.ftLastWriteTime);
+	ULARGE_INTEGER size;
+	size.HighPart = data.nFileSizeHigh;
+	size.LowPart = data.nFileSizeLow;
+	status->size_ = size.QuadPart;
+}
+
+void FileLib::getFileStatus(
+		const WIN32_FIND_DATAW &data, FileStatus *status) {
+	status->accessTime_ = getUnixTime(data.ftLastAccessTime);
+	status->attributes_ = data.dwFileAttributes;
+	status->creationTime_ = getUnixTime(data.ftCreationTime);
+	status->hardLinkCount_ = 1;
+	status->modificationTime_ = getUnixTime(data.ftLastWriteTime);
+	ULARGE_INTEGER size;
+	size.HighPart = data.nFileSizeHigh;
+	size.LowPart = data.nFileSizeLow;
+	status->size_ = size.QuadPart;
+}
+#else
+void FileLib::getFileStatus(const struct stat &stBuf, FileStatus *status) {
+	status->accessTime_ = getUnixTime(stBuf.st_atime);
+	status->blockCount_ = stBuf.st_blocks;
+	status->blockSize_ = stBuf.st_blksize;
+	status->changeTime_ = getUnixTime(stBuf.st_ctime);
+	status->device_ = stBuf.st_dev;
+	status->gid_ = stBuf.st_gid;
+	status->hardLinkCount_ = stBuf.st_nlink;
+	status->iNode_ = stBuf.st_ino;
+	status->mode_ = stBuf.st_mode;
+	status->modificationTime_ = getUnixTime(stBuf.st_mtime);
+	status->rDevice_ = stBuf.st_rdev;
+	status->size_ = stBuf.st_size;
+	status->uid_ = stBuf.st_uid;
+}
+#endif
+
+void FileLib::getFileSystemStatus(
+		const char8_t *path, FileSystemStatus *status) {
+#ifdef _WIN32
+	u8string realPathDir;
+	if (FileSystem::exists(path)) {
+		u8string realPath;
+		FileSystem::getRealPath(path, realPath);
+
+		if (FileSystem::isDirectory(realPath.c_str())) {
+			realPathDir = realPath;
+		}
+		else {
+			FileSystem::getDirectoryName(realPath.c_str(), realPathDir);
+		}
+	}
+	else {
+		realPathDir = path;
+	}
+
+	std::wstring pathStr;
+	CodeConverter(Code::UTF8, Code::WCHAR_T)(realPathDir.c_str(), pathStr);
+
+	ULARGE_INTEGER availableBytes;
+	ULARGE_INTEGER totalBytes;
+	ULARGE_INTEGER freeBytes;
+	if (!GetDiskFreeSpaceExW(pathStr.c_str(),
+			&availableBytes, &totalBytes, &freeBytes)) {
+		UTIL_THROW_PLATFORM_ERROR(NULL);
+	}
+
+	SYSTEM_INFO systemInfo;
+	GetSystemInfo(&systemInfo);
+
+	const DWORD blockSize = systemInfo.dwPageSize;
+	status->blockSize_ = blockSize;
+	status->fragmentSize_ = blockSize;
+	status->blockCount_ = totalBytes.QuadPart / blockSize;
+	status->freeBlockCount_ = freeBytes.QuadPart / blockSize;
+	status->availableBlockCount_ = availableBytes.QuadPart / blockSize;
+#else
+	std::string pathStr;
+	CodeConverter(Code::UTF8, Code::CHAR)(path, pathStr);
+
+	struct statvfs stvBuf;
+	if (statvfs(pathStr.c_str(), &stvBuf) != 0) {
+		UTIL_THROW_PLATFORM_ERROR(NULL);
+	}
+
+	status->blockSize_ = stvBuf.f_bsize;
+	status->fragmentSize_ = stvBuf.f_frsize;
+	status->blockCount_ = stvBuf.f_blocks;
+	status->freeBlockCount_ = stvBuf.f_bfree;
+	status->availableBlockCount_ = stvBuf.f_bavail;
+
+	status->iNodeCount_ = stvBuf.f_files;
+	status->freeINodeCount_ = stvBuf.f_ffree;
+	status->availableINodeCount_ = stvBuf.f_favail;
+	status->id_ = stvBuf.f_fsid;
+	status->flags_ = stvBuf.f_flag;
+	status->maxFileNameSize_ = stvBuf.f_namemax;
+#endif
+}
 
 } 

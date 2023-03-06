@@ -226,6 +226,335 @@ void MutexAttribute::getShared(bool &shared) const {
 #endif
 }
 
+
+struct RWLock::Data {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	Data(const pthread_rwlockattr_t *attr);
+#else
+	Data();
+	void unlock();
+	void addWriter();
+	void removeWriter();
+#endif
+
+	~Data();
+	void close();
+
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	pthread_rwlock_t rwlock_;
+#else
+	HANDLE mutex_;
+	HANDLE readEvent_;
+	HANDLE writeEvent_;
+	size_t readerCount_;
+	size_t waitingWriterCount_;
+	size_t writerCount_;
+#endif
+};
+
+struct RWLockAttribute::Data {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	pthread_rwlockattr_t attr_;
+#endif
+};
+
+#ifdef UTIL_HAVE_POSIX_MUTEX
+RWLock::Data::Data(const pthread_rwlockattr_t *attr) {
+	if (0 != pthread_rwlock_init(&rwlock_, attr)) {
+		UTIL_THROW_PLATFORM_ERROR(NULL);
+	}
+}
+#else
+RWLock::Data::Data() {
+	readerCount_ = 0;
+	waitingWriterCount_ = 0;
+	writerCount_ = 0;
+	mutex_ = NULL;
+	readEvent_ = NULL;
+	writeEvent_ = NULL;
+	try {
+		mutex_ = CreateMutexW(NULL, FALSE, NULL);
+		if (mutex_ == NULL) {
+			UTIL_THROW_PLATFORM_ERROR(NULL);
+		}
+		readEvent_ = CreateEventW(NULL, TRUE, TRUE, NULL);
+		if (readEvent_ == NULL) {
+			UTIL_THROW_PLATFORM_ERROR(NULL);
+		}
+		writeEvent_ = CreateEventW(NULL, TRUE, TRUE, NULL);
+		if (writeEvent_ == NULL) {
+			UTIL_THROW_PLATFORM_ERROR(NULL);
+		}
+	}
+	catch (...) {
+		close();
+		throw;
+	}
+}
+#endif
+
+#ifndef UTIL_HAVE_POSIX_MUTEX
+void RWLock::Data::unlock() {
+	switch (WaitForSingleObject(mutex_, INFINITE)) {
+	case WAIT_OBJECT_0:
+		if (readerCount_ == 0) {
+			ReleaseMutex(mutex_);
+			UTIL_THROW_UTIL_ERROR(CODE_ILLEGAL_OPERATION,
+					"Not locked");
+		}
+
+		writerCount_ = 0;
+		if (waitingWriterCount_ == 0) {
+			SetEvent(readEvent_);
+		}
+		if ((--readerCount_) == 0) {
+			SetEvent(writeEvent_);
+		}
+		ReleaseMutex(mutex_);
+		break;
+	case WAIT_FAILED:
+		UTIL_THROW_PLATFORM_ERROR(NULL);
+	default:
+		UTIL_THROW_UTIL_ERROR_CODED(CODE_INVALID_STATUS);
+	}
+}
+#endif
+
+#ifndef UTIL_HAVE_POSIX_MUTEX
+void RWLock::Data::addWriter() {
+	switch (WaitForSingleObject(mutex_, INFINITE)) {
+	case WAIT_OBJECT_0:
+		if (++waitingWriterCount_ == 1) {
+			ResetEvent(readEvent_);
+		}
+		ReleaseMutex(mutex_);
+		break;
+	case WAIT_FAILED:
+		UTIL_THROW_PLATFORM_ERROR(NULL);
+	default:
+		UTIL_THROW_UTIL_ERROR_CODED(CODE_INVALID_STATUS);
+	}
+}
+#endif
+
+#ifndef UTIL_HAVE_POSIX_MUTEX
+void RWLock::Data::removeWriter() {
+	switch (WaitForSingleObject(mutex_, INFINITE)) {
+	case WAIT_OBJECT_0:
+		if (--waitingWriterCount_ == 0 && writerCount_ == 0) {
+			SetEvent(readEvent_);
+		}
+		ReleaseMutex(mutex_);
+		break;
+	case WAIT_FAILED:
+		UTIL_THROW_PLATFORM_ERROR(NULL);
+	default:
+		UTIL_THROW_UTIL_ERROR_CODED(CODE_INVALID_STATUS);
+	}
+}
+#endif
+
+RWLock::Data::~Data() {
+	close();
+}
+
+void RWLock::Data::close() {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	pthread_rwlock_destroy(&rwlock_);
+#else
+	if (mutex_ != NULL) {
+		CloseHandle(mutex_);
+	}
+	if (readEvent_ != NULL) {
+		CloseHandle(readEvent_);
+	}
+	if (writeEvent_ != NULL) {
+		CloseHandle(writeEvent_);
+	}
+#endif
+}
+
+RWLock::RWLock(const RWLockAttribute *attr) :
+		readLock_(newData(attr)),
+		writeLock_(readLock_.data_) {
+}
+
+RWLock::RWLock() :
+		readLock_(newData(NULL)),
+		writeLock_(readLock_.data_) {
+}
+
+RWLock::~RWLock() {
+	delete readLock_.data_;
+}
+
+RWLock::Data* RWLock::newData(const RWLockAttribute *attr) {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	const pthread_rwlockattr_t *baseAttr = NULL;
+	if (attr != NULL) {
+		baseAttr = &attr->data_->attr_;
+	}
+
+	return new Data(baseAttr);
+#else
+	return new Data();
+#endif 
+}
+
+void RWLock::ReadLock::lock(void) {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	pthread_rwlock_rdlock(&data_->rwlock_);
+#else
+	HANDLE handles[] = { data_->mutex_, data_->readEvent_ };
+	switch (WaitForMultipleObjects(2, handles, TRUE, INFINITE)) {
+	case WAIT_OBJECT_0:
+	case (WAIT_OBJECT_0 + 1):
+		data_->readerCount_++;
+		ResetEvent(data_->writeEvent_);
+		ReleaseMutex(data_->mutex_);
+		break;
+	case WAIT_FAILED:
+		UTIL_THROW_PLATFORM_ERROR(NULL);
+	default:
+		UTIL_THROW_UTIL_ERROR_CODED(CODE_INVALID_STATUS);
+	}
+#endif
+}
+
+bool RWLock::ReadLock::tryLock(void) {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	return (0 == pthread_rwlock_tryrdlock(&data_->rwlock_));
+#else
+	return tryLock(1);
+#endif
+}
+
+bool RWLock::ReadLock::tryLock(uint32_t msec) {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	timespec ts = FileLib::calculateTimeoutSpec(CLOCK_REALTIME, msec);
+	return (0 == pthread_rwlock_timedrdlock(&data_->rwlock_, &ts));
+#else
+	HANDLE handles[] = { data_->mutex_, data_->readEvent_ };
+	switch (WaitForMultipleObjects(2, handles, TRUE, msec)) {
+	case WAIT_OBJECT_0:
+	case (WAIT_OBJECT_0 + 1):
+		data_->readerCount_++;
+		assert (data_->writerCount_ == 0);
+		assert (data_->waitingWriterCount_ == 0);
+		ResetEvent(data_->writeEvent_);
+		ReleaseMutex(data_->mutex_);
+		return true;
+	case WAIT_TIMEOUT:
+		return false;
+	case WAIT_FAILED:
+		UTIL_THROW_PLATFORM_ERROR(NULL);
+	default:
+		UTIL_THROW_UTIL_ERROR_CODED(CODE_INVALID_STATUS);
+	}
+#endif
+}
+
+void RWLock::ReadLock::unlock(void) {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	pthread_rwlock_unlock(&data_->rwlock_);
+#else
+	data_->unlock();
+#endif
+}
+
+void RWLock::WriteLock::lock(void) {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	pthread_rwlock_wrlock(&data_->rwlock_);
+#else
+	if (!tryLock(INFINITE)) {
+		UTIL_THROW_UTIL_ERROR_CODED(CODE_INVALID_STATUS);
+	}
+#endif
+}
+
+bool RWLock::WriteLock::tryLock(void) {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	return (0 == pthread_rwlock_trywrlock(&data_->rwlock_));
+#else
+	return tryLock(1);
+#endif
+}
+
+bool RWLock::WriteLock::tryLock(uint32_t msec) {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	timespec ts = FileLib::calculateTimeoutSpec(CLOCK_REALTIME, msec);
+	return (0 == pthread_rwlock_timedwrlock(&data_->rwlock_, &ts));
+#else
+	data_->addWriter();
+	HANDLE handles[] = { data_->mutex_, data_->writeEvent_ };
+	switch (WaitForMultipleObjects(2, handles, TRUE, msec)) {
+	case WAIT_OBJECT_0:
+	case (WAIT_OBJECT_0 + 1):
+		data_->waitingWriterCount_--;
+		data_->readerCount_++;
+		data_->writerCount_++;
+		ResetEvent(data_->readEvent_);
+		ResetEvent(data_->writeEvent_);
+		ReleaseMutex(data_->mutex_);
+		return true;
+	case WAIT_TIMEOUT:
+		data_->removeWriter();
+		return false;
+	case WAIT_FAILED:
+		data_->removeWriter();
+		UTIL_THROW_PLATFORM_ERROR(NULL);
+	default:
+		data_->removeWriter();
+		UTIL_THROW_UTIL_ERROR_CODED(CODE_INVALID_STATUS);
+	}
+#endif
+}
+
+void RWLock::WriteLock::unlock(void) {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	pthread_rwlock_unlock(&data_->rwlock_);
+#else
+	data_->unlock();
+#endif
+}
+
+RWLockAttribute::RWLockAttribute() : data_(new Data()) {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	if (0 != pthread_rwlockattr_init(&data_->attr_)) {
+		UTIL_THROW_PLATFORM_ERROR(NULL);
+	}
+#endif
+}
+
+RWLockAttribute::~RWLockAttribute() {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	pthread_rwlockattr_destroy(&data_->attr_);
+#endif
+}
+
+void RWLockAttribute::setShared(bool shared) {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	if (0 != pthread_rwlockattr_setpshared(&data_->attr_,
+			shared ? PTHREAD_PROCESS_SHARED : PTHREAD_PROCESS_PRIVATE)) {
+		UTIL_THROW_PLATFORM_ERROR(NULL);
+	}
+#else
+	UTIL_THROW_NOIMPL_UTIL();
+#endif
+}
+
+void RWLockAttribute::getShared(bool &shared) const {
+#ifdef UTIL_HAVE_POSIX_MUTEX
+	int type;
+	if (0 != pthread_rwlockattr_getpshared(&data_->attr_, &type)) {
+		UTIL_THROW_PLATFORM_ERROR(NULL);
+	}
+	shared = (type == PTHREAD_PROCESS_SHARED);
+#else
+	UTIL_THROW_NOIMPL_UTIL();
+#endif
+}
+
 void Thread::sleep(uint32_t millisecTime) {
 #ifdef _WIN32
 	Sleep(millisecTime);
@@ -234,6 +563,18 @@ void Thread::sleep(uint32_t millisecTime) {
 	spec.tv_sec = millisecTime / 1000;
 	spec.tv_nsec = (millisecTime % 1000) * 1000 * 1000;
 	nanosleep(&spec, NULL);
+#endif
+}
+
+void Thread::yield() {
+	Thread::sleep(0);
+}
+
+uint64_t Thread::getSelfId() {
+#ifdef _WIN32
+	return GetCurrentThreadId();
+#else
+	return syscall(SYS_gettid);
 #endif
 }
 

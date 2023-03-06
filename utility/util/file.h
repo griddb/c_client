@@ -463,7 +463,256 @@ public:
 
 };
 
+/*!
+    @brief Manages a list of directory.
+*/
+class Directory {
+public:
+	explicit Directory(const char8_t *path);
 
+	virtual ~Directory();
+
+	bool nextEntry(u8string &name);
+
+	void resetPosition();
+
+	bool isSubDirectoryChecked();
+
+	bool isParentOrSelfChecked();
+
+private:
+	Directory(const Directory&);
+	Directory& operator=(const Directory&);
+
+private:
+	struct Data;
+	UTIL_UNIQUE_PTR<Data> data_;
+};
+/*!
+    @brief File status.
+*/
+class FileStatus {
+public:
+	bool getStatus(const File &file);
+
+	bool getStatus(int fd);
+
+	bool getStatus(const char *path);
+
+	bool getStatus2(const char *path);
+
+	bool isSocket() const;
+
+	bool isRegularFile() const;
+
+	bool isDirectory() const;
+
+	bool isCharacterDevice() const;
+
+	bool isBlockDevice() const;
+
+	bool isFIFO() const;
+
+	bool isSymbolicLink() const;
+
+public:
+	dev_t getDevice() const;
+
+	ino_t getINode() const;
+
+
+	nlink_t getHardLinkCount() const;
+
+	uid_t getUID() const;
+
+	gid_t getGID() const;
+
+	dev_t getRDevice() const;
+
+	off_t getSize() const;
+
+	blksize_t getBlockSize() const;
+
+	blkcnt_t getBlockCount() const;
+
+	DateTime getAccessTime() const;
+
+	DateTime getModificationTime() const;
+
+	DateTime getChangeTime() const;
+
+	DateTime getCreationTime() const;
+
+public:
+	FileStatus();
+	virtual ~FileStatus();
+
+private:
+	FileStatus(const FileStatus&);
+	FileStatus& operator=(const FileStatus&);
+
+private:
+	friend struct FileLib;
+
+	DateTime accessTime_;
+	nlink_t hardLinkCount_;
+	DateTime modificationTime_;
+	uint64_t size_;
+
+#ifdef _WIN32
+	uint32_t attributes_;
+	DateTime creationTime_;
+#else
+	blkcnt_t blockCount_;
+	blksize_t blockSize_;
+	DateTime changeTime_;
+	dev_t device_;
+	gid_t gid_;
+	ino_t iNode_;
+	int mode_;
+	dev_t rDevice_;
+	uid_t uid_;
+#endif
+};
+
+/*!
+    @brief File system status.
+*/
+class FileSystemStatus {
+public:
+	size_t getBlockSize() const;
+
+	size_t getFragmentSize() const;
+
+	uint64_t getBlocks() const;
+
+	uint64_t getFreeBlocks() const;
+
+	uint64_t getAvailableBlocks() const;
+
+	uint64_t getINodes() const;
+
+	uint64_t getFreeINodes() const;
+
+	uint64_t getAvailableINodes() const;
+
+	size_t getID() const;
+
+	size_t getFlags() const;
+
+	size_t getMaxFileNameSize() const;
+
+	bool isReadOnly() const;
+
+	bool isNoSUID() const;
+
+public:
+	FileSystemStatus();
+	virtual ~FileSystemStatus();
+
+private:
+	FileSystemStatus(const FileSystemStatus&);
+	FileSystemStatus& operator=(const FileSystemStatus&);
+
+private:
+	friend struct FileLib;
+
+	size_t blockSize_;
+	size_t fragmentSize_;
+	uint64_t blockCount_;
+	uint64_t freeBlockCount_;
+	uint64_t availableBlockCount_;
+
+#ifndef _WIN32
+	uint64_t iNodeCount_;
+	uint64_t freeINodeCount_;
+	uint64_t availableINodeCount_;
+	size_t id_;
+	size_t flags_;
+	size_t maxFileNameSize_;
+#endif
+};
+
+/*!
+    @brief Utility of the file system.
+*/
+class FileSystem {
+public:
+	static bool exists(const char8_t *path);
+
+	static bool isDirectory(const char8_t *path);
+
+	static bool isRegularFile(const char8_t *path);
+
+	static void createDirectory(const char8_t *path);
+
+	static void createDirectoryTree(const char8_t *path);
+
+	static void createLink(
+			const char8_t *sourcePath, const char8_t *targetPath);
+
+	static void createPath(
+			const char8_t *directoryName, const char8_t *baseName,
+			u8string &path);
+
+	static void getBaseName(const char8_t *path, u8string &name);
+
+	static void getDirectoryName(const char8_t *path, u8string &directoryName);
+
+	static void getFileStatus(const char8_t *path, FileStatus *status);
+
+	static void getFileStatusNoFollow(const char8_t *path, FileStatus *status);
+
+	static void getRealPath(const char8_t *path, u8string &realPath);
+
+	static void getStatus(const char8_t *path, FileSystemStatus *status);
+
+	static void move(const char8_t *sourcePath, const char8_t *targetPath);
+
+	static void remove(const char8_t *path, bool recursive = true);
+
+	static void removeDirectory(const char8_t *path);
+
+	static void removeFile(const char8_t *path);
+
+	static void touch(const char8_t *path);
+
+	static void updateFileTime(const char8_t *path,
+			const DateTime *accessTime = NULL,
+			const DateTime *modifiedTime = NULL,
+			const DateTime *creationTime = NULL);
+
+	static bool getFDLimit(int32_t *cur, int32_t *max);
+
+	static bool setFDLimit(int32_t cur, int32_t max);
+
+	static void syncAll();
+
+private:
+	FileSystem();
+	FileSystem(const FileSystem&);
+	FileSystem& operator=(const FileSystem&);
+};
+	
+/*!
+    @brief Prevents of double execution by file.
+*/
+class PIdFile {
+public:
+	PIdFile();
+	~PIdFile();
+
+	void open(const char8_t *name);
+
+	void close();
+
+private:
+	PIdFile(const PIdFile&);
+	PIdFile& operator=(const PIdFile&);
+
+	NamedFile base_;
+	bool locked_;
+};
 
 } 
 

@@ -722,7 +722,8 @@ public:
 		CODE_MEMORY_LIMIT_EXCEEDED,	
 		CODE_SIZE_LIMIT_EXCEEDED,	
 		CODE_DECODE_FAILED,	
-		CODE_VALUE_OVERFLOW
+		CODE_VALUE_OVERFLOW,
+		CODE_LIBRARY_UNMATCH 
 	};
 };
 
@@ -1124,6 +1125,30 @@ struct DirectAllocationUtils {
 #endif
 
 
+struct UtilExceptionTag;
+
+namespace util {
+struct LibraryTool {
+	typedef int32_t (*ProviderFunc)(
+			const void *const **funcList, size_t *funcCount);
+
+	static bool findError(int32_t code, UtilExceptionTag *ex) throw();
+
+	template<typename E> static E fromLibraryException(
+			int32_t code, ProviderFunc provider,
+			UtilExceptionTag *&src) throw() {
+		E dest;
+		fromLibraryException(code, provider, src, dest);
+		return dest;
+	}
+
+	static void fromLibraryException(
+			int32_t code, ProviderFunc provider, UtilExceptionTag *&src,
+			Exception &dest) throw();
+	static int32_t toLibraryException(
+			const Exception &src, UtilExceptionTag **dest) throw();
+};
+} 
 
 #if UTIL_FAILURE_SIMULATION_ENABLED
 namespace util {

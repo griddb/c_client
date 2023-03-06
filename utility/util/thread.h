@@ -219,6 +219,117 @@ private:
 	UTIL_UNIQUE_PTR<Data> data_;
 };
 
+class RWLockAttribute;
+class RWLock;
+
+/*!
+    @brief Lock permits a single write operation, or multi read operations.
+*/
+class RWLock {
+private:
+	struct Data;
+public:
+	class ReadLock;
+	class WriteLock;
+
+	explicit RWLock(const RWLockAttribute *attr);
+
+	explicit RWLock();
+
+	virtual ~RWLock();
+
+	ReadLock& getReadLock();
+
+	WriteLock& getWriteLock();
+
+	inline operator ReadLock&() { return getReadLock(); }
+	inline operator WriteLock&() { return getWriteLock(); }
+
+public:
+	class ReadLock {
+	public:
+		void lock(void);
+
+		bool tryLock(void);
+
+		bool tryLock(uint32_t msec);
+
+		void unlock(void);
+
+	private:
+		friend class RWLock;
+
+		ReadLock(Data *data) : data_(data) {}
+		ReadLock(const ReadLock&);
+		ReadLock& operator=(const ReadLock&);
+
+		Data *data_;
+	};
+
+public:
+	class WriteLock {
+	public:
+		void lock(void);
+
+		bool tryLock(void);
+
+		bool tryLock(uint32_t msec);
+
+		void unlock(void);
+
+	private:
+		friend class RWLock;
+
+		WriteLock(Data *data) : data_(data) {}
+		WriteLock(const WriteLock&);
+		WriteLock& operator=(const WriteLock&);
+
+		Data *data_;
+	};
+
+private:
+	RWLock(const RWLock&);
+	RWLock& operator=(const RWLock&);
+
+	Data* newData(const RWLockAttribute *attr);
+
+	ReadLock readLock_;
+	WriteLock writeLock_;
+};
+
+/*!
+    @brief Attributes of RWLock.
+*/
+class RWLockAttribute {
+public:
+	RWLockAttribute(void);
+
+	virtual ~RWLockAttribute();
+
+	void setShared(bool pshared);
+
+	void getShared(bool &pshared) const;
+
+private:
+	RWLockAttribute(const RWLockAttribute&);
+	RWLockAttribute& operator=(const RWLockAttribute&);
+
+	friend class RWLock;
+	struct Data;
+	UTIL_UNIQUE_PTR<Data> data_;
+};
+
+inline RWLock::ReadLock& RWLock::getReadLock() {
+	return readLock_;
+}
+
+inline RWLock::WriteLock& RWLock::getWriteLock() {
+	return writeLock_;
+}
+
+typedef RWLock::ReadLock ReadLock;
+typedef RWLock::WriteLock WriteLock;
+
 class ThreadRunner {
 public:
 };
@@ -226,6 +337,10 @@ public:
 class Thread : public ThreadRunner {
 public:
 	static void sleep(uint32_t millisecTime);
+
+	static void yield();
+
+	static uint64_t getSelfId();
 };
 
 } 
