@@ -3,7 +3,7 @@
 %:
 	dh $@
 
-C_CLIENT_VER = 5.0.0
+C_CLIENT_VER = 5.1.0
 
 configure: clean
 	cd client/c && \

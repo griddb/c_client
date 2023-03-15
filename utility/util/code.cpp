@@ -62,6 +62,122 @@
 namespace util {
 
 
+TinyLexicalIntConverter::TinyLexicalIntConverter() :
+		minWidth_(1),
+		maxWidth_(0) {
+}
+
+bool TinyLexicalIntConverter::format(
+		char8_t *&it, char8_t *end, uint32_t value) const {
+	char8_t buf[std::numeric_limits<uint32_t>::digits10 + 1];
+
+	char8_t *const bufEnd = buf + sizeof(buf);
+	char8_t *bufIt = bufEnd;
+
+	for (uint32_t rest = value; rest > 0; rest /= 10) {
+		if (bufIt == buf) {
+			assert(false);
+			return false;
+		}
+		--bufIt;
+
+		const uint32_t digit = rest % 10;
+		*bufIt = static_cast<char8_t>('0' + digit);
+	}
+
+	const size_t digitWidth = static_cast<size_t>(bufEnd - bufIt);
+	if (minWidth_ > digitWidth) {
+		size_t restWidth = minWidth_ - digitWidth;
+		do {
+			if (it == end) {
+				return false;
+			}
+			*it = '0';
+			++it;
+		}
+		while (--restWidth > 0);
+	}
+
+	for (; bufIt != bufEnd; ++bufIt) {
+		if (it == end) {
+			return false;
+		}
+		*it = *bufIt;
+		++it;
+	}
+
+	return true;
+}
+
+bool TinyLexicalIntConverter::parse(
+		const char8_t *&it, const char8_t *end, uint32_t &value) const {
+	value = 0;
+
+	if (it > end) {
+		assert(false);
+		return false;
+	}
+	const char8_t *const begin = it;
+
+	size_t limitSize = static_cast<size_t>(end - it);
+	if (maxWidth_ > 0 && maxWidth_ < limitSize) {
+		limitSize = maxWidth_;
+	}
+	const char8_t *const limitedEnd = it + limitSize;
+
+	size_t fillSize = static_cast<size_t>(limitedEnd - it);
+	if (minWidth_ < limitSize) {
+		fillSize = minWidth_;
+	}
+	const char8_t *const fillEnd = it + fillSize;
+
+	for (; it != fillEnd; ++it) {
+		if (*it != '0') {
+			break;
+		}
+	}
+	const bool filled = (it != begin);
+
+	const size_t maxDigit =
+			static_cast<size_t>(std::numeric_limits<uint32_t>::digits10 + 1);
+
+	size_t digitSize = static_cast<size_t>(limitedEnd - it);
+	if (maxDigit < limitSize) {
+		digitSize = maxDigit;
+	}
+	const char8_t *const digitEnd = it + digitSize;
+
+	uint64_t ret = 0;
+	if (it == digitEnd) {
+		if (!filled) {
+			return false;
+		}
+	}
+	else {
+		if (*it == '0') {
+			return false;
+		}
+		do {
+			if (*it < '0' || *it > '9') {
+				break;
+			}
+			ret = ret * 10 + static_cast<uint32_t>(*it - '0');
+		}
+		while (++it != digitEnd);
+
+		if (ret > std::numeric_limits<uint32_t>::max()) {
+			return false;
+		}
+	}
+
+	if (static_cast<size_t>(it - begin) < minWidth_) {
+		return false;
+	}
+
+	value = static_cast<uint32_t>(ret);
+	return true;
+}
+
 namespace detail {
 
 template<typename T>

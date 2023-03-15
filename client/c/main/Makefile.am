@@ -12,6 +12,7 @@ ebbdir = $(rootdir)/3rd_party/ebb
 shadir = $(rootdir)/3rd_party/sha2
 securitydir = $(rootdir)/3rd_party/omaha/omaha/base/security
 uuiddir = $(rootdir)/3rd_party/uuid
+extdir = $(srcdir)/ext
 bindir = $(rootdir)/bin
 
 version = 0:0:0
@@ -46,8 +47,10 @@ $(utildir)/util/container.cpp \
 $(utildir)/util/file.cpp \
 $(utildir)/util/net.cpp \
 $(utildir)/util/os.cpp \
+$(utildir)/util/system.cpp \
 $(utildir)/util/thread.cpp \
 $(utildir)/util/time.cpp \
+$(utildir)/util/trace.cpp \
 $(utildir)/util/type.cpp \
 $(commondir)/authentication.cpp \
 $(commondir)/bit_array.cpp \
@@ -55,6 +58,7 @@ $(commondir)/container_key.cpp \
 $(commondir)/http.cpp \
 $(commondir)/json.cpp \
 $(commondir)/service_address.cpp \
+$(commondir)/socket_wrapper.cpp \
 $(commondir)/uuid_utils.cpp \
 $(ebbdir)/ebb_request_parser.c \
 $(shadir)/sha2.c \
@@ -70,6 +74,7 @@ $(uuiddir)/uuid/unpack.c \
 $(uuiddir)/uuid/unparse.c \
 $(uuiddir)/uuid/uuid_time.c \
 $(srcdir)/client.cpp \
+$(srcdir)/client_logging.cpp \
 $(srcdir)/container_key_utils.cpp 
 
 libgridstore_la_CFLAGS = $(AM_CFLAGS) -fvisibility=hidden
@@ -86,4 +91,5 @@ INCLUDES = \
 -I$(shadir) \
 -I$(securitydir) \
 -I$(uuiddir) \
--I$(srcdir)/include
+-I$(srcdir)/include \
+-I$(extdir)/include

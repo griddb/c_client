@@ -91,6 +91,16 @@ public:
 	}
 };
 
+struct TinyLexicalIntConverter {
+	TinyLexicalIntConverter();
+
+	bool format(char8_t *&it, char8_t *end, uint32_t value) const;
+	bool parse(const char8_t *&it, const char8_t *end, uint32_t &value) const;
+
+	size_t minWidth_;
+	size_t maxWidth_;
+};
+	
 /*!
 	@brief Converts strings and values of numbers or booleans.
 */
@@ -1540,25 +1550,6 @@ UTIL_FORCEINLINE int32_t varIntEncode32_fast_short(uint8_t *p, uint32_t v) {
 		return 2;
 	}
 	return varIntEncode64(p, v);
-}
-
-/*
-	https://developers.google.com/protocol-buffers/docs/encoding#types
-*/
-inline uint32_t zigzagEncode32(int32_t n) {
-	return (static_cast<uint32_t>(n) << 1) ^ static_cast<uint32_t>(n >> 31);
-}
-
-inline int32_t zigzagDecode32(uint32_t n) {
-	return static_cast<int32_t>(n >> 1) ^ (-1) * static_cast<int32_t>(n & 1);
-}
-
-inline uint64_t zigzagEncode64(int64_t n) {
-	return (static_cast<uint64_t>(n) << 1) ^ static_cast<uint64_t>(n >> 63);
-}
-
-inline int64_t zigzagDecode64(uint64_t n) {
-	return static_cast<int64_t>(n >> 1) ^ (-1) * static_cast<int64_t>(n & 1);
 }
 
 

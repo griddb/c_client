@@ -43,10 +43,11 @@
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 #include "util/time.h"
+#include "util/code.h"
 #include "util/os.h"
 #include <iomanip>
 #include <limits>
-#include <assert.h>
+#include <cassert>
 
 namespace util {
 
@@ -68,19 +69,13 @@ namespace util {
 #define UTIL_DATE_TIME_DIFF_WITH_SUB_FIELDS 1
 #endif
 
+#ifndef UTIL_TIME_ZONE_PARSER_FIX_NON_SEPARATOR
+#define UTIL_TIME_ZONE_PARSER_FIX_NON_SEPARATOR 1
+#endif
+
 
 struct CharBufferUtils {
 	static bool write(char8_t *&it, char8_t *end, const char8_t *str);
-};
-
-struct TinyLexicalIntConverter {
-	TinyLexicalIntConverter();
-
-	bool format(char8_t *&it, char8_t *end, uint32_t value) const;
-	bool parse(const char8_t *&it, const char8_t *end, uint32_t &value) const;
-
-	size_t minWidth_;
-	size_t maxWidth_;
 };
 
 bool CharBufferUtils::write(char8_t *&it, char8_t *end, const char8_t *str) {
@@ -94,143 +89,16 @@ bool CharBufferUtils::write(char8_t *&it, char8_t *end, const char8_t *str) {
 	return true;
 }
 
-TinyLexicalIntConverter::TinyLexicalIntConverter() :
-		minWidth_(1),
-		maxWidth_(0) {
-}
-
-bool TinyLexicalIntConverter::format(
-		char8_t *&it, char8_t *end, uint32_t value) const {
-	char8_t buf[std::numeric_limits<uint32_t>::digits10 + 1];
-
-	char8_t *const bufEnd = buf + sizeof(buf);
-	char8_t *bufIt = bufEnd;
-
-	for (uint32_t rest = value; rest > 0; rest /= 10) {
-		if (bufIt == buf) {
-			assert(false);
-			return false;
-		}
-		--bufIt;
-
-		const uint32_t digit = rest % 10;
-		*bufIt = static_cast<char8_t>('0' + digit);
-	}
-
-	const size_t digitWidth = static_cast<size_t>(bufEnd - bufIt);
-	if (minWidth_ > digitWidth) {
-		size_t restWidth = minWidth_ - digitWidth;
-		do {
-			if (it == end) {
-				return false;
-			}
-			*it = '0';
-			++it;
-		}
-		while (--restWidth > 0);
-	}
-
-	for (; bufIt != bufEnd; ++bufIt) {
-		if (it == end) {
-			return false;
-		}
-		*it = *bufIt;
-		++it;
-	}
-
-	return true;
-}
-
-bool TinyLexicalIntConverter::parse(
-		const char8_t *&it, const char8_t *end, uint32_t &value) const {
-	value = 0;
-
-	if (it > end) {
-		assert(false);
-		return false;
-	}
-	const char8_t *const begin = it;
-
-	size_t limitSize = static_cast<size_t>(end - it);
-	if (maxWidth_ > 0 && maxWidth_ < limitSize) {
-		limitSize = maxWidth_;
-	}
-	const char8_t *const limitedEnd = it + limitSize;
-
-	size_t fillSize = static_cast<size_t>(limitedEnd - it);
-	if (minWidth_ < limitSize) {
-		fillSize = minWidth_;
-	}
-	const char8_t *const fillEnd = it + fillSize;
-
-	for (; it != fillEnd; ++it) {
-		if (*it != '0') {
-			break;
-		}
-	}
-	const bool filled = (it != begin);
-
-	const size_t maxDigit =
-			static_cast<size_t>(std::numeric_limits<uint32_t>::digits10 + 1);
-
-	size_t digitSize = static_cast<size_t>(limitedEnd - it);
-	if (maxDigit < limitSize) {
-		digitSize = maxDigit;
-	}
-	const char8_t *const digitEnd = it + digitSize;
-
-	uint64_t ret = 0;
-	if (it == digitEnd) {
-		if (!filled) {
-			return false;
-		}
-	}
-	else {
-		if (*it == '0') {
-			return false;
-		}
-		do {
-			if (*it < '0' || *it > '9') {
-				break;
-			}
-			ret = ret * 10 + static_cast<uint32_t>(*it - '0');
-		}
-		while (++it != digitEnd);
-
-		if (ret > std::numeric_limits<uint32_t>::max()) {
-			return false;
-		}
-	}
-
-	if (static_cast<size_t>(it - begin) < minWidth_) {
-		return false;
-	}
-
-	value = static_cast<uint32_t>(ret);
-	return true;
-}
-
 
 TimeZone::TimeZone() :
 		offsetMillis_(Constants::emptyOffsetMillis()) {
 }
 
 TimeZone TimeZone::getLocalTimeZone(int64_t unixTimeMillis) {
-	DateTime modTime(unixTimeMillis);
-
-	DateTime::ZonedOption option;
-	DateTime::FieldData fieldData;
-
-	option.asLocalTimeZone_ = true;
-	modTime.getFields(fieldData, option);
-
-	option.asLocalTimeZone_ = false;
-	modTime.setFields(fieldData, option);
-
-	const int64_t modMillis = modTime.getUnixTime();
+	static_cast<void>(unixTimeMillis);
 
 	TimeZone zone;
-	zone.setOffsetMillis(modMillis - unixTimeMillis);
+	zone.setOffsetMillis(getLocalOffsetMillis());
 	return zone;
 }
 
@@ -342,10 +210,20 @@ bool TimeZone::parse(const char8_t *buf, size_t size, bool throwOnError) {
 				break;
 			}
 
-			if (it == end || *it != ':') {
+#if UTIL_TIME_ZONE_PARSER_FIX_NON_SEPARATOR
+			if (it != end && *it == ':') {
+				++it;
+			}
+
+			if (it == end) {
+				break;
+			}
+#else
+			if (it != end && *it != ':') {
 				break;
 			}
 			++it;
+#endif
 
 			uint32_t minute;
 			if (!converter.parse(it, end, minute) || minute > 59) {
@@ -375,6 +253,49 @@ bool TimeZone::parse(const char8_t *buf, size_t size, bool throwOnError) {
 		UTIL_THROW_UTIL_ERROR(CODE_INVALID_PARAMETER, "Failed to parse");
 	}
 	return false;
+}
+
+TimeZone::Offset TimeZone::getLocalOffsetMillis() {
+	static uint32_t absOffset = 0;
+	const int32_t diff = 24 * 60 * 60 * 1000;
+
+	if (absOffset == 0) {
+		const Offset base = detectLocalOffsetMillis();
+		assert(-diff < base && base < diff);
+		absOffset = static_cast<uint32_t>(base + diff);
+	}
+
+	return static_cast<Offset>(absOffset) - diff;
+}
+
+TimeZone::Offset TimeZone::detectLocalOffsetMillis() {
+	const int64_t localTimeMillis = 24 * 60 * 60 * 1000; 
+	const bool asLocalTimeZone = true;
+#ifdef _WIN32
+	const bool dstIgnored = true;
+	SYSTEMTIME time = FileLib::getSystemTime(
+			FileLib::getFileTime(localTimeMillis), false, dstIgnored);
+	const int64_t timeMillis = FileLib::getUnixTime(
+			FileLib::getFileTime(time, asLocalTimeZone, dstIgnored));
+#else
+	tm time = FileLib::getTM(localTimeMillis, false);
+	assert(time.tm_isdst == 0);
+	time.tm_yday = 0;
+	time.tm_wday = 0;
+	time.tm_isdst = 0;
+	const int32_t milliSecond = 0;
+	const int64_t timeMillis =
+			FileLib::getUnixTime(time, milliSecond, asLocalTimeZone);
+#endif
+
+	const Offset offset = localTimeMillis - timeMillis;
+	const Offset range = Constants::offsetMillisRange();
+	if (offset <= -range || range <= offset) {
+		UTIL_THROW_UTIL_ERROR(
+				CODE_INVALID_STATUS, "Unexpected time zone offset");
+	}
+
+	return offset;
 }
 
 
@@ -421,13 +342,15 @@ void DateTime::getFields(
 		FieldData &fieldData, const ZonedOption &option) const {
 	checkUnixTimeBounds(unixTimeMillis_, option.baseOption_);
 
-	const bool asLocalTimeZone =
-			option.zone_.isEmpty() ? option.asLocalTimeZone_ : false;
+	const bool asLocalTimeZone = false;
 
 	int64_t offsetMillis = 0;
 	if (!option.zone_.isEmpty()) {
 		option.zone_.checkRange(true);
 		offsetMillis = option.zone_.getOffsetMillis();
+	}
+	else if (option.asLocalTimeZone_) {
+		offsetMillis = getLocalOffsetMillis();
 	}
 
 	bool biased = false;
@@ -441,8 +364,9 @@ void DateTime::getFields(
 	}
 
 #ifdef _WIN32
+	const bool dstIgnored = true;
 	SYSTEMTIME time = FileLib::getSystemTime(
-			FileLib::getFileTime(modTimeMillis), asLocalTimeZone);
+			FileLib::getFileTime(modTimeMillis), asLocalTimeZone, dstIgnored);
 	fieldData.year_ = static_cast<int32_t>(time.wYear);
 	fieldData.month_ = static_cast<int32_t>(time.wMonth);
 	fieldData.monthDay_ = static_cast<int32_t>(time.wDay);
@@ -521,29 +445,38 @@ int64_t DateTime::getField(
 	}
 
 	if (type == FIELD_DAY_OF_WEEK) {
-		fieldData.year_ = 1970;
-		fieldData.month_ = 1;
-		fieldData.monthDay_ = 1;
-
-		DateTime modTime;
-		modTime.setFields(fieldData, option);
-
 		const int64_t timeDays =
-				(unixTimeMillis_ - modTime.unixTimeMillis_) /
-				(24 * 60 * 60 * 1000);
-		return (timeDays + EPOCH_DAY_OF_WEEK - 1) % 7;
+				getUnixTimeDays(fieldData, FIELD_YEAR, option);
+		return unixTimeDaysToWeek(timeDays);
 	}
 	else if (type == FIELD_DAY_OF_YEAR) {
-		fieldData.month_ = 1;
-		fieldData.monthDay_ = 1;
-
-		DateTime modTime;
-		modTime.setFields(fieldData, option);
-
 		const int64_t timeDays =
-				(unixTimeMillis_ - modTime.unixTimeMillis_) /
-				(24 * 60 * 60 * 1000);
+				getUnixTimeDays(fieldData, FIELD_MONTH, option);
 		return timeDays + 1;
+	}
+	else if (type == FIELD_WEEK_OF_YEAR_SUNDAY ||
+			type == FIELD_WEEK_OF_YEAR_MONDAY) {
+		const int64_t timeDays =
+				getUnixTimeDays(fieldData, FIELD_MONTH, option);
+		const int64_t yearDow = unixTimeDaysToWeek(
+				getUnixTimeDays(fieldData, FIELD_YEAR, option) - timeDays);
+
+		int64_t offset = yearDow;
+		if (type == FIELD_WEEK_OF_YEAR_SUNDAY) {
+			if (offset == 0) {
+				offset = 7;
+			}
+		}
+		else {
+			offset = (offset + (7 - 1));
+
+			if (offset > 7) {
+				offset %= 7;
+			}
+		}
+
+		const int64_t modDays = timeDays + offset;
+		return modDays / 7;
 	}
 	else {
 		UTIL_THROW_UTIL_ERROR(CODE_ILLEGAL_ARGUMENT,
@@ -574,12 +507,12 @@ void DateTime::setFields(
 		}
 	}
 
-	const bool asLocalTimeZone =
-			option.zone_.isEmpty() ? option.asLocalTimeZone_ : false;
+	const bool asLocalTimeZone = false;
 	const int32_t modMilliSecond =
 			option.baseOption_.trimMilliseconds_ ? 0 : fieldData.milliSecond_;
 
 #ifdef _WIN32
+	const bool dstIgnored = true;
 	SYSTEMTIME time;
 	time.wYear = static_cast<WORD>(year);
 	time.wMonth = static_cast<WORD>(month);
@@ -589,8 +522,8 @@ void DateTime::setFields(
 	time.wMinute = static_cast<WORD>(fieldData.minute_);
 	time.wSecond = static_cast<WORD>(fieldData.second_);
 	time.wMilliseconds = static_cast<WORD>(modMilliSecond);
-	const int64_t modTimeMillis =
-			FileLib::getUnixTime(FileLib::getFileTime(time, asLocalTimeZone));
+	const int64_t modTimeMillis = FileLib::getUnixTime(
+			FileLib::getFileTime(time, asLocalTimeZone, dstIgnored));
 #else
 	tm time;
 	time.tm_year = year - 1900;
@@ -609,6 +542,9 @@ void DateTime::setFields(
 	if (!option.zone_.isEmpty()) {
 		option.zone_.checkRange(true);
 		offsetMillis -= option.zone_.getOffsetMillis();
+	}
+	else if (option.asLocalTimeZone_) {
+		offsetMillis -= getLocalOffsetMillis();
 	}
 
 	const int64_t retMillis = modTimeMillis + offsetMillis;
@@ -1137,6 +1073,48 @@ DateTime DateTime::max(bool trimMilliseconds) {
 	Option option;
 	option.trimMilliseconds_ = trimMilliseconds;
 	return max(option);
+}
+
+TimeZone::Offset DateTime::getLocalOffsetMillis() {
+	return TimeZone::getLocalTimeZone(0).getOffsetMillis();
+}
+
+int64_t DateTime::getUnixTimeDays(
+		const FieldData &fieldData, FieldType trimingFieldType,
+		const ZonedOption &option) const {
+	const int64_t dayToMillis = 24 * 60 * 60 * 1000;
+	const int32_t epochYear = 1970;
+
+	FieldData modFieldData = fieldData;
+
+	do {
+		modFieldData.monthDay_ = 1;
+
+		modFieldData.month_ = 1;
+		if (trimingFieldType == FIELD_MONTH) {
+			break;
+		}
+
+		modFieldData.year_ = epochYear;
+		assert(trimingFieldType == FIELD_YEAR);
+	}
+	while (false);
+
+	int64_t offsetMillis = 0;
+	if (modFieldData.year_ == epochYear) {
+		modFieldData.monthDay_++;
+		offsetMillis = dayToMillis;
+	}
+
+	DateTime modTime;
+	modTime.setFields(modFieldData, option);
+	const int64_t modMillis = modTime.unixTimeMillis_ - offsetMillis;
+
+	return (unixTimeMillis_ - modMillis) / dayToMillis;
+}
+
+int64_t DateTime::unixTimeDaysToWeek(int64_t timeDays) {
+	return (timeDays + EPOCH_DAY_OF_WEEK - 1) % 7;
 }
 
 void DateTime::checkFieldBounds(
