@@ -5,9 +5,9 @@ Architecture: amd64
 Version: 5.1.0
 Maintainer: Katsuhiko Nonomura <contact@griddb.org>
 Homepage: https://github.com/griddb/c_client
-Standards-Version: 5.0.0
+Standards-Version: 5.1.0
 Build-Depends: debhelper (>= 10)
 Build-Depends-Indep: gcc-7, g++-7
-DEBTRANSFORM-TAR: griddb-c-client-v5.0.0.tar.gz
+DEBTRANSFORM-TAR: griddb-c-client-v5.1.0.tar.gz
 Package-List:
  griddb-c-client deb unknown extra arch=amd64
