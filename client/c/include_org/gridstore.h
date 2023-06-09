@@ -103,7 +103,7 @@
 
 	@ENDL
 */
-#define GS_CLIENT_VERSION_MAJOR 4
+#define GS_CLIENT_VERSION_MAJOR 5
 #endif
 
 #ifndef GS_CLIENT_VERSION_MINOR
@@ -280,6 +280,14 @@ extern "C" {
 #define GS_COMPATIBILITY_SUPPORT_4_3 0
 #endif
 
+#if !defined(GS_COMPATIBILITY_SUPPORT_5_3) && \
+	(GS_CLIENT_VERSION_MAJOR > 5 || \
+	(GS_CLIENT_VERSION_MAJOR == 5 && GS_CLIENT_VERSION_MINOR >= 3))
+#define GS_COMPATIBILITY_SUPPORT_5_3 1
+#else
+#define GS_COMPATIBILITY_SUPPORT_5_3 0
+#endif
+
 #endif // GS_INTERNAL_DEFINITION_VISIBLE
 
 /*!
@@ -367,13 +375,15 @@ typedef int32_t GSEnum;
 /*!
 	@JP
 	@ingroup Group_GSTimestamp
-	@brief GridDB上のTIMESTAMP型と対応する時刻型です。
+	@brief GridDB上の通常精度のTIMESTAMP型と対応する時刻型です。
 		ミリ秒単位のUNIX時刻を保持します。
+	@see GS_TYPE_OPTION_TIME_MILLI
 
 	@EN
 	@ingroup Group_GSTimestamp
 	@brief Time data type corresponding to TIMESTAMP type on GridDB.
 		The value keeps Unix time in milliseconds.
+	@see GS_TYPE_OPTION_TIME_MILLI
 
 	@ENDL
 */
@@ -576,7 +586,8 @@ typedef struct GSGridStoreTag GSGridStore;
 		LONG | int64_t
 		FLOAT | float
 		DOUBLE | double
-		TIMESTAMP | @ref GSTimestamp
+		TIMESTAMP(通常精度:ミリ秒) | @ref GSTimestamp
+		TIMESTAMP(高精度:マイクロ・ナノ秒) | @ref GSPreciseTimestamp
 		GEOMETRY | @ref GSChar*
 		BLOB | @ref GSBlob
 		STRING配列 | @ref GSChar**
@@ -625,6 +636,9 @@ typedef struct GSGridStoreTag GSGridStore;
 		GEOMETRY | @c POINT(EMPTY)
 		BLOB | 長さ0のBLOBデータ
 		配列型 | 要素数0の配列
+	@par
+		日時精度は、@ref GSTypeOption の日時精度に関するオプションにより明示的に
+		指定できます。
 	@par
 		トランザクション処理では、デフォルトで自動コミットモードが有効になっています。
 		自動コミットモードでは、変更操作は逐次確定し、明示的に取り消すことができません。
@@ -1166,6 +1180,67 @@ typedef int32_t GSResult;
 	@ENDL
  */
 #define GS_SUCCEEDED(result) ((result) == GS_RESULT_OK)
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief GridDB上の高精度のTIMESTAMP型と対応する時刻型です。
+		現バージョンではナノ秒単位までの時刻を保持します。
+	@see GS_TYPE_OPTION_TIME_MICRO
+	@see GS_TYPE_OPTION_TIME_NANO
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@see GS_TYPE_OPTION_TIME_MICRO
+	@see GS_TYPE_OPTION_TIME_NANO
+	@since 5.3
+
+	@ENDL
+*/
+typedef struct GSPreciseTimestampTag {
+
+	/*!
+		@JP
+		@brief 通常精度のTIMESTAMP値を表します。
+
+		@EN
+
+		@ENDL
+	 */
+	GSTimestamp base;
+
+	/*!
+		@JP
+		@brief ミリ秒未満の桁の値について、ナノ秒単位ので表します。
+		@par
+			有効な値の範囲は@c0 から @c 999999 までです。
+
+		@EN
+
+		@ENDL
+	 */
+	uint32_t nanos;
+
+} GSPreciseTimestamp;
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief @ref GSPreciseTimestamp の初期化子です。
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@since 5.3
+
+	@ENDL
+*/
+#define GS_PRECISE_TIMESTAMP_INITIALIZER \
+		{ 0, 0 }
+
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
 
 /*!
 	@JP
@@ -2411,6 +2486,12 @@ enum GSTypeTag {
 	/*!
 		@JP
 		@brief TIMESTAMP型です。
+		@par
+			カラム定義に用いる場合、精度の指定には@ref GSTypeOption
+			の日時精度に関するオプションを用います。
+		@par
+			ロウオブジェクトのフィールド値の型を識別するために用いる場合は、
+			通常精度のTIMESTAMP値であることを示します。
 
 		@EN
 		@brief TIMESTAMP type.
@@ -2556,7 +2637,25 @@ enum GSTypeTag {
 
 		@ENDL
 	*/
-	GS_TYPE_NULL = -1
+	GS_TYPE_NULL = -1,
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+	/*!
+		@JP
+		@brief 高精度のTIMESTAMP値であることを示します。
+		@par
+			カラムの型として用いることはできません。ロウオブジェクトのフィールド値の
+			型を識別するために用います。
+		@since 5.3
+
+		@EN
+		@since 5.3
+
+		@ENDL
+	*/
+	GS_TYPE_PRECISE_TIMESTAMP = -2
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
+
 #endif
 };
 
@@ -2645,7 +2744,48 @@ enum GSTypeOptionTag {
 
 		@ENDL
 	*/
-	GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL = 1 << 4
+	GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL = 1 << 4,
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+	/*!
+		@JP
+		@brief ミリ秒単位で保持する通常精度の日時型カラムであることを示します。
+		@par
+			日時型カラムの定義において、精度のオプションが指定されなかった場合、
+			この通常精度のオプションが選択されたものとみなされます。
+		@since 5.3
+
+		@EN
+		@since 5.3
+
+		@ENDL
+	*/
+	GS_TYPE_OPTION_TIME_MILLI = 1 << 5,
+
+	/*!
+		@JP
+		@brief マイクロ秒単位で保持する高精度の日時型カラムであることを示します。
+		@since 5.3
+
+		@EN
+		@since 5.3
+
+		@ENDL
+	*/
+	GS_TYPE_OPTION_TIME_MICRO = 1 << 6,
+
+	/*!
+		@JP
+		@brief ナノ秒単位で保持する高精度の日時型カラムであることを示します。
+		@since 5.3
+
+		@EN
+		@since 5.3
+
+		@ENDL
+	*/
+	GS_TYPE_OPTION_TIME_NANO = 1 << 7,
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
 
 #endif // GS_COMPATIBILITY_SUPPORT_4_1
 
@@ -3652,9 +3792,7 @@ typedef struct GSTriggerInfoTag {
 	@ENDL
  */
 #define GS_TRIGGER_INFO_INITIALIZER \
-	{ NULL, GS_TRIGGER_REST, NULL, \
-	0, NULL, \
-	NULL, NULL, NULL, NULL }
+	{ NULL, GS_TRIGGER_REST, NULL, 0, NULL, 0, NULL, NULL, NULL }
 
 #endif // GS_COMPATIBILITY_SUPPORT_1_5
 
@@ -4572,7 +4710,10 @@ typedef union GSValueTag {
 
 	/*!
 		@JP
-		@brief TIMESTAMP型のロウフィールドに対応する値です。
+		@brief 通常精度のTIMESTAMP型のロウフィールドに対応する値です。
+		@par
+			@ref GSValue を用いてフィールド値を設定・取得する場合、
+			値の型は@ref GS_TYPE_TIMESTAMP と対応します。
 
 		@EN
 		@brief The value corresponding to a Row field of TIMESTAMP type.
@@ -4580,6 +4721,23 @@ typedef union GSValueTag {
 		@ENDL
 	 */
 	GSTimestamp asTimestamp;
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+	/*!
+		@JP
+		@brief 高精度のTIMESTAMP型のロウフィールドに対応する値です。
+		@par
+			@ref GSValue を用いてフィールド値を設定・取得する場合、
+			値の型は@ref GS_TYPE_PRECISE_TIMESTAMP と対応します。
+		@since 5.3
+
+		@EN
+		@since 5.3
+
+		@ENDL
+	*/
+	GSPreciseTimestamp asPreciseTimestamp;
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
 
 	/*!
 		@JP
@@ -4865,6 +5023,62 @@ typedef struct GSTimeZoneTag {
 
 #endif // GS_COMPATIBILITY_SUPPORT_4_3
 
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief 日時フォーマットに関するオプション情報を表します。
+	@note
+		使用する関数によっては、オプション情報を一部またはすべて参照しない
+		場合があります。
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@since 5.3
+
+	@ENDL
+*/
+typedef struct GSTimestampFormatOptionTag {
+	/*!
+		@JP
+		@brief 日時フォーマットに用いるタイムゾーンのオプションです。
+		@par
+			@c NULL の場合、タイムゾーンが指定されなかったものとみなされます。
+
+		@EN
+
+		@ENDL
+	*/
+	const GSTimeZone *timeZone;
+} GSTimestampFormatOption;
+
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief @ref GSTimestampFormatOption の初期化子です。
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@brief Initializer of @ref GSTimestampFormatOption.
+	@since 5.3
+
+	@ENDL
+*/
+#define GS_TIMESAMP_FORMAT_OPTION_INITIALIZER \
+	{ NULL }
+
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
+
+#if GS_INTERNAL_DEFINITION_VISIBLE
+#if GS_COMPATIBILITY_SUPPORT_5_3
+#define GS_INTERNAL_TIME_STRING_SIZE_MAX 37
+#else
+#define GS_INTERNAL_TIME_STRING_SIZE_MAX 32
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
+#endif // GS_INTERNAL_DEFINITION_VISIBLE
+
 /*!
 	@JP
 	@ingroup Group_GSTimestamp
@@ -4880,7 +5094,7 @@ typedef struct GSTimeZoneTag {
 
 	@ENDL
  */
-#define GS_TIME_STRING_SIZE_MAX 32
+#define GS_TIME_STRING_SIZE_MAX GS_INTERNAL_TIME_STRING_SIZE_MAX
 
 #if GS_COMPATIBILITY_SUPPORT_4_3
 
@@ -10274,9 +10488,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByLong(
 /*!
 	@JP
 	@ingroup Group_GSContainer
-	@brief TIMESTAMP型のロウキーに対応するロウの内容を取得します。
+	@brief 通常精度のTIMESTAMP型のロウキーに対応するロウの内容を取得します。
 	@par
-		ロウキーに対応するTIMESTAMP型のカラムが存在する場合のみ使用できます。
+		ロウキーに対応する通常精度のTIMESTAMP型のカラムが存在する場合のみ
+		使用できます。
 	@par
 		手動コミットモードにおいて更新用ロックを要求した場合、
 		トランザクションが終了するかタイムアウトするまで対象ロウのロックを維持します。
@@ -10316,7 +10531,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByLong(
 		@ref GS_FALSE が格納されます。
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
-		- ロウキーに対応するTIMESTAMP型のカラムが存在しない場合
+		- ロウキーに対応する通常精度のTIMESTAMP型のカラムが存在しない場合
 		- 自動コミットモードであるにもかかわらず、更新用ロックを要求しようとした場合
 		- この処理またはトランザクションのタイムアウト、
 			指定のコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
@@ -10395,6 +10610,73 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByLong(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByTimestamp(
 		GSContainer *container, GSTimestamp key, void *rowObj,
 		GSBool forUpdate, GSBool *exists);
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSContainer
+	@brief 高精度のTIMESTAMP型のロウキーに対応するロウの内容を取得します。
+	@par
+		ロウキーに対応する高精度のTIMESTAMP型のカラムが存在する場合のみ
+		使用できます。
+	@par
+		手動コミットモードにおいて更新用ロックを要求した場合、
+		トランザクションが終了するかタイムアウトするまで対象ロウのロックを維持します。
+		ロックされたロウに対する他のトランザクションからの更新・削除操作は、
+		このトランザクションが終了するかタイムアウトするまで待機するようになります。
+		対象ロウが削除されたとしても、ロックは維持されます。
+	@par
+		自動コミットモードの場合、更新用ロックを要求できません。
+	@par
+		取得結果のロウオブジェクトに含まれる文字列や配列などの可変長サイズの
+		データのリソースは、指定の@ref GSContainer を直接介した次回のロウオブジェクト
+		取得処理を実行するまで維持されます。
+	@attention
+		指定の@ref GSContainer にバインドされたロウオブジェクトの型と
+		指定のロウオブジェクトの型とが一致しない場合、この処理の動作は未定義です。
+		アクセス違反により実行プロセスが異常終了する可能性があります。
+	@attention
+		文字列や配列などの可変長のデータを格納するために、指定の@ref GSContainer
+		と対応する@ref GSGridStore インスタンス上で管理される、一時的なメモリ領域を
+		使用します。この領域は、対応する@ref GSGridStore もしくはその関連リソースに対し、
+		この関数もしくは同様に一時的なメモリ領域を使用する関数が再び実行されるまで
+		有効です。 無効になった領域にアクセスしようとした場合の動作は未定義です。
+	@param [in] container
+		処理対象の@ref GSContainer
+	@param [in] key
+		処理対象のロウキー
+	@param [out] rowObj
+		取得対象のロウの内容を格納するためのロウオブジェクト。
+		取得対象のロウが存在しない場合、ロウオブジェクトの内容は何も変更されません。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		ロウオブジェクトのフィールドのうち一部またはすべてが変更されることがあります。
+	@param [in] forUpdate
+		更新用ロックを要求するかどうか
+	@param [out] exists
+		処理対象のロウが存在したかどうかを格納するためのブール型変数へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@ref GS_FALSE が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- ロウキーに対応する高精度のTIMESTAMP型のカラムが存在しない場合
+		- 自動コミットモードであるにもかかわらず、更新用ロックを要求しようとした場合
+		- この処理またはトランザクションのタイムアウト、
+			指定のコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
+		- サポート範囲外の値がキーとして設定されていた場合
+		- @c exists 以外の引数に@c NULL が指定された場合
+	@see gsGetRow
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSContainer
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByPreciseTimestamp(
+		GSContainer *container, const GSPreciseTimestamp *key, void *rowObj,
+		GSBool forUpdate, GSBool *exists);
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
 
 /*!
 	@JP
@@ -10714,9 +10996,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRowByLong(
 /*!
 	@JP
 	@ingroup Group_GSContainer
-	@brief TIMESTAMP型のロウキーを指定して、ロウを新規作成または更新します。
+	@brief 通常精度のTIMESTAMP型のロウキーを指定して、ロウを新規作成または
+		更新します。
 	@par
-		ロウキーに対応するTIMESTAMP型のカラムが存在する場合のみ使用できます。
+		ロウキーに対応する通常精度のTIMESTAMP型のカラムが存在する場合のみ
+		使用できます。
 	@par
 		ロウキーとコンテナの状態を基に、ロウを新規作成するか更新するかを決定します。
 		この際、対応するロウがコンテナ内に存在しない場合は新規作成、
@@ -10747,7 +11031,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRowByLong(
 		@ref GS_FALSE が格納されます。
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
-		- ロウキーに対応するTIMESTAMP型のカラムが存在しない場合
+		- ロウキーに対応する通常精度のTIMESTAMP型のカラムが存在しない場合
 		- 特定コンテナ固有の制限に反する操作を行った場合
 		- この処理またはトランザクションのタイムアウト、
 			指定のコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
@@ -10824,6 +11108,68 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRowByLong(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRowByTimestamp(
 		GSContainer *container, GSTimestamp key, const void *rowObj,
 		GSBool *exists);
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSContainer
+	@brief 高精度のTIMESTAMP型のロウキーを指定して、ロウを新規作成または
+		更新します。
+	@par
+		ロウキーに対応する高精度のTIMESTAMP型のカラムが存在する場合のみ
+		使用できます。
+	@par
+		ロウキーとコンテナの状態を基に、ロウを新規作成するか更新するかを決定します。
+		この際、対応するロウがコンテナ内に存在しない場合は新規作成、
+		存在する場合は更新します。ロウオブジェクト内のロウキーは無視されます。
+	@par
+		ただし、コンテナの種別ならびに設定によっては、制限が設けられています。
+		指定のコンテナが時系列であり、圧縮オプションが設定されている場合、
+		以下の操作のみを条件付きで行うことができます。
+		- 新規作成
+			- 最も新しい時刻を持つ既存ロウより新しい時刻のロウを指定した場合のみ
+		- 既存ロウの内容の保持
+			- 最も新しい時刻を持つ既存ロウの時刻が指定の時刻と一致する場合のみ
+	@par
+		手動コミットモードの場合、対象のロウはロックされます。
+	@attention
+		指定の@ref GSContainer にバインドされたロウオブジェクトの型と
+		指定のロウオブジェクトの型とが一致しない場合、この処理の動作は未定義です。
+		アクセス違反により実行プロセスが異常終了する可能性があります。
+	@param [in] container
+		処理対象の@ref GSContainer
+	@param [in] key
+		処理対象のロウキー
+	@param [in] rowObj
+		新規作成または更新するロウの内容と対応するロウオブジェクト
+	@param [out] exists
+		処理対象のロウが存在したかどうかを格納するためのブール型変数へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@ref GS_FALSE が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- ロウキーに対応する高精度のTIMESTAMP型のカラムが存在しない場合
+		- 特定コンテナ固有の制限に反する操作を行った場合
+		- この処理またはトランザクションのタイムアウト、
+			指定のコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
+		- サポート範囲外の値がキーまたはロウオブジェクトに含まれていた場合
+		- @c exists 以外の引数に@c NULL が指定された場合。
+			また、指定のロウオブジェクト内のフィールドについて、
+			文字列など可変長サイズのデータへのポインタ値に
+			@c NULL が含まれていた場合
+	@see gsPutRow
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSContainer
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRowByPreciseTimestamp(
+		GSContainer *container, const GSPreciseTimestamp *key,
+		const void *rowObj, GSBool *exists);
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
 
 /*!
 	@JP
@@ -11049,10 +11395,10 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByLong(
 /*!
 	@JP
 	@ingroup Group_GSContainer
-	@brief TIMESTAMP型のロウキーに対応するロウを削除します。
+	@brief 通常精度のTIMESTAMP型のロウキーに対応するロウを削除します。
 	@par
-		ロウキーに対応するTIMESTAMP型のカラムが存在する場合のみ使用できます。
-		対応するロウが存在しない場合は何も変更しません。
+		ロウキーに対応する通常精度のTIMESTAMP型のカラムが存在する場合のみ
+		使用できます。対応するロウが存在しない場合は何も変更しません。
 	@par
 		ただし、コンテナの種別ならびに設定によっては、制限が設けられています。
 		圧縮オプションが設定された状態の時系列に対しては使用できません。
@@ -11068,7 +11414,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByLong(
 		@ref GS_FALSE が格納されます。
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
-		- ロウキーに対応するTIMESTAMP型のカラムが存在しない場合
+		- ロウキーに対応する通常精度のTIMESTAMP型のカラムが存在しない場合
 		- 特定コンテナ固有の制限に反する操作を行った場合
 		- この処理またはトランザクションのタイムアウト、
 			指定のコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
@@ -11114,6 +11460,47 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByLong(
  */
 GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByTimestamp(
 		GSContainer *container, GSTimestamp key, GSBool *exists);
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSContainer
+	@brief 高精度のTIMESTAMP型のロウキーに対応するロウを削除します。
+	@par
+		ロウキーに対応する高精度のTIMESTAMP型のカラムが存在する場合のみ
+		使用できます。対応するロウが存在しない場合は何も変更しません。
+	@par
+		ただし、コンテナの種別ならびに設定によっては、制限が設けられています。
+		圧縮オプションが設定された状態の時系列に対しては使用できません。
+	@par
+		手動コミットモードの場合、対象のロウはロックされます。
+	@param [in] container
+		処理対象の@ref GSContainer
+	@param [in] key
+		処理対象のロウキー
+	@param [out] exists
+		処理対象のロウが存在したかどうかを格納するためのブール型変数へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@ref GS_FALSE が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- ロウキーに対応する高精度のTIMESTAMP型のカラムが存在しない場合
+		- 特定コンテナ固有の制限に反する操作を行った場合
+		- この処理またはトランザクションのタイムアウト、
+			指定のコンテナの削除もしくはスキーマ変更、接続障害が発生した場合
+		- サポート範囲外の値がキーとして指定された場合
+	@see gsDeleteRow
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSContainer
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByPreciseTimestamp(
+		GSContainer *container, const GSPreciseTimestamp *key, GSBool *exists);
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
 
 /*!
 	@JP
@@ -13268,7 +13655,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldAsDouble(
 /*!
 	@JP
 	@ingroup Group_GSRow
-	@brief 指定のTIMESTAMP型フィールドに値を設定します。
+	@brief 指定の通常精度のTIMESTAMP型フィールドに値を設定します。
 	@param [in] row
 		処理対象の@ref GSRow
 	@param [in] column
@@ -13278,7 +13665,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldAsDouble(
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- ポインタ型引数に@c NULL が指定された場合
 		- 範囲外のカラム番号が指定された場合
-		- 指定のカラム番号の型と一致しない場合
+		- 指定のカラム番号の型・精度種別と一致しない場合
 	@since 1.5
 
 	@EN
@@ -13307,7 +13694,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByTimestamp(
 /*!
 	@JP
 	@ingroup Group_GSRow
-	@brief 指定のTIMESTAMP型フィールドの値を取得します。
+	@brief 指定の通常精度のTIMESTAMP型フィールドの値を取得します。
 	@param [in] row
 		処理対象の@ref GSRow
 	@param [in] column
@@ -13320,6 +13707,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByTimestamp(
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- ポインタ型引数に@c NULL が指定された場合
 		- 範囲外のカラム番号が指定された場合
+		- 指定のカラム番号の型・精度種別と一致しない場合
 	@since 1.5
 
 	@EN
@@ -13345,6 +13733,61 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByTimestamp(
  */
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldAsTimestamp(
 		GSRow *row, int32_t column, GSTimestamp *fieldValue);
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSRow
+	@brief 指定の高精度のTIMESTAMP型フィールドに値を設定します。
+	@param [in] row
+		処理対象の@ref GSRow
+	@param [in] column
+		対象フィールドのカラム番号。@c 0 以上かつカラム数未満の値
+	@param [in] fieldValue
+		対象フィールドの値
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- ポインタ型引数に@c NULL が指定された場合
+		- 範囲外のカラム番号が指定された場合
+		- 指定のカラム番号の型・精度種別と一致しない場合
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSRow
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByPreciseTimestamp(
+		GSRow *row, int32_t column, const GSPreciseTimestamp *fieldValue);
+
+/*!
+	@JP
+	@ingroup Group_GSRow
+	@brief 指定の高精度のTIMESTAMP型フィールドの値を取得します。
+	@param [in] row
+		処理対象の@ref GSRow
+	@param [in] column
+		対象フィールドのカラム番号。@c 0 以上かつカラム数未満の値
+	@param [out] fieldValue
+		対象フィールドの値を格納するための変数へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@c NULL が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- ポインタ型引数に@c NULL が指定された場合
+		- 範囲外のカラム番号が指定された場合
+		- 指定のカラム番号の型・精度種別と一致しない場合
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSRow
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldAsPreciseTimestamp(
+		GSRow *row, int32_t column, GSPreciseTimestamp *fieldValue);
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
 
 /*!
 	@JP
@@ -15166,6 +15609,46 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetNextQueryAnalysis(
  */
 GS_DLL_PUBLIC GSRowSetType GS_API_CALL gsGetRowSetType(GSRowSet *rowSet);
 
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSRowSet
+	@brief このロウ集合に対応するスキーマを取得します。
+	@par
+		ロウキーの有無を含むカラムレイアウトにする情報のみが設定された
+		@ref GSContainerInfo が求まります。
+		コンテナ名、コンテナ種別、索引設定、時系列構成オプションなどその他の
+		コンテナ情報は含まれません。
+	@par
+		このロウ集合の種別が@ref GS_ROW_SET_AGGREGATION_RESULT であり、
+		かつ、1件もロウを含まない場合、現バージョンではスキーマを取得しません。
+	@param [in] rowSet
+		処理対象の@ref GSRowSet
+	@param [out] schemaInfo
+		スキーマ情報を格納するための@ref GSContainerInfo へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@ref GS_CONTAINER_INFO_INITIALIZER
+		と同一の内容の初期値が格納されます。
+	@param [out] exists
+		取得可能なスキーマが存在したかどうかを格納するための、ブール型変数への
+		ポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@ref GS_FALSE が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- @c exists 引数に@c NULL が指定された場合
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSRowSet
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowSetSchema(
+		GSRowSet *rowSet, GSContainerInfo *schemaInfo, GSBool *exists);
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
+
 /*!
 	@JP
 	@ingroup Group_GSRowSet
@@ -15502,10 +15985,13 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsDouble(
 /*!
 	@JP
 	@ingroup Group_GSAggregationResult
-	@brief 時刻型の集計値をTIMESTAMP型(@ref GSTimestamp)で取得します。
+	@brief 時刻型の集計値を通常精度のTIMESTAMP型(@ref GSTimestamp)で取得します。
 	@par
 		TIMESTAMP型以外の値を保持している場合、@c assigned 引数には
 		@ref GS_FALSE が格納されます。
+	@par
+		通常精度のTIMESTAMP値を保持している場合、高精度の値に変換したものが
+		求まります。
 	@param [in] aggregationResult
 		取得対象の@ref GSAggregationResult
 	@param [out] value
@@ -15542,6 +16028,41 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsDouble(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsTimestamp(
 		GSAggregationResult *aggregationResult, GSTimestamp *value,
 		GSBool *assigned);
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSAggregationResult
+	@brief 時刻型の集計値を高精度のTIMESTAMP型(@ref GSPreciseTimestamp)で
+		取得します。
+	@par
+		TIMESTAMP型以外の値を保持している場合、@c assigned 引数には
+		@ref GS_FALSE が格納されます。
+	@par
+		高精度のTIMESTAMP値を保持している場合、通常精度の値に変換したものが
+		求まります。
+	@param [in] aggregationResult
+		取得対象の@ref GSAggregationResult
+	@param [out] value
+		集計値を格納するための変数へのポインタ値
+	@param [out] assigned
+		期待の型の値を取得できたかどうかを格納するための変数へのポインタ値。
+		@c NULL が指定された場合、取得できたかどうかの情報は格納されません
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を
+		返します。
+		- @c assigned 以外の引数に@c NULL が指定された場合
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSAggregationResult
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsPreciseTimestamp(
+		GSAggregationResult *aggregationResult, GSPreciseTimestamp *value,
+		GSBool *assigned);
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
 
 #endif // GS_COMPATIBILITY_SUPPORT_3_5
 
@@ -15943,7 +16464,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsLong(
 /*!
 	@JP
 	@ingroup Group_GSRowKeyPredicate
-	@brief 範囲条件の開始位置とするTIMESTAMP型ロウキーの値を取得します。
+	@brief 範囲条件の開始位置とする通常精度のTIMESTAMP型ロウキーの値を取得
+		します。
 	@attention
 		値を格納する領域を確保するために、指定の@ref GSRowKeyPredicate
 		と関係する@ref GSGridStore インスタンス上で管理される一時的なメモリ領域を
@@ -15961,7 +16483,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsLong(
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- 引数に@c NULL が指定された場合
-		- 期待した型が合致条件の評価対象とするロウキーの型と異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる場合
 	@since 1.5
 
 	@EN
@@ -15997,6 +16519,42 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsLong(
  */
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp **startKey);
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSRowKeyPredicate
+	@brief 範囲条件の開始位置とする高精度のTIMESTAMP型ロウキーの値を取得
+		します。
+	@attention
+		値を格納する領域を確保するために、指定の@ref GSRowKeyPredicate
+		と関係する@ref GSGridStore インスタンス上で管理される一時的なメモリ領域を
+		使用する場合があります。
+		この領域は、指定の@ref GSGridStore もしくはその関連リソースに対し、
+		この関数もしくは同様に一時的なメモリ領域を使用する関数が再び実行されるまで
+		有効です。 無効になった領域にアクセスしようとした場合の動作は未定義です。
+	@param [in] predicate
+		処理対象の@ref GSRowKeyPredicate
+	@param [out] startKey
+		開始位置とするロウキーの値を格納するための変数へのポインタ値。
+		開始位置が設定されていない場合は@c NULL が格納されます。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@c NULL が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 引数に@c NULL が指定された場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる場合
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSRowKeyPredicate
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsPreciseTimestamp(
+		GSRowKeyPredicate *predicate, const GSPreciseTimestamp **startKey);
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
 
 #if GS_COMPATIBILITY_SUPPORT_4_3
 
@@ -16276,7 +16834,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsLong(
 /*!
 	@JP
 	@ingroup Group_GSRowKeyPredicate
-	@brief 範囲条件の終了位置とするTIMESTAMP型ロウキーの値を取得します。
+	@brief 範囲条件の終了位置とする通常精度のTIMESTAMP型ロウキーの値を取得
+		します。
 	@attention
 		値を格納する領域を確保するために、指定の@ref GSRowKeyPredicate
 		と関係する@ref GSGridStore インスタンス上で管理される一時的なメモリ領域を
@@ -16294,7 +16853,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsLong(
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- 引数に@c NULL が指定された場合
-		- 期待した型が合致条件の評価対象とするロウキーの型と異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる場合
 	@since 1.5
 
 	@EN
@@ -16330,6 +16889,43 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsLong(
  */
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp **finishKey);
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSRowKeyPredicate
+	@brief 範囲条件の終了位置とする高精度のTIMESTAMP型ロウキーの値を取得
+		します。
+	@attention
+		値を格納する領域を確保するために、指定の@ref GSRowKeyPredicate
+		と関係する@ref GSGridStore インスタンス上で管理される一時的なメモリ領域を
+		使用する場合があります。
+		この領域は、指定の@ref GSGridStore もしくはその関連リソースに対し、
+		この関数もしくは同様に一時的なメモリ領域を使用する関数が再び実行されるまで
+		有効です。 無効になった領域にアクセスしようとした場合の動作は未定義です。
+	@param [in] predicate
+		処理対象の@ref GSRowKeyPredicate
+	@param [out] finishKey
+		終了位置とするロウキーの値を格納するための変数へのポインタ値。
+		終了位置が設定されていない場合は@c NULL が格納されます。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@c NULL が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 引数に@c NULL が指定された場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる場合
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSRowKeyPredicate
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsPreciseTimestamp(
+		GSRowKeyPredicate *predicate, const GSPreciseTimestamp **finishKey);
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
+
 
 #if GS_COMPATIBILITY_SUPPORT_4_3
 
@@ -16694,7 +17290,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsLong(
 /*!
 	@JP
 	@ingroup Group_GSRowKeyPredicate
-	@brief 個別条件を構成するTIMESTAMP型ロウキーの値の集合を取得します。
+	@brief 個別条件を構成する通常精度のTIMESTAMP型ロウキーの値の集合を取得
+		します。
 	@attention
 		値ならびにその列を格納する領域を確保するために、指定の
 		@ref GSRowKeyPredicate と関係する@ref GSGridStore インスタンス上で
@@ -16718,7 +17315,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsLong(
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- 引数に@c NULL が指定された場合
-		- 期待した型が合致条件の評価対象とするロウキーの型と異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
 	@since 1.5
 
 	@EN
@@ -16763,6 +17360,49 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsLong(
 GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsTimestamp(
 		GSRowKeyPredicate *predicate,
 		const GSTimestamp **keyList, size_t *size);
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSRowKeyPredicate
+	@brief 個別条件を構成する高精度のTIMESTAMP型ロウキーの値の集合を取得
+		します。
+	@attention
+		値ならびにその列を格納する領域を確保するために、指定の
+		@ref GSRowKeyPredicate と関係する@ref GSGridStore インスタンス上で
+		管理される一時的なメモリ領域を使用する場合があります。
+		この領域は、指定の@ref GSGridStore もしくはその関連リソースに対し、
+		この関数もしくは同様に一時的なメモリ領域を使用する関数が再び実行されるまで
+		有効です。 無効になった領域にアクセスしようとした場合の動作は未定義です。
+	@param [in] predicate
+		処理対象の@ref GSRowKeyPredicate
+	@param [out] keyList
+		個別条件を構成するロウキーの値の集合を構成する配列のアドレスを
+		格納するための変数へのポインタ値。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@c NULL が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@param [out] size
+		個別条件を構成するロウキーの値の集合の要素数を格納するための変数への
+		ポインタ値。個別条件が設定されていない場合は@c 0 が格納されます。
+		実行結果として@ref GS_RESULT_OK 以外が返される場合、
+		@c 0 が格納されます。
+		ポインタ値が@c NULL の場合、この格納処理が省略されます。
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- 引数に@c NULL が指定された場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSRowKeyPredicate
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsPreciseTimestamp(
+		GSRowKeyPredicate *predicate,
+		const GSPreciseTimestamp **keyList, size_t *size);
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
 
 #if GS_COMPATIBILITY_SUPPORT_4_3
 
@@ -17022,7 +17662,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByLong(
 /*!
 	@JP
 	@ingroup Group_GSRowKeyPredicate
-	@brief 範囲条件の開始位置とするTIMESTAMP型ロウキーの値を設定します。
+	@brief 範囲条件の開始位置とする通常精度のTIMESTAMP型ロウキーの値を設定
+		します。
 	@par
 		設定された値より小さな値のロウキーは合致しないものとみなされるようになります。
 	@par
@@ -17035,7 +17676,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByLong(
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- @c predicate 引数に@c NULL が指定された場合
 		- 個別条件がすでに設定されていた場合
-		- 期待した型が合致条件の評価対象とするロウキーの型と異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
 	@since 1.5
 
 	@EN
@@ -17065,6 +17706,37 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByLong(
  */
 GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp *startKey);
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSRowKeyPredicate
+	@brief 範囲条件の開始位置とする高精度のTIMESTAMP型ロウキーの値を設定
+		します。
+	@par
+		設定された値より小さな値のロウキーは合致しないものとみなされるようになります。
+	@par
+		STRING型のように大小関係の定義されていない型の場合、
+		条件として設定はできるものの、実際の判定に用いることはできません。
+	@param [in] predicate
+		処理対象の@ref GSRowKeyPredicate
+	@param [in] startKey
+		開始位置とするロウキーの値。@c NULL の場合、設定が解除されます
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- @c predicate 引数に@c NULL が指定された場合
+		- 個別条件がすでに設定されていた場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSRowKeyPredicate
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByPreciseTimestamp(
+		GSRowKeyPredicate *predicate, const GSPreciseTimestamp *startKey);
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
 
 #if GS_COMPATIBILITY_SUPPORT_4_3
 
@@ -17323,7 +17995,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByLong(
 /*!
 	@JP
 	@ingroup Group_GSRowKeyPredicate
-	@brief 範囲条件の終了位置とするTIMESTAMP型ロウキーの値を設定します。
+	@brief 範囲条件の終了位置とする通常精度のTIMESTAMP型ロウキーの値を設定
+		します。
 	@par
 		設定された値より大きな値のロウキーは合致しないものとみなされるようになります。
 	@par
@@ -17336,7 +18009,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByLong(
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- @c predicate 引数に@c NULL が指定された場合
 		- 個別条件がすでに設定されていた場合
-		- 期待した型が合致条件の評価対象とするロウキーの型と異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
 	@since 1.5
 
 	@EN
@@ -17366,6 +18039,37 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByLong(
  */
 GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByTimestamp(
 		GSRowKeyPredicate *predicate, const GSTimestamp *finishKey);
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSRowKeyPredicate
+	@brief 範囲条件の終了位置とする高精度のTIMESTAMP型ロウキーの値を設定
+		します。
+	@par
+		設定された値より大きな値のロウキーは合致しないものとみなされるようになります。
+	@par
+		STRING型のように大小関係の定義されていない型の場合、
+		条件として設定はできるものの、実際の判定に用いることはできません。
+	@param [in] predicate
+		処理対象の@ref GSRowKeyPredicate
+	@param [in] finishKey
+		終了位置とするロウキーの値。@c NULL の場合、設定が解除されます
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- @c predicate 引数に@c NULL が指定された場合
+		- 個別条件がすでに設定されていた場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSRowKeyPredicate
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByPreciseTimestamp(
+		GSRowKeyPredicate *predicate, const GSPreciseTimestamp *finishKey);
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
 
 #if GS_COMPATIBILITY_SUPPORT_4_3
 
@@ -17600,7 +18304,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByLong(
 /*!
 	@JP
 	@ingroup Group_GSRowKeyPredicate
-	@brief 個別条件の要素の一つとするTIMESTAMP型ロウキーの値を追加します。
+	@brief 個別条件の要素の一つとする通常精度のTIMESTAMP型ロウキーの値を追加
+		します。
 	@par
 		追加された値と同一の値のロウキーは合致するものとみなされるようになります。
 	@param [in] predicate
@@ -17611,7 +18316,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByLong(
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- ポインタ型引数に@c NULL が指定された場合
 		- 個別条件がすでに設定されていた場合
-		- 期待した型が合致条件の評価対象とするロウキーの型と異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
 	@since 1.5
 
 	@EN
@@ -17640,6 +18345,35 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByLong(
  */
 GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByTimestamp(
 		GSRowKeyPredicate *predicate, GSTimestamp key);
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSRowKeyPredicate
+	@brief 個別条件の要素の一つとする高精度のTIMESTAMP型ロウキーの値を追加
+		します。
+	@par
+		追加された値と同一の値のロウキーは合致するものとみなされるようになります。
+	@param [in] predicate
+		処理対象の@ref GSRowKeyPredicate
+	@param [in] key
+		個別条件の要素の一つとするロウキーの値
+		終了位置とするロウキーの値。@c NULL の場合、設定が解除されます
+	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
+		- ポインタ型引数に@c NULL が指定された場合
+		- 個別条件がすでに設定されていた場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSRowKeyPredicate
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByPreciseTimestamp(
+		GSRowKeyPredicate *predicate, const GSPreciseTimestamp *key);
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
 
 #endif // GS_COMPATIBILITY_SUPPORT_1_5
 
@@ -18801,6 +19535,46 @@ GS_DLL_PUBLIC size_t GS_API_CALL gsFormatZonedTime(
 		GSTimestamp timestamp, GSChar *strBuf, size_t bufSize,
 		const GSTimeZone *zone);
 
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief 指定のオプション設定を用い、高精度のTIMESTAMP値表記に従って時刻の
+		文字列表現を求めます。
+	@param [in] timestamp
+		対象とする時刻
+	@param [out] strBuf
+		出力先の文字列バッファ。
+		@c bufSize を超えない範囲で終端文字を含む文字列を出力します。
+		@c bufSize が@c 1 以上であり、出力に必要とするサイズに満たない場合、
+		終端文字をバッファ範囲内の最終位置に設定し、残りの領域に可能な限り
+		文字列を出力します。
+		@c strBuf が @c NULL または@c bufSize が@c 0 の場合、文字列は出力
+		されません。
+	@param [in] bufSize
+		出力先の文字列バッファについての、終端文字を含んだバイト単位のサイズ
+	@param [in] option
+		オプション設定情報へのポインタ値。
+		@c NULL の場合は@ref gsFormatTime と同様に振る舞います。
+		タイムゾーンが指定された場合、指定のタイムゾーン設定を用います。
+	@return 終端文字を含んだ、出力に必要とする文字列バッファのバイト単位の
+		最低サイズ。ただし次の場合は、空文字列のサイズに相当する@c 1 。
+		- サポート範囲外の時刻が指定された場合
+		- 初期化誤りなど正しくないタイムゾーン情報が指定されたことを検知した場合
+	@see GS_TIME_STRING_SIZE_MAX
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC size_t GS_API_CALL gsFormatPreciseTime(
+		const GSPreciseTimestamp *timestamp, GSChar *strBuf, size_t bufSize,
+		const GSTimestampFormatOption *option);
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
+
 #endif // GS_COMPATIBILITY_SUPPORT_4_3
 
 /*!
@@ -18846,6 +19620,40 @@ GS_DLL_PUBLIC size_t GS_API_CALL gsFormatZonedTime(
  */
 GS_DLL_PUBLIC GSBool GS_API_CALL gsParseTime(
 		const GSChar *str, GSTimestamp *timestamp);
+
+#if GS_COMPATIBILITY_SUPPORT_5_3
+/*!
+	@JP
+	@ingroup Group_GSTimestamp
+	@brief 通常精度もしくは高精度のTIMESTAMP値表記に従い、指定の文字列に対応する
+		@ref GSPreciseTimestamp 値を求めます。
+	@par
+		TIMESTAMP値表記に含まれるタイムゾーン設定を使用します。
+	@param [in] str
+		対象とする時刻を表す文字列
+	@param [out] timestamp
+		変換した値を格納するための変数へのポインタ値。
+		戻り値が@ref GS_FALSE となる場合、このポインタ値が@c NULL ではない限り
+		@c -1 が格納されます。
+	@param [in] option
+		オプション設定情報へのポインタ値。現バージョンでは、使用されません。
+	@return @ref GSTimestamp 値への変換に成功し結果を格納できたかどうか。
+		次の場合、@ref GS_FALSE を返します。
+		- 時刻の文字列表記と一致しない文字列が指定された場合
+		- サポート範囲外の時刻が指定された場合
+		- 引数に@c NULL が指定された場合
+	@since 5.3
+
+	@EN
+	@ingroup Group_GSTimestamp
+	@since 5.3
+
+	@ENDL
+*/
+GS_DLL_PUBLIC GSBool GS_API_CALL gsParsePreciseTime(
+		const GSChar *str, GSPreciseTimestamp *timestamp,
+		const GSTimestampFormatOption *option);
+#endif // GS_COMPATIBILITY_SUPPORT_5_3
 
 #if GS_COMPATIBILITY_SUPPORT_4_3
 

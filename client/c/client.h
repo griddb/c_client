@@ -325,13 +325,39 @@ private:
 
 class TimestampUtils {
 public:
+	struct RawMicroTimestamp;
+	struct RawNanoTimestamp;
+
 	static GSTimestamp current();
+
+	static GSPreciseTimestamp getInitialPreciseTimestamp();
+
+	static GSTimestamp getComponents(
+			const GSPreciseTimestamp &timestamp, uint32_t *nanoSeconds);
+	static GSPreciseTimestamp compose(
+			GSTimestamp timestamp, uint32_t nanoSeconds);
+
+	static RawMicroTimestamp microTimestampToRaw(const GSPreciseTimestamp &src);
+	static GSPreciseTimestamp rawToMicroTimestamp(const RawMicroTimestamp &src);
+
+	static RawNanoTimestamp nanoTimestampToRaw(const GSPreciseTimestamp &src);
+	static GSPreciseTimestamp rawToNanoTimestamp(const RawNanoTimestamp &src);
 
 	static int64_t getField(
 			GSTimestamp timestamp, GSTimeUnit timeUnit,
 			const GSTimeZone *zone);
+	static int64_t getField(
+			const GSPreciseTimestamp &timestamp, GSTimeUnit timeUnit,
+			const GSTimeZone *zone);
+
 	static void setField(
 			GSTimestamp &timestamp, int64_t amount, GSTimeUnit timeUnit,
+			const GSTimeZone *zone);
+	static void setField(
+			GSPreciseTimestamp &timestamp, int64_t amount, GSTimeUnit timeUnit,
+			const GSTimeZone *zone);
+	static void setField(
+			util::PreciseDateTime &dateTime, int64_t amount, GSTimeUnit timeUnit,
 			const GSTimeZone *zone);
 
 	static GSTimestamp add(
@@ -344,7 +370,12 @@ public:
 	static size_t format(
 			GSTimestamp timestamp, GSChar *strBuf, size_t bufSize,
 			const GSTimeZone *zone);
+	static size_t format(
+			const GSPreciseTimestamp &timestamp, GSChar *strBuf, size_t bufSize,
+			const GSTimeZone *zone);
+
 	static bool parse(const GSChar *str, GSTimestamp &timestamp);
+	static bool parse(const GSChar *str, GSPreciseTimestamp &timestamp);
 
 	static int64_t getZoneOffset(
 			const GSTimeZone &zone, GSTimeUnit timeUnit);
@@ -360,12 +391,20 @@ public:
 	static size_t format(
 			GSTimestamp timestamp, GSChar *strBuf, size_t bufSize);
 
+	static int32_t compare(
+			const GSPreciseTimestamp &ts1, const GSPreciseTimestamp &ts2);
+
 private:
 	struct ZonedOptionSource {
 		util::DateTime::FieldData fields_;
 	};
 
 	TimestampUtils();
+
+	static util::PreciseDateTime toDateTime(
+			const GSPreciseTimestamp &timestamp);
+	static GSPreciseTimestamp toTimestamp(
+			const util::PreciseDateTime &dateTime);
 
 	static util::DateTime::FieldType resolveFieldType(GSTimeUnit timeUnit);
 
@@ -380,6 +419,45 @@ private:
 
 	static util::TimeZone resolveZone(const GSTimeZone &zone);
 	static util::TimeZone resolveZone(const int64_t &offsetMillis);
+};
+
+struct TimestampUtils::RawMicroTimestamp {
+	int64_t value_;
+};
+
+struct TimestampUtils::RawNanoTimestamp {
+	typedef uint8_t Low;
+
+	struct High {
+		uint8_t value_[8];
+	};
+
+	union LocalHigh {
+		High high_;
+		int64_t longValue_;
+	};
+
+	static const int64_t HIGH_MICRO_UNIT = 4;
+
+	void assign(int64_t high, uint8_t low) {
+		LocalHigh local;
+		local.longValue_ = high;
+		high_ = local.high_;
+		low_ = low;
+	}
+
+	int64_t getHigh() const {
+		LocalHigh local;
+		local.high_ = high_;
+		return local.longValue_;
+	}
+
+	uint8_t getLow() const {
+		return low_;
+	}
+
+	High high_;
+	Low low_;
 };
 
 typedef TimestampUtils TimestampUtil;
@@ -635,6 +713,25 @@ public:
 		CATEGORY_AGGREGATION_RESULT
 	};
 
+	enum ElementType {
+		ELEM_TYPE_STRING,
+		ELEM_TYPE_BOOL,
+		ELEM_TYPE_BYTE,
+		ELEM_TYPE_SHORT,
+		ELEM_TYPE_INTEGER,
+		ELEM_TYPE_LONG,
+		ELEM_TYPE_FLOAT,
+		ELEM_TYPE_DOUBLE,
+		ELEM_TYPE_TIMESTAMP,
+		ELEM_TYPE_GEOMETRY,
+		ELEM_TYPE_BLOB,
+		ELEM_TYPE_MICRO_TIMESTAMP,
+		ELEM_TYPE_NANO_TIMESTAMP,
+
+		ELEM_TYPE_END_NORMAL,
+		ELEM_TYPE_ANY_NULL = -1
+	};
+
 	enum KeyCategory {
 		KEY_CATEGORY_NONE,
 		KEY_CATEGORY_SINGLE,
@@ -649,9 +746,14 @@ public:
 		MODE_AGGREGATED
 	};
 
-	static const GSType ANY_NULL_TYPE = GS_TYPE_NULL;
-	static const GSType NULLABLE_MASK =
-			~static_cast<GSType>((1U << (CHAR_BIT - 1)) - 1);
+	enum SchemaFeatureLevel {
+
+		FEATURE_LEVEL1,
+
+		FEATURE_LEVEL2,
+
+		FEATURE_LEVEL_NONE
+	};
 
 	struct TypeOptionMask {
 		static const GSTypeOption MASK_NULLABLE =
@@ -659,9 +761,13 @@ public:
 		static const GSTypeOption MASK_DEFAULT_VALUE =
 				GS_TYPE_OPTION_DEFAULT_VALUE_NULL |
 				GS_TYPE_OPTION_DEFAULT_VALUE_NOT_NULL;
+		static const GSTypeOption MASK_PRECISION =
+				GS_TYPE_OPTION_TIME_MILLI |
+				GS_TYPE_OPTION_TIME_MICRO |
+				GS_TYPE_OPTION_TIME_NANO;
 
 		static const GSTypeOption MASK_GENERAL_SUPPORTED =
-				MASK_NULLABLE | MASK_DEFAULT_VALUE;
+				MASK_NULLABLE | MASK_DEFAULT_VALUE | MASK_PRECISION;
 		static const GSTypeOption MASK_BINDING_SUPPORTED =
 				GS_TYPE_OPTION_KEY | MASK_GENERAL_SUPPORTED;
 	};
@@ -670,22 +776,29 @@ public:
 	struct RowTool;
 	struct GeneralRowHolder;
 	struct Config;
+
+	class DetailElementType;
+	class Entry;
+
 	class InputCursor;
 	class OutputCursor;
 	class VarDataPool;
 	class Cache;
 	class Reference;
+	class MovableReference;
 
-	template<GSType ElemType, bool ArrayType> struct ObjectTypeTraits;
-	template<GSType ElemType, bool ArrayType> struct TypeTraits;
+	template<ElementType ElemType, bool ArrayType> struct ObjectTypeTraits;
+	template<ElementType ElemType, bool ArrayType> struct TypeTraits;
 
 	template<bool A>
-	struct ObjectTypeTraits<ANY_NULL_TYPE, A> {
+	struct ObjectTypeTraits<ELEM_TYPE_ANY_NULL, A> {
+		typedef GSValue Field;
 		typedef GSValue Object;
+		static const GSType FULL_FIELD_TYPE = GS_TYPE_NULL;
 		static Object& as(GSValue &v) { return v; }
 		static const Object& as(const GSValue &v) { return v; }
 	};
-	typedef TypeTraits<ANY_NULL_TYPE, false> AnyNullTraits;
+	typedef TypeTraits<ELEM_TYPE_ANY_NULL, false> AnyNullTraits;
 
 	template<int> struct BindingEntryTraits;
 	template<int> struct ColumnInfoTraits;
@@ -693,16 +806,26 @@ public:
 	class BindingRef;
 	template<bool Const = false> class ContainerInfoRef;
 
+	class BindingCursor;
+	class ObjectBindingCursor;
+	class StreamBindingCursor;
+	class SchemaBindingCursor;
+	class MapperBindingCursor;
+	class ReorderedBindingCursor;
+
+	class BindingBuilder;
+	class ObjectBindingBuilder;
+	class SchemaBindingBuilder;
+
 public:
 	RowMapper(
-			RowTypeCategory rowTypeCategory, const GSBinding *binding,
+			RowTypeCategory category, const GSBinding *binding,
 			const Config &config);
 	RowMapper(
 			const RowMapper &srcMapper, ArrayByteInStream &schemaIn,
 			const Config &config, bool columnOrderIgnorable);
-	~RowMapper();
 
-	static std::unique_ptr<RowMapper> getInstance(
+	static UTIL_UNIQUE_PTR<RowMapper> getInstance(
 			ArrayByteInStream &in, const Config &config,
 			RowTypeCategory category);
 
@@ -715,18 +838,13 @@ public:
 	void checkKeySchemaMatched(const RowMapper &mapper) const;
 
 	bool matches(
-			RowTypeCategory rowTypeCategory, const GSBinding *binding,
-			bool general, const Config &config) const;
-	bool matches(
-			const RowMapper &baseMapper, ArrayByteInStream schemaIn,
-			const Config &config) const;
+			BindingCursor &cursor, bool schemaOnly, bool schemaFull,
+			bool throwOnUnmatch) const;
+	bool matchBindingHead(
+			RowTypeCategory category, bool general, bool nullableAllowed,
+			bool throwOnUnmatch) const;
 
-	static size_t getDigest(
-			RowTypeCategory rowTypeCategory, const GSBinding *binding,
-			bool general, bool nullableAllowed);
-	static size_t getDigest(
-			const RowMapper &baseMapper, ArrayByteInStream schemaIn,
-			const Config &config);
+	static size_t getDigest(BindingCursor &cursor);
 
 	GSContainerType getContainerType() const;
 
@@ -736,17 +854,19 @@ public:
 	void getKeyContainerSchema(
 			ContainerInfoRef<> &containerInfoRef,
 			VarDataPool &varDataPool) const;
+	void peekNextRowSchema(
+			InputCursor &cursor,
+			UTIL_UNIQUE_PTR<RowMapper> &schemaMapper) const;
 
 	static GSColumnInfo getColumnSchema(
-			const GSBindingEntry &entry, VarDataPool *varDataPool);
+			const Entry &entry, VarDataPool &varDataPool);
 
 	RowTypeCategory getCategory() const;
 	bool isGeneral() const;
 	bool isNullableAllowed() const;
 
-	const GSBinding& getBinding() const;
-	const GSBinding& getKeyBinding() const;
-	const GSBinding* findKeyBinding() const;
+	size_t getEntryCount() const;
+	const Entry& getEntry(size_t columnId) const;
 
 	bool hasKey() const;
 	KeyCategory getKeyCategory() const;
@@ -755,6 +875,10 @@ public:
 	bool isArray(int32_t columnId) const;
 	bool hasAnyTypeColumn() const;
 	bool isDefaultValueSpecified() const;
+
+	SchemaFeatureLevel getFeatureLevel() const;
+	static SchemaFeatureLevel mergeFeatureLevel(
+			SchemaFeatureLevel level1, SchemaFeatureLevel level2);
 
 	static GSBinding importSchema(
 			ArrayByteInStream &in, VarDataPool *varDataPool,
@@ -774,24 +898,24 @@ public:
 			std::vector<int32_t> &keyColumnList);
 	static void importKeyListEnd(
 			ArrayByteInStream &in, const Config &config, size_t columnCount,
-			std::vector<int32_t> &keyColumnList);
+			std::vector<int32_t> &keyColumnList,
+			std::vector<GSColumnInfo> *columnInfoList);
 
 	static void exportKeyListBegin(
 			XArrayByteOutStream &out, const Config &config,
-			const GSBinding *keyBinding);
+			const RowMapper *keyMapper);
 	static void exportKeyListEnd(
 			XArrayByteOutStream &out, const Config &config,
-			const GSBinding *keyBinding);
+			const RowMapper *keyMapper);
 
 	static GSColumnInfo importColumnSchema(
 			ArrayByteInStream &in, const Config &config,
 			VarDataPool &varDataPool);
 
 	static void exportColumnSchema(
-			XArrayByteOutStream &out, const GSBindingEntry &entry);
-	static void importColumnSchema(
-			ArrayByteInStream &in, const Config &config, GSBindingEntry &entry,
-			std::string *nameStr, VarDataPool *varDataPool);
+			XArrayByteOutStream &out, const Entry &entry);
+	static Entry importColumnSchema(
+			ArrayByteInStream &in, const bool *forKey, const Config &config);
 
 	int32_t resolveColumnId(const GSChar *name) const;
 
@@ -805,8 +929,8 @@ public:
 			bool withEncodedSize, bool withKeyCount) const;
 
 	static void encodeKeyField(
-			XArrayByteOutStream &out, MappingMode mode, GSType keyType,
-			const void *keyObj);
+			XArrayByteOutStream &out, MappingMode mode,
+			const DetailElementType &keyType, const void *keyObj);
 
 	void encodeKeyByObj(
 			XArrayByteOutStream &out, MappingMode mode, const GSType *keyType,
@@ -853,7 +977,8 @@ public:
 	size_t getGeneralRowSize() const;
 	size_t getGeneralRowKeySize() const;
 
-	static void encodeGeometry(XArrayByteOutStream &out, const char8_t *text, MappingMode mode);
+	static void encodeGeometry(
+			XArrayByteOutStream &out, const char8_t *text, MappingMode mode);
 
 	template<typename Alloc>
 	static const GSChar* findEmptyString(Alloc &alloc);
@@ -884,58 +1009,70 @@ public:
 	static bool isArrayColumn(const GSBindingEntry &entry);
 	static bool isKeyColumn(const GSBindingEntry &entry);
 
-	static GSBindingEntry getEntryGeneral(
-			const GSBindingEntry &src, const GSType type);
-
-	static size_t getFieldObjectMainPartSize(
-			GSType elementType, bool arrayUsed);
+	static Entry getEntryGeneral(
+			const Entry &src, const DetailElementType &type);
 
 	template<typename Caller, typename Operator>
 	static void invokeTypedOperation(
-			Caller &caller, Operator &op, const GSBindingEntry &entry);
+			Caller &caller, Operator &op, const Entry &entry);
 
 	template<typename Alloc, typename Mask>
-	static GSValue copyValue(const GSValue &src,
-			GSType elementType, bool arrayUsed, Alloc *alloc, const Mask&);
+	static GSValue copyValue(
+			const GSValue &src, const DetailElementType &type, Alloc *alloc,
+			const Mask&);
 
 	template<typename Traits, typename Alloc, typename Mask, typename T>
-	static GSValue copyValue(const GSValue &src, const Traits&, Alloc*,
-			const Mask&, T);
+	static GSValue copyValue(
+			const GSValue &src, const Traits&, Alloc*, const Mask&, T);
 
 	template<typename Traits, typename Alloc, typename Mask, typename E>
-	static GSValue copyValue(const GSValue &src, const Traits&, Alloc *alloc,
-			const Mask&, const E*);
+	static GSValue copyValue(
+			const GSValue &src, const Traits&, Alloc *alloc, const Mask&,
+			const E*);
 
 	template<typename Traits, typename Alloc, typename Mask>
-	static GSValue copyValue(const GSValue &src, const Traits&, Alloc *alloc,
-			const Mask&, const GSChar *const*);
+	static GSValue copyValue(
+			const GSValue &src, const Traits&, Alloc *alloc, const Mask&,
+			const GSChar *const*);
 
 	template<typename Traits, typename Alloc, typename Mask>
-	static GSValue copyValue(const GSValue &src, const Traits&, Alloc *alloc,
-			const Mask&, GSBlob);
+	static GSValue copyValue(
+			const GSValue &src, const Traits&, Alloc *alloc, const Mask&,
+			GSBlob);
 
 	static GSContainerType checkContainerType(GSContainerType type);
 	static RowTypeCategory containerTypeToCategory(GSContainerType type);
 
 	static bool isKeyType(GSType type);
-
-	static bool isAny(GSType type);
-	static bool isNullable(const GSBindingEntry &entry);
-	static bool isTypeNullable(GSType type);
-	static GSType toNullable(GSType type, bool nullable = true);
-	static GSType toNonNullable(GSType type);
+	static bool isKeyColumn(GSTypeOption options);
 
 	static bool isOptionNullable(GSTypeOption options);
 	static bool isOptionInitialValueNull(GSTypeOption options);
 
+	static GSTypeOption applyKeyOption(GSTypeOption srcOptions, bool forKey);
+	static GSTypeOption applyNullableOption(
+			GSTypeOption srcOptions, bool nullable, bool nullableAllowed,
+			const bool *forKey);
+	static GSTypeOption applyPrecisionOption(
+			GSTypeOption srcOptions, const DetailElementType &type);
+
 	static GSTypeOption filterTypeOptions(
-			const GSBindingEntry &entry,
-			bool anyTypeAllowed, bool nullableAllowed);
+			GSTypeOption srcOptions, const DetailElementType &type,
+			const char8_t *name, const bool *forKey, bool anyTypeAllowed,
+			bool nullableAllowed);
+	static GSTypeOption filterColumnSchemaOptions(
+			GSTypeOption srcOptions, const bool *forKey);
+
+	static GSTypeOption filterKeyOption(
+			GSTypeOption options, const bool *forKey);
 	static GSTypeOption filterNullable(
 			GSTypeOption options, GSTypeOption nullableDefault,
-			bool nullableAllowed, const GSChar *columnName);
+			bool nullableAllowed, bool forKey, const GSChar *columnName);
 	static GSTypeOption filterInitialValueNull(
 			GSTypeOption options, bool nullable,
+			const GSChar *columnName);
+	static GSTypeOption filterPrecision(
+			GSTypeOption options, const DetailElementType &type,
 			const GSChar *columnName);
 
 	static BindingRef toBindingRef(
@@ -951,15 +1088,6 @@ public:
 		static size_t counter_;
 	};
 
-	inline uint32_t getVarColumnCount() const {
-		return varColumnCount_;
-	}
-	inline size_t getNullsByteSize() const {
-		return nullsByteSize_;
-	}
-	inline uint32_t getNullsOffset() const {
-		return nullsOffset_;
-	}
 private:
 	class GeometryEncoderHandler : public GeometryCoder::BinaryHandler {
 	public:
@@ -981,9 +1109,48 @@ private:
 
 	struct BaseCursor;
 
-	struct ColumnIdEntry {
-		std::string name_;
-		int32_t id_;
+	class FieldLayoutBuilder {
+	public:
+		explicit FieldLayoutBuilder(size_t entryCount);
+
+		Entry build(const DetailElementType &type, const Entry &src);
+
+	private:
+		size_t lastOffset_;
+	};
+
+	struct ReferenceHead {
+		explicit ReferenceHead(size_t digest);
+
+		const size_t digest_;
+		size_t refCount_;
+	};
+
+	struct BindingHead {
+		BindingHead(
+				RowTypeCategory category, bool general, bool nullableAllowed);
+
+		RowTypeCategory rowTypeCategory_;
+		bool general_;
+		bool nullableAllowed_;
+	};
+
+	struct ObjectLayout {
+		ObjectLayout();
+
+		uint32_t varColumnCount_;
+		size_t nullsByteSize_;
+		uint32_t nullsOffset_;
+	};
+
+	struct MapperConstants {
+		static const bool ACCEPT_AGGREGATION_RESULT_COLUMN_ID;
+		static const bool RESTRICT_KEY_ORDER_FIRST = true;
+
+		static const Config BASIC_CONFIG;
+		static const Config AGGREGATION_SCHEMA_CONFIG;
+		static const RowMapper AGGREGATION_RESULT_MAPPER;
+		static const RowMapper QUERY_ANALYSIS_MAPPER;
 	};
 
 	enum ColumnFlag {
@@ -991,36 +1158,52 @@ private:
 		COLUMN_FLAG_NOT_NULL = 1 << 2
 	};
 
-	typedef std::map<std::string, ColumnIdEntry> ColumnIdMap;
-
-	static const bool ACCEPT_AGGREGATION_RESULT_COLUMN_ID;
-	static const bool RESTRICT_KEY_ORDER_FIRST;
+	typedef std::map<u8string, uint32_t> ColumnIdMap;
+	typedef std::vector<Entry> EntryList;
+	typedef EntryList::const_iterator EntryIterator;
 
 	static Cache *cache_;
-	static const Config BASIC_CONFIG;
-	static const RowMapper AGGREGATION_RESULT_MAPPER;
-	static const RowMapper QUERY_ANALYSIS_MAPPER;
 
 	RowMapper(
-			size_t digest, RowTypeCategory rowTypeCategory, bool general,
-			bool nullableAllowed);
+			size_t digest, BindingCursor &cursor,
+			UTIL_UNIQUE_PTR<RowMapper> *srcKeyMapper, const Config &config);
 
 	RowMapper(const RowMapper&);
 	RowMapper& operator=(const RowMapper&);
 
-	void clear();
+	template<typename C>
+	static BindingHead setUp(
+			const C &cursor, const Config &config, EntryList &entryList,
+			ColumnIdMap &columnIdMap, UTIL_UNIQUE_PTR<RowMapper> &keyMapper,
+			ObjectLayout &objectLayout);
+	static BindingHead setUpDetail(
+			BindingCursor &cursor, const Config &config, EntryList &entryList,
+			ColumnIdMap &columnIdMap, UTIL_UNIQUE_PTR<RowMapper> *srcKeyMapper,
+			UTIL_UNIQUE_PTR<RowMapper> &keyMapper, ObjectLayout &objectLayout);
 
-	static size_t getDigest(const GSBindingEntry &entry);
+	static bool matchEntryCount(
+			size_t count1, size_t count2, bool throwOnUnmatch);
+	static bool matchBindingHeadDetail(
+			const BindingHead &head1, const BindingHead &head2,
+			bool throwOnUnmatch);
+	static bool matchEntry(
+			const Entry &entry1, const Entry &entry2, bool schemaOnly,
+			bool schemaFull, bool throwOnUnmatch);
+
+	static bool matchEntryType(
+			const Entry &entry1, const Entry &entry2, bool throwOnUnmatch);
+	static bool matchEntryName(
+			const Entry &entry1, const Entry &entry2, bool exact,
+			bool throwOnUnmatch);
+	static bool matchEntryBasicOptions(
+			const Entry &entry1, const Entry &entry2, bool throwOnUnmatch);
+	static bool matchEntryFullOptions(
+			const Entry &entry1, const Entry &entry2, bool throwOnUnmatch);
+
+	static size_t getDigest(const BindingHead &head);
+	static size_t getDigest(const Entry &entry);
+	static size_t getDigest(const DetailElementType &type);
 	static size_t getDigest(const GSChar *str);
-
-	static GSBinding checkAndCopyBinding(
-			const GSBinding *src, bool general, ColumnIdMap &entryIndexMap,
-			RowTypeCategory rowTypeCategory, size_t &compositeKeyOffeset,
-			const Config &config);
-	static GSBinding createReorderedBinding(
-			const RowMapper &baseMapper, ColumnIdMap &entryIndexMap,
-			ArrayByteInStream &in, const Config &config,
-			bool columnOrderIgnorable);
 
 	static size_t checkNestedBindingEntryCount(
 			const GSBinding &binding, const GSBinding *&keyBinding);
@@ -1030,22 +1213,30 @@ private:
 			size_t *upperOffset);
 	static bool isKeyBindingFound(const GSBindingEntry &entry);
 
+	static BindingHead makeEntries(
+			BindingCursor &cursor, const Config &config, EntryList &entryList);
+	static void makeColumnIdMap(
+			const EntryList &entryList, const Config &config,
+			ColumnIdMap &columnIdMap);
+
 	static void makeKeyMapper(
-			const GSBinding &binding, RowTypeCategory rowTypeCategory,
-			size_t compositeKeyOffeset, bool general, const Config &config,
-			std::unique_ptr<RowMapper> &keyMapper);
+			const BindingHead &head, const EntryList &entryList,
+			const Config &config, UTIL_UNIQUE_PTR<RowMapper> *srcKeyMapper,
+			UTIL_UNIQUE_PTR<RowMapper> &keyMapper);
+	static void checkKeyEntries(
+			const BindingHead &head, const EntryList &entryList,
+			const Config &config);
+
+	static ObjectLayout makeObjectLayout(const EntryList &entryList);
 
 	template<GSType T, typename M>
 	static const GSChar *maskNullString(const GSChar *src);
 
-	static void* getField(const GSBindingEntry &entry, void *rowObj);
-	static const void* getField(
-			const GSBindingEntry &entry, const void *rowObj);
+	static void* getField(const Entry &entry, void *rowObj);
+	static const void* getField(const Entry &entry, const void *rowObj);
 
-	static void* getArrayFieldSizeAddr(
-			const GSBindingEntry &entry, void *rowObj);
-	static size_t getArrayFieldSize(
-			const GSBindingEntry &entry, const void *rowObj);
+	static void* getArrayFieldSizeAddr(const Entry &entry, void *rowObj);
+	static size_t getArrayFieldSize(const Entry &entry, const void *rowObj);
 
 	size_t toKeyList(
 			const int32_t *&list, VarDataPool &varDataPool) const;
@@ -1058,8 +1249,6 @@ private:
 	const RowMapper& resolveKeyMapper() const;
 	const RowMapper* findKeyMapper() const;
 
-	const GSBindingEntry& getEntry(int32_t columnId) const;
-
 	bool isNull(const void *rowObj, int32_t columnId) const;
 	void setNull(void *rowObj, int32_t columnId, bool nullValue) const;
 
@@ -1069,24 +1258,51 @@ private:
 	size_t getFixedRowPartSize(bool rowIdIncluded, MappingMode mode) const;
 	size_t getFixedFieldPartSize(int32_t columnId, MappingMode mode) const;
 
+	void peekAggregationSchema(
+			InputCursor &baseCursor,
+			UTIL_UNIQUE_PTR<RowMapper> &schemaMapper) const;
 	void decodeAggregation(InputCursor &cursor, void *rowObj) const;
+	const DetailElementType& decodeAggregationHead(
+			InputCursor &cursor, const Entry *&entry) const;
 
 	static void putArraySizeInfo(
 			XArrayByteOutStream &out, MappingMode mode,
 			size_t elementSize, size_t elementCount);
 
-	void encodeField(OutputCursor &cursor, int32_t columnId,
-			const GSType *keyType, const void *keyObj,
-			const void *rowObj, const GSBindingEntry *generalEntry = NULL) const;
+	void encodeField(
+			OutputCursor &cursor, size_t columnId,
+			const DetailElementType *keyType, const void *keyObj,
+			const void *rowObj, const Entry *generalEntry = NULL) const;
 
 	void decodeField(
-			InputCursor &cursor, int32_t columnId, void *rowObj,
+			InputCursor &cursor, size_t columnId, void *rowObj,
 			void *&pendingVarData, size_t &pendingPtrArraySize,
-			const GSBindingEntry *generalEntry = NULL) const;
+			const Entry *generalEntry = NULL) const;
 
-	template<GSType ElemType, bool ArrayType>
-	void clearField(const GSBindingEntry &entry, void *rowObj) const;
-	void clearFieldGeneral(const GSBindingEntry &entry, void *rowObj) const;
+	template<ElementType ElemType, bool ArrayType>
+	void clearField(const Entry &entry, void *rowObj) const;
+	void clearFieldGeneral(const Entry &entry, void *rowObj) const;
+
+	size_t checkEntryIndex(int32_t columnId) const;
+
+	uint32_t getVarColumnCount() const;
+	size_t getNullsByteSize() const;
+	uint32_t getNullsOffset() const;
+
+	static void putMicroTimestamp(
+			XArrayByteOutStream &out, const GSPreciseTimestamp &ts);
+	static GSPreciseTimestamp getMicroTimestamp(ArrayByteInStream &in);
+	static GSPreciseTimestamp getMicroTimestamp(const GSValue &rawValue);
+
+	static void putNanoTimestamp(
+			OutputCursor &cursor, const GSPreciseTimestamp &ts, bool onAnyData);
+	static GSPreciseTimestamp getNanoTimestamp(
+			InputCursor &cursor, bool onAnyData);
+
+	static void putFixedNanoTimestamp(
+			XArrayByteOutStream &out, const GSPreciseTimestamp &ts);
+	static GSPreciseTimestamp getFixedNanoTimestamp(ArrayByteInStream &in);
+	static GSPreciseTimestamp getFixedNanoTimestamp(const GSValue &rawValue);
 
 	template<typename Alloc>
 	static void deallocateStringArray(
@@ -1098,38 +1314,29 @@ private:
 	void* allocate(VarDataPool *pool, void *rowObj, size_t size) const;
 	void deallocate(VarDataPool *pool, void *rowObj, void *ptr) const;
 
-	void setupAccessInfo();
-
 	template<typename Alloc, typename Mask>
 	struct ValueCopier {
 		ValueCopier(Alloc *alloc, const GSValue &src);
 
 		template<typename Traits>
-		void operator()(GSValue &dest, const GSBindingEntry &entry, const Traits&);
+		void operator()(GSValue &dest, const Entry &entry, const Traits&);
 
 		Alloc *alloc_;
 		const GSValue &src_;
 	};
 
 	template<typename Traits, typename Alloc, typename Mask,
-	bool StringOrArray = Traits::STRING_FAMILY>
+	bool StringOrArray = Traits::FOR_SINGLE_VAR>
 	struct StringOrArrayCopier {
 		GSValue operator()(const GSValue &src, Alloc *alloc);
 	};
 
-	const size_t digest_;
-	size_t refCount_;
-	const RowTypeCategory rowTypeCategory_;
-	const bool general_;
-	const bool nullableAllowed_;
+	ReferenceHead refHead_;
+	EntryList entryList_;
 	ColumnIdMap columnIdMap_;
-	size_t compositeKeyOffeset_;
-	GSBinding binding_;
-	std::unique_ptr<RowMapper> keyMapper_;
-
-	uint32_t varColumnCount_;
-	size_t nullsByteSize_;
-	uint32_t nullsOffset_;
+	UTIL_UNIQUE_PTR<RowMapper> keyMapper_;
+	ObjectLayout objectLayout_;
+	const BindingHead bindingHead_;
 };
 
 namespace {
@@ -1139,6 +1346,7 @@ RowMapper::Initializer g_rowMapperInitializer;
 struct RowMapper::RowTool {
 private:
 	friend struct GSRowTag;
+	friend struct GSRowKeyPredicateTag;
 
 	static const RowMapper& resolveKeyMapper(const RowMapper &mapper);
 };
@@ -1195,14 +1403,152 @@ struct RowMapper::Config {
 	bool keyComposable_;
 };
 
+class RowMapper::DetailElementType {
+public:
+	static const DetailElementType& getAny();
+
+	static const DetailElementType& of(ElementType base, bool forArray);
+
+	static const DetailElementType& ofField(
+			GSType base, bool forArray, GSTypeOption options);
+	static const DetailElementType& ofFullField(GSType base, GSTypeOption options);
+	static const DetailElementType& ofFullObject(GSType base);
+
+	static const DetailElementType& ofRaw(int8_t rawType);
+
+	template<typename Traits>
+	static const DetailElementType& ofKeyTraits(const Traits&) {
+		UTIL_STATIC_ASSERT(Traits::KEY_TYPE);
+		return ofTraits(Traits());
+	}
+
+	template<typename Traits>
+	static const DetailElementType& ofTraits(const Traits&) {
+		return of(Traits::ELEMENT_TYPE, Traits::ARRAY_TYPE);
+	}
+
+	static const DetailElementType& get(ArrayByteInStream &in);
+	void put(XArrayByteOutStream &out) const;
+
+	ElementType getBase() const;
+
+	bool isForArray() const;
+	bool isForKey() const;
+	bool isAny() const;
+
+	GSType toFullFieldType() const;
+	GSType toFullObjectType() const;
+
+	int8_t toRawType() const;
+	GSTypeOption toOptions() const;
+
+	size_t getFixedFieldPartSize(MappingMode mode) const;
+	size_t getBaseFixedFieldSize() const;
+	size_t getBaseFixedObjectSize() const;
+	bool hasVarDataPart() const;
+
+	SchemaFeatureLevel getFeatureLevel() const;
+
+	bool equals(ElementType base, bool forArray) const;
+	bool equals(const DetailElementType &another) const;
+
+	bool matchAsObject(const DetailElementType &another) const;
+
+private:
+	template<ElementType ElemType, bool ArrayType>
+	struct InvalidTypeTraits {
+		static const ElementType ELEMENT_TYPE = ElemType;
+		static const bool ARRAY_TYPE = ArrayType;
+		static const bool KEY_TYPE = false;
+		static const bool FOR_SIZE_VAR = false;
+		static const bool TYPE_VALID = false;
+		static const GSType FULL_FIELD_TYPE = GS_TYPE_NULL;
+		static const size_t BASE_FIXED_FIELD_SIZE = 0;
+		static const size_t BASE_FIXED_OBJECT_SIZE = 0;
+	};
+
+	DetailElementType(const DetailElementType&);
+	DetailElementType& operator=(const DetailElementType&);
+
+	template<typename Traits>
+	explicit DetailElementType(const Traits&);
+
+	static const DetailElementType& applyPrecision(
+			const DetailElementType &src, GSTypeOption options);
+
+	static GSTypeOption resolvePrecision(ElementType base, bool forArray);
+	static GSType resolveFullObjectType(
+			ElementType base, bool forArray, GSType fullFieldType);
+
+	static SchemaFeatureLevel resolveFeatureLevel(
+			ElementType base, bool forArray);
+
+	static const DetailElementType LIST_BY_ELEM[];
+	static const DetailElementType *LIST_BY_FULL[];
+
+	ElementType base_;
+	bool forArray_;
+	bool valid_;
+
+	GSTypeOption precision_;
+	GSType fullFieldType_;
+	GSType fullObjectType_;
+	bool forKey_;
+	bool forSizeVar_;
+	size_t baseFixedFieldSize_;
+	size_t baseFixedObjectSize_;
+	SchemaFeatureLevel featureLevel_;
+};
+
+class RowMapper::Entry {
+public:
+	Entry();
+
+	Entry withSchema(
+			const DetailElementType &type, const char8_t *name,
+			GSTypeOption filteredOptions) const;
+	Entry withLayout(
+			size_t offset, size_t arraySizeOffset,
+			size_t compositeKeyOffset) const;
+
+	const DetailElementType& getType() const;
+	const u8string& getName() const;
+
+	bool isForKey() const;
+	bool isNullable() const;
+
+	bool isInitialValueNull() const;
+	bool isDefaultValueSpecified() const;
+
+	GSTypeOption getOptions() const;
+
+	size_t getOffset() const;
+	size_t getArraySizeOffset() const;
+	size_t getCompositeKeyOffset() const;
+
+private:
+	const DetailElementType *type_;
+	u8string name_;
+	GSTypeOption filteredOptions_;
+
+	size_t offset_;
+	size_t arraySizeOffset_;
+	size_t compositeKeyOffset_;
+};
+
 class RowMapper::InputCursor {
 public:
 	friend class RowMapper;
 	friend struct RowMapper::Tool;
 
-	InputCursor(ArrayByteInStream &in, const RowMapper &mapper,
+	InputCursor(
+			ArrayByteInStream &in, const RowMapper &mapper,
 			MappingMode mode, int32_t rowCount, bool rowIdIncluded,
 			VarDataPool *varDataPool);
+
+	InputCursor& asReadOnly(
+			util::LocalUniquePtr<InputCursor> &localCursor,
+			ArrayByteInStream &localIn) const;
 
 	void setVarDataBaseOffset(int64_t varDataBaseOffset);
 
@@ -1296,14 +1642,15 @@ public:
 	Cache();
 
 	const RowMapper* resolve(
-			RowTypeCategory rowTypeCategory, const GSBinding *binding,
+			RowTypeCategory category, const GSBinding *binding,
 			bool general, const Config &config);
 	const RowMapper* resolve(
 			const RowMapper &baseMapper, ArrayByteInStream &schemaIn,
 			const Config &config, bool columnOrderIgnorable);
 	const RowMapper* resolve(
 			const RowMapper::ContainerInfoRef<true> &infoRef,
-			const Config &config, bool forKey = false);
+			const Config &config, bool forKey = false,
+			const RowTypeCategory *category = NULL);
 
 	const RowMapper* duplicate(const RowMapper &mapper);
 
@@ -1313,6 +1660,9 @@ private:
 	Cache(const Cache&);
 	Cache& operator=(const Cache&);
 
+	const RowMapper* resolveDetail(
+			BindingCursor &cursor, const Config &config);
+
 	typedef std::multimap<size_t, RowMapper*> EntryMap;
 	typedef EntryMap::iterator EntryMapIterator;
 	EntryMap entryMap_;
@@ -1321,12 +1671,14 @@ private:
 
 class RowMapper::Reference {
 public:
+	Reference();
 	Reference(Cache &cache, const RowMapper *mapper);
-	Reference(std::unique_ptr<RowMapper> mapper);
+	explicit Reference(UTIL_UNIQUE_PTR<RowMapper> &mapper);
+	explicit Reference(const MovableReference &ref);
 	~Reference();
 
-	Reference(Reference &another);
-	Reference& operator=(Reference &another);
+	MovableReference move();
+	void swap(Reference &another);
 
 	const RowMapper* operator->() const;
 	const RowMapper& operator*() const;
@@ -1337,15 +1689,30 @@ public:
 	void reset() throw();
 
 private:
+	Reference(const Reference &another);
+	Reference& operator=(const Reference &another);
+
 	Cache *cache_;
 	const RowMapper *mapper_;
 };
 
-#define CLIENT_TYPE_TRAITS_PRIMITIVE( \
-		upperSymbol, camelSymbol, type) \
+class RowMapper::MovableReference {
+public:
+	explicit MovableReference(Reference &ref);
+	Reference& getReference() const;
+
+private:
+	Reference &ref_;
+};
+
+#define CLIENT_TYPE_TRAITS_PRIMITIVE_CUSTOM( \
+		upperSymbol, upperSymbolFull, camelSymbol, objectType, fieldType) \
 		template<> \
-		struct RowMapper::ObjectTypeTraits<GS_TYPE_##upperSymbol, false> { \
-			typedef type Object; \
+		struct RowMapper::ObjectTypeTraits< \
+		RowMapper::ELEM_TYPE_##upperSymbol, false> { \
+			typedef fieldType Field; \
+			typedef objectType Object; \
+			static const GSType FULL_FIELD_TYPE = GS_TYPE_##upperSymbolFull; \
 			static Object& as(GSValue &v) { \
 					return v.as##camelSymbol; } \
 			static const Object& as(const GSValue &v) { \
@@ -1359,11 +1726,21 @@ private:
 					UTIL_STATIC_ASSERT(sizeof(Value) == 0); \
 					return *static_cast<size_t*>(NULL); } \
 		}
+
+#define CLIENT_TYPE_TRAITS_PRIMITIVE( \
+		upperSymbol, camelSymbol, type) \
+		CLIENT_TYPE_TRAITS_PRIMITIVE_CUSTOM( \
+				upperSymbol, upperSymbol, camelSymbol, type, type)
+
 #define CLIENT_TYPE_TRAITS_ARRAY( \
 		upperSymbol, camelSymbol, type) \
 		template<> \
-		struct RowMapper::ObjectTypeTraits<GS_TYPE_##upperSymbol, true> { \
+		struct RowMapper::ObjectTypeTraits< \
+		RowMapper::ELEM_TYPE_##upperSymbol, true> { \
+			typedef type Field; \
 			typedef type Object; \
+			static const GSType FULL_FIELD_TYPE = \
+					GS_TYPE_##upperSymbol##_ARRAY; \
 			static Object& as(GSValue &v) { \
 					return v.asArray.elements.as##camelSymbol; } \
 			static const Object& as(const GSValue &v) { \
@@ -1388,6 +1765,13 @@ CLIENT_TYPE_TRAITS_PRIMITIVE(TIMESTAMP, Timestamp, GSTimestamp);
 CLIENT_TYPE_TRAITS_PRIMITIVE(GEOMETRY, Geometry, const GSChar*);
 CLIENT_TYPE_TRAITS_PRIMITIVE(BLOB, Blob, GSBlob);
 
+CLIENT_TYPE_TRAITS_PRIMITIVE_CUSTOM(
+		MICRO_TIMESTAMP, TIMESTAMP, PreciseTimestamp, GSPreciseTimestamp,
+		TimestampUtils::RawMicroTimestamp);
+CLIENT_TYPE_TRAITS_PRIMITIVE_CUSTOM(
+		NANO_TIMESTAMP, TIMESTAMP, PreciseTimestamp, GSPreciseTimestamp,
+		TimestampUtils::RawNanoTimestamp);
+
 CLIENT_TYPE_TRAITS_ARRAY(STRING, String, const GSChar *const*);
 CLIENT_TYPE_TRAITS_ARRAY(BOOL, Bool, const GSBool*);
 CLIENT_TYPE_TRAITS_ARRAY(BYTE, Byte, const int8_t*);
@@ -1398,32 +1782,52 @@ CLIENT_TYPE_TRAITS_ARRAY(FLOAT, Float, const float*);
 CLIENT_TYPE_TRAITS_ARRAY(DOUBLE, Double, const double*);
 CLIENT_TYPE_TRAITS_ARRAY(TIMESTAMP, Timestamp, const GSTimestamp*);
 
-template<GSType ElemType, bool ArrayType>
+template<RowMapper::ElementType ElemType, bool ArrayType>
 struct RowMapper::TypeTraits {
 
-	static const GSType ELEMENT_TYPE = ElemType;
+	static const ElementType ELEMENT_TYPE = ElemType;
 
 	static const bool ARRAY_TYPE = ArrayType;
 
 	static const bool KEY_TYPE = !ARRAY_TYPE && (
-			ELEMENT_TYPE == GS_TYPE_STRING ||
-			ELEMENT_TYPE == GS_TYPE_INTEGER ||
-			ELEMENT_TYPE == GS_TYPE_LONG ||
-			ELEMENT_TYPE == GS_TYPE_TIMESTAMP);
+			ELEMENT_TYPE == ELEM_TYPE_STRING ||
+			ELEMENT_TYPE == ELEM_TYPE_INTEGER ||
+			ELEMENT_TYPE == ELEM_TYPE_LONG ||
+			ELEMENT_TYPE == ELEM_TYPE_TIMESTAMP ||
+			ELEMENT_TYPE == ELEM_TYPE_MICRO_TIMESTAMP ||
+			ELEMENT_TYPE == ELEM_TYPE_NANO_TIMESTAMP);
 
-	static const bool STRING_FAMILY = (
-			ELEMENT_TYPE == GS_TYPE_STRING ||
-			ELEMENT_TYPE == GS_TYPE_GEOMETRY);
+	static const bool FOR_SINGLE_VAR = (
+			ELEMENT_TYPE == ELEM_TYPE_STRING ||
+			ELEMENT_TYPE == ELEM_TYPE_GEOMETRY);
 
-	static const bool VAR_DATA_FAMILY = (
+	static const bool FOR_SIZE_VAR = (
 			ARRAY_TYPE ||
-			STRING_FAMILY ||
-			ELEMENT_TYPE == GS_TYPE_BLOB);
+			FOR_SINGLE_VAR ||
+			ELEMENT_TYPE == ELEM_TYPE_ANY_NULL ||
+			ELEMENT_TYPE == ELEM_TYPE_BLOB);
 
 	static const bool GENERAL_KEY = false;
+	static const bool TYPE_VALID = true;
+
+	static const ElementType SECONDARY_TYPE =
+			(ELEMENT_TYPE == ELEM_TYPE_NANO_TIMESTAMP ?
+					ELEM_TYPE_MICRO_TIMESTAMP : ELEM_TYPE_ANY_NULL);
 
 	typedef ObjectTypeTraits<ElemType, ArrayType> ObjectTraits;
+
+	typedef typename ObjectTraits::Field Field;
 	typedef typename ObjectTraits::Object Object;
+
+	static const GSType FULL_FIELD_TYPE = ObjectTraits::FULL_FIELD_TYPE;
+
+	static const size_t BASE_FIXED_FIELD_SIZE =
+			(FOR_SIZE_VAR ? 0 : sizeof(Field));
+	static const size_t BASE_FIXED_OBJECT_SIZE =
+			(ARRAY_TYPE ? sizeof(void*) + sizeof(size_t) :
+			ELEMENT_TYPE == ELEM_TYPE_ANY_NULL ?
+					sizeof(int8_t) + sizeof(GSValue) :
+			sizeof(Object));
 
 	static Object& as(GSValue &v) { return ObjectTraits::as(v); }
 	static const Object& as(const GSValue &v) { return ObjectTraits::as(v); }
@@ -1438,9 +1842,9 @@ struct RowMapper::TypeTraits {
 		return ObjectTraits::arraySizeOf(v);
 	}
 
-	static const GSType* resolveKeyType() {
-		static const GSType elementType = ElemType;
-		return (KEY_TYPE ? &elementType : NULL);
+	static const GSType* findFullKeyType() {
+		static const GSType type = FULL_FIELD_TYPE;
+		return (KEY_TYPE ? &type : NULL);
 	}
 
 };
@@ -1609,6 +2013,187 @@ void RowMapper::ContainerInfoRef<false>::clearColumnInfoList() throw();
 
 template<>
 void RowMapper::ContainerInfoRef<false>::clearIndexInfoList() throw();
+
+class RowMapper::BindingCursor {
+public:
+	BindingHead readHead(size_t *entryCount);
+	bool readEntry(Entry &entry);
+
+protected:
+	explicit BindingCursor(const BindingHead &head);
+	virtual ~BindingCursor();
+
+	virtual size_t onHead() = 0;
+	virtual Entry onEntry(size_t columnId) = 0;
+
+private:
+	BindingHead head_;
+	bool entryAcceptable_;
+	size_t nextColumnId_;
+	size_t entryCount_;
+};
+
+class RowMapper::ObjectBindingCursor : public RowMapper::BindingCursor {
+public:
+	ObjectBindingCursor(
+			RowTypeCategory category, const GSBinding *binding,
+			bool general, const Config &config);
+	virtual ~ObjectBindingCursor();
+
+	static ObjectBindingCursor create(
+			RowTypeCategory category, const GSBinding *binding,
+			const Config &config);
+
+protected:
+	virtual size_t onHead();
+	virtual Entry onEntry(size_t columnId);
+
+private:
+	const GSBinding *binding_;
+	const GSBinding *keyBinding_;
+	Config config_;
+
+	size_t subPos_;
+};
+
+class RowMapper::StreamBindingCursor : public RowMapper::BindingCursor {
+public:
+	StreamBindingCursor(
+			ArrayByteInStream &schemaIn, RowTypeCategory category,
+			bool general, const Config &config);
+	virtual ~StreamBindingCursor();
+
+protected:
+	virtual size_t onHead();
+	virtual Entry onEntry(size_t columnId);
+
+private:
+	static size_t resolveKeyEntryCount(
+			const ArrayByteInStream &orgSchemaIn, const Config &config);
+
+	ArrayByteInStream &schemaIn_;
+	ArrayByteInStream orgSchemaIn_;
+	Config config_;
+
+	size_t entryRemaining_;
+	size_t keyEntryCount_;
+	std::vector<int32_t> keyColumnList_;
+	FieldLayoutBuilder layoutBuilder_;
+};
+
+class RowMapper::SchemaBindingCursor : public RowMapper::BindingCursor {
+public:
+	SchemaBindingCursor(
+			const ContainerInfoRef<true> &infoRef,
+			bool general, const Config &config, bool forKey,
+			const RowTypeCategory *category);
+	virtual ~SchemaBindingCursor();
+
+private:
+	virtual size_t onHead();
+	virtual Entry onEntry(size_t columnId);
+
+private:
+	static RowTypeCategory resolveCategory(
+			const ContainerInfoRef<true> &infoRef,
+			const RowTypeCategory *category);
+	static size_t checkInfo(
+			const ContainerInfoRef<true> &infoRef, const Config &config,
+			bool forKey, size_t keyEntryCount);
+
+	ContainerInfoRef<true> infoRef_;
+	Config config_;
+
+	size_t keyEntryCount_;
+	size_t entryCount_;
+	FieldLayoutBuilder layoutBuilder_;
+};
+
+class RowMapper::MapperBindingCursor : public RowMapper::BindingCursor {
+public:
+	MapperBindingCursor(const BindingHead &head, const EntryList *entryList);
+	virtual ~MapperBindingCursor();
+
+	static MapperBindingCursor create(const RowMapper &mapper);
+
+private:
+	virtual size_t onHead();
+	virtual Entry onEntry(size_t columnId);
+
+private:
+	const EntryList *entryList_;
+};
+
+class RowMapper::ReorderedBindingCursor : public RowMapper::BindingCursor {
+public:
+	class WithStream;
+
+	ReorderedBindingCursor(
+			BindingCursor &base, const RowMapper &mapper,
+			bool columnOrderIgnorable);
+	virtual ~ReorderedBindingCursor();
+
+protected:
+	virtual size_t onHead();
+	virtual Entry onEntry(size_t columnId);
+
+private:
+	BindingCursor &base_;
+	const RowMapper &mapper_;
+	bool columnOrderIgnorable_;
+};
+
+class RowMapper::ReorderedBindingCursor::WithStream :
+	public RowMapper::BindingCursor {
+public:
+	WithStream(
+			ArrayByteInStream &schemaIn, const RowMapper &mapper,
+			bool columnOrderIgnorable, const Config &config);
+	virtual ~WithStream();
+
+protected:
+	virtual size_t onHead();
+	virtual Entry onEntry(size_t columnId);
+
+private:
+	StreamBindingCursor streamCursor_;
+	ReorderedBindingCursor reorderedCursor_;
+};
+
+class RowMapper::BindingBuilder {
+public:
+	virtual BindingCursor& toCursor(
+			RowTypeCategory category, bool general, const Config &config) = 0;
+
+protected:
+	virtual ~BindingBuilder();
+};
+
+class RowMapper::ObjectBindingBuilder : public RowMapper::BindingBuilder {
+public:
+	explicit ObjectBindingBuilder(const GSBinding *binding);
+	virtual ~ObjectBindingBuilder();
+
+	virtual BindingCursor& toCursor(
+			RowTypeCategory category, bool general, const Config &config);
+
+private:
+	const GSBinding *binding_;
+	util::LocalUniquePtr<ObjectBindingCursor> cursor_;
+};
+
+class RowMapper::SchemaBindingBuilder : public RowMapper::BindingBuilder {
+public:
+	explicit SchemaBindingBuilder(const ContainerInfoRef<true> &infoRef);
+	virtual ~SchemaBindingBuilder();
+
+	virtual BindingCursor& toCursor(
+			RowTypeCategory category, bool general, const Config &config);
+
+private:
+	ContainerInfoRef<true> infoRef_;
+	util::LocalUniquePtr<SchemaBindingCursor> cursor_;
+};
 
 
 struct ContainerKey {
@@ -2028,7 +2613,10 @@ struct NodeConnection::OptionalRequest {
 	};
 
 	enum FeatureVersion {
-		FEATURE_V4_3 = 3
+		FEATURE_V4_3 = 3,
+		FEATURE_V5_3 = 5,
+
+		FEATURE_LATEST = FEATURE_V5_3
 	};
 
 	typedef std::vector<uint8_t> ExtValue;
@@ -2056,7 +2644,7 @@ struct NodeConnection::OptionalRequest {
 	int32_t fetchBytesSize_;
 	int32_t featureVersion_;
 	int32_t acceptableFeatureVersion_;
-	std::unique_ptr<ExtMap> extRequestMap_;
+	UTIL_UNIQUE_PTR<ExtMap> extRequestMap_;
 	std::string applicationName_;
 	double storeMemoryAgingSwapRate_;
 	util::TimeZone timeZoneOffset_;
@@ -2097,7 +2685,7 @@ struct NodeConnection::Heartbeat {
 	int32_t orgStatementTypeNumber_;
 	int64_t orgStatementId_;
 	bool orgStatementFound_;
-	std::unique_ptr<StatementException> orgException_;
+	UTIL_UNIQUE_PTR<StatementException> orgException_;
 	size_t orgRespPos_;
 	size_t orgRespSize_;
 };
@@ -2114,10 +2702,10 @@ public:
 	size_t getMaxSize();
 	void setMaxSize(size_t maxSize);
 
-	void add(std::unique_ptr<NodeConnection> &connection);
-	std::unique_ptr<NodeConnection> pull(const util::SocketAddress &address);
+	void add(UTIL_UNIQUE_PTR<NodeConnection> &connection);
+	UTIL_UNIQUE_PTR<NodeConnection> pull(const util::SocketAddress &address);
 
-	std::unique_ptr<NodeConnection> resolve(
+	UTIL_UNIQUE_PTR<NodeConnection> resolve(
 			const util::SocketAddress &address,
 			util::NormalXArray<uint8_t> &req,
 			util::NormalXArray<uint8_t> &resp,
@@ -2311,7 +2899,7 @@ private:
 	util::SocketAddress notificationInterfaceAddress_;
 	util::SocketAddress masterAddress_;
 	NodeConnection::Config connectionConfig_;
-	std::unique_ptr<NodeConnection> masterConnection_;
+	UTIL_UNIQUE_PTR<NodeConnection> masterConnection_;
 	util::NormalXArray<uint8_t> req_;
 	util::NormalXArray<uint8_t> resp_;
 	int64_t notificationReceiveTimeoutMillis_;
@@ -2670,7 +3258,7 @@ private:
 	util::NormalXArray<uint8_t> resp_;
 	int64_t lastSessionId_;
 	ConnectionId connectionId_;
-	std::unique_ptr<ContainerCache> containerCache_;
+	UTIL_UNIQUE_PTR<ContainerCache> containerCache_;
 	PreferableHostMap preferableHosts_;
 
 	ResolverExecutor *resolverExecutor_;
@@ -2743,9 +3331,9 @@ public:
 
 	const LocatedSchema* findSchema(
 			const ContainerKey &normalizedContainerKey,
-			const GSBinding *binding,
-			const GSContainerType *containerType,
-			bool general, const RowMapper::Config &config) const;
+			RowMapper::BindingBuilder *bindingBuilder,
+			const GSContainerType *containerType, bool general,
+			const RowMapper::Config &config) const;
 	void cacheSchema(
 			const ContainerKey&normalizedContainerKey,
 			const RowMapper &mapper, int64_t containerId, int32_t versionId);
@@ -3280,14 +3868,12 @@ private:
 	class ReentranceChecker;
 	class ErrorHolder;
 	class ConfigLoader;
-	class ExtensionLoader;
 	struct Data;
 
 	GSGridStoreFactoryTag(const GSGridStoreFactory&);
 	GSGridStoreFactory& operator=(const GSGridStoreFactory&);
 
 	bool prepareConfigFile() throw();
-	bool prepareExtension() throw();
 
 	void setPropertiesInternal(
 			util::LockGuard<util::Mutex> &guard, bool forInitial,
@@ -3325,11 +3911,13 @@ private:
 			util::LibraryFunctions::ProviderFunc provider,
 			UtilExceptionTag **ex) throw();
 
+	static const LibraryNameInfo KNOWN_LIBRARY_NAMES[];
+
 	static FuncTable FUNC_TABLE;
 	static FuncInitializer FUNC_TABLE_INITIALIZER;
 
 	GSResourceHeader resourceHeader_;
-	std::unique_ptr<Data> data_;
+	UTIL_UNIQUE_PTR<Data> data_;
 
 	static GSGridStoreFactory *defaultFactory_;
 };
@@ -3346,7 +3934,11 @@ public:
 		int64_t expectedCount_;
 	};
 
+	static void setEnabled(bool enabled);
+
 private:
+	static bool enabled_;
+
 	util::Atomic<int64_t> counter_;
 };
 
@@ -3381,7 +3973,6 @@ private:
 
 	static void applyConfig(const Properties *src, Properties &dest);
 
-	void acceptFile(const char8_t *path);
 	void acceptFileData(std::string &buf, bool eof, uint64_t &lineNumber);
 	void acceptFileLine(const char8_t *line, size_t size);
 	void acceptProperty(const char8_t *name, const char8_t *value);
@@ -3396,6 +3987,7 @@ private:
 	UTIL_UNIQUE_PTR<Properties> factoryProps_;
 	UTIL_UNIQUE_PTR<Properties> storeProps_;
 };
+
 
 struct GSGridStoreFactoryTag::Data {
 	Data();
@@ -3619,6 +4211,7 @@ private:
 	typedef GridStoreChannel::ContainerCache ContainerCache;
 	typedef std::multimap<ContainerKey, GSContainer*> ContainerMap;
 
+	struct ContainerSchemaOption;
 	struct ContainerPropertiesOption;
 
 	struct MultiQueryStatement {
@@ -3681,6 +4274,7 @@ private:
 		ContainerKeyList containerKeyList_;
 		SubEntryMap subEntryMap_;
 		uuid_t sessionUUID_;
+		RowMapper::SchemaFeatureLevel featureLevel_;
 	};
 
 	struct MultiGetRequest {
@@ -3692,6 +4286,8 @@ private:
 		typedef std::vector<GSRowKeyPredicate*> PredicateList;
 		typedef std::vector<GSRowKeyPredicateEntry> EntryList;
 
+		MultiGetRequest();
+
 		void add(const GSRowKeyPredicateEntry &predicateEntry);
 		bool makeRequest(
 				XArrayByteOutStream &req,
@@ -3699,6 +4295,7 @@ private:
 
 		PredicateList predicateList_;
 		EntryList entryList_;
+		RowMapper::SchemaFeatureLevel featureLevel_;
 	};
 
 	static bool pathKeyOperationEnabled_;
@@ -3713,9 +4310,9 @@ private:
 	GSContainer* findContainerByCache(
 			ContainerCache &cache, const ContainerKey &key,
 			const ContainerKeyConverter &keyConverter,
-			const GSBinding *binding, const GSContainerType *containerType,
-			bool general);
-	std::unique_ptr<ContainerKey> acceptRemoteContainerKey(
+			RowMapper::BindingBuilder *bindingBuilder,
+			const GSContainerType *containerType, bool general);
+	UTIL_UNIQUE_PTR<ContainerKey> acceptRemoteContainerKey(
 			ArrayByteInStream *in, const ContainerKey &localKey,
 			const ContainerKeyConverter &keyConverter, bool &cached);
 
@@ -3730,8 +4327,12 @@ private:
 			XArrayByteOutStream &reqOut, GridStoreChannel::Context &context,
 			bool forCreationDDL, const OptionalRequestSource *source = NULL);
 
+	static ContainerSchemaOption containerSchemaToOption(
+			RowMapper::SchemaFeatureLevel level, bool accepting);
 	static ContainerPropertiesOption containerPropertiesToOption(
 			const RowMapper &mapper);
+	static int32_t getFeatureVersionForSchema(
+			RowMapper::SchemaFeatureLevel level);
 
 	static void exportContainerProperties(
 			XArrayByteOutStream &out, const GSContainerType type,
@@ -3746,7 +4347,7 @@ private:
 	static double checkCompressionRate(double rate);
 
 	const GSContainer& resolveContainer(const ContainerKey &containerKey);
-	std::unique_ptr<GSContainer> duplicateContainer(const GSContainer &src);
+	UTIL_UNIQUE_PTR<GSContainer> duplicateContainer(const GSContainer &src);
 
 	static Statement::Id getContainerStatement(
 			Statement::Id statement, const GSContainerType *containerType);
@@ -3805,8 +4406,34 @@ private:
 	ErrorStack stack_;
 };
 
-struct GSGridStoreTag::ContainerPropertiesOption {
+struct GSGridStoreTag::ContainerSchemaOption :
+		public NodeConnection::OptionalRequestSource {
+public:
+	ContainerSchemaOption(
+			int32_t featureVersion, int32_t acceptableFeatureVersion);
+
 	const OptionalRequestSource* get() const;
+
+	bool hasOptions() const;
+	void putOptions(NodeConnection::OptionalRequest &optionalRequest) const;
+
+private:
+	int32_t featureVersion_;
+	int32_t acceptableFeatureVersion_;
+};
+
+struct GSGridStoreTag::ContainerPropertiesOption :
+		public NodeConnection::OptionalRequestSource {
+public:
+	explicit ContainerPropertiesOption(int32_t featureVersion);
+
+	const OptionalRequestSource* get() const;
+
+	bool hasOptions() const;
+	void putOptions(NodeConnection::OptionalRequest &optionalRequest) const;
+
+private:
+	int32_t featureVersion_;
 };
 
 struct GSContainerTag {
@@ -3829,9 +4456,10 @@ public:
 
 	static const int8_t ROW_SET_TYPE_PARTIAL_ROWS;
 
-	GSContainerTag(GSGridStore &store, RowMapper::Reference mapper,
+	GSContainerTag(
+			GSGridStore &store, RowMapper::Reference &mapper,
 			int32_t schemaVerId, int32_t partitionId, int64_t containerId,
-			std::unique_ptr<ContainerKey> &normalizedContainerKey, bool cached);
+			UTIL_UNIQUE_PTR<ContainerKey> &normalizedContainerKey, bool cached);
 	~GSContainerTag();
 
 	bool isClosed() const;
@@ -4141,7 +4769,7 @@ private:
 	const int32_t schemaVerId_;
 	const int32_t partitionId_;
 	const int64_t containerId_;
-	std::unique_ptr<ContainerKey> normalizedContainerKey_;
+	UTIL_UNIQUE_PTR<ContainerKey> normalizedContainerKey_;
 
 	int64_t sessionId_;
 	int64_t transactionId_;
@@ -4157,13 +4785,13 @@ private:
 struct GSContainerTag::AnyKeyTraits {
 	typedef void Object;
 	static const bool GENERAL_KEY = false;
-	static const GSType* resolveKeyType() { return NULL; }
+	static const GSType* findFullKeyType() { return NULL; }
 };
 
 struct GSContainerTag::GeneralKeyTraits {
 	typedef GSRowKey Object;
 	static const bool GENERAL_KEY = true;
-	static const GSType* resolveKeyType() { return NULL; }
+	static const GSType* findFullKeyType() { return NULL; }
 };
 
 struct GSContainerTag::PartialFetchStatus {
@@ -4199,7 +4827,7 @@ struct GSContainerTag::PartialExecutionStatus {
 			const PartialExecutionStatus &next) const;
 
 	bool enabled_;
-	std::unique_ptr<EntryMap> entryMap_;
+	UTIL_UNIQUE_PTR<EntryMap> entryMap_;
 };
 
 struct GSContainerTag::QueryFormatter {
@@ -4332,11 +4960,11 @@ private:
 	static int64_t filterSizedFetchOption(
 			GSFetchOption option, const void *value, GSType valueType);
 
-	template<GSType T>
+	template<RowMapper::ElementType T>
 	static const typename RowMapper::ObjectTypeTraits<T, false>::Object*
 	filterFetchOption(
-			GSFetchOption option, const void *value, GSType valueType,
-			bool force);
+			GSFetchOption option, const void *value,
+			const RowMapper::DetailElementType &valueType, bool force);
 
 	GSResourceHeader resourceHeader_;
 
@@ -4375,6 +5003,13 @@ public:
 
 	int32_t getSize() const;
 	GSRowSetType getType() const;
+
+	static GSResult getSchema(
+			GSRowSet *rowSet, GSContainerInfo *schemaInfo, GSBool *exists,
+			const ClientVersion &version,
+			const GSInterceptor::FunctionInfo &funcInfo) throw();
+	bool getSchema(RowMapper::ContainerInfoRef<> &infoRef);
+
 	bool isPartial() const;
 	bool hasNext() const;
 
@@ -4438,6 +5073,7 @@ private:
 
 	const int64_t totalRowCount_;
 	int64_t remainingRowCount_;
+	UTIL_UNIQUE_PTR<RowMapper> nextRowSchema_;
 	QueryParameters queryParameters_;
 	const PartialFetchStatus fetchStatus_;
 	GridStoreChannel::ConnectionId connectionId_;
@@ -4456,9 +5092,14 @@ public:
 	~GSAggregationResultTag();
 
 	static void close(GSAggregationResult **aggregationResult) throw();
-	static std::unique_ptr<GSAggregationResult> newStandaloneInstance();
+	static UTIL_UNIQUE_PTR<GSAggregationResult> newStandaloneInstance();
 
-	bool getValue(void *value, GSType valueType);
+	void setValueAsLong(const int64_t &value);
+	void setValueAsDouble(const double &value);
+	void setValueAsTimestamp(const GSTimestamp &value);
+	void setValueAsPreciseTimestamp(const GSPreciseTimestamp &value);
+
+	bool getValue(void *value, const RowMapper::DetailElementType &valueType);
 
 	template<typename Traits>
 	static GSResult getValueTyped(
@@ -4474,11 +5115,8 @@ private:
 	GSResourceHeader resourceHeader_;
 
 	GSContainer *container_;
-	GSType resultType_;
-	union {
-		double doubleValue_;
-		int64_t longOrTimestampValue_;
-	} value_;
+	const RowMapper::DetailElementType *resultType_;
+	GSValue value_;
 };
 
 struct GSRowTag {
@@ -4486,13 +5124,13 @@ public:
 	friend struct GSResourceHeader;
 
 	static GSRow* create(
-			GSGridStore &store, RowMapper::Reference mapper,
+			GSGridStore &store, RowMapper::Reference &mapper,
 			bool forKey = false);
 	static GSRow* create(
-			GSContainer &container, RowMapper::Reference mapper,
+			GSContainer &container, RowMapper::Reference &mapper,
 			bool forKey = false);
 	static GSRow* create(
-			RowMapper::VarDataPool &pool, RowMapper::Reference mapper,
+			RowMapper::VarDataPool &pool, RowMapper::Reference &mapper,
 			bool forKey = false);
 
 	GSRow* create(bool forKey) const;
@@ -4502,10 +5140,10 @@ public:
 	static const GSRow& resolve(const void *resource);
 	static GSRow& resolve(void *resource);
 
-	static GSBinding createBinding(
-			const RowMapper::ContainerInfoRef<true> &infoRef,
-			std::vector<GSBindingEntry> &entryList,
-			bool anyTypeAllowed = false, bool forKey = false);
+	static void createKeyMapper(
+			RowMapper::Cache &cache, const RowMapper &srcMapper,
+			const RowMapper::Config &config, RowMapper::VarDataPool &pool,
+			RowMapper::Reference &mapperRef);
 
 	const RowMapper& getRowMapper() const;
 	void getContainerSchema(RowMapper::ContainerInfoRef<> &infoRef);
@@ -4528,7 +5166,7 @@ public:
 
 	template<typename Traits>
 	static GSResult setPrimitiveField(
-			GSRow *row, int32_t columnId, typename Traits::Object value,
+			GSRow *row, int32_t columnId, const typename Traits::Object *value,
 			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	template<typename Traits>
@@ -4537,35 +5175,45 @@ public:
 			size_t arraySize,
 			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
-	void getField(int32_t columnId, GSValue &value, GSType &type,
-			const GSType *expectedType);
-	void getField(int32_t columnId, GSValue &value, GSType &type,
-			const GSType *expectedType, RowMapper::VarDataPool &pool) const;
-	void setField(int32_t columnId, const GSValue &value,
-			GSType expectedType);
+	void getField(
+			int32_t columnId, GSValue &value,
+			const RowMapper::DetailElementType *&type,
+			const RowMapper::DetailElementType *expectedType);
+	void getField(
+			int32_t columnId, GSValue &value,
+			const RowMapper::DetailElementType *&type,
+			const RowMapper::DetailElementType *expectedType,
+			RowMapper::VarDataPool &pool) const;
+	void setField(
+			int32_t columnId, const GSValue &value,
+			const RowMapper::DetailElementType &expectedType);
 
 	void clear(bool silent);
 
 	void* allocate(size_t size);
 	void deallocate(void *varData);
 
-	GSType getTypeGeneral(const GSBindingEntry &entry) const;
-	GSBindingEntry getEntryGeneral(const GSBindingEntry &src) const;
+	const RowMapper::DetailElementType& getTypeGeneral(
+			const RowMapper::Entry &entry) const;
+	RowMapper::Entry getEntryGeneral(const RowMapper::Entry &src) const;
 
 	bool isNull(int32_t columnId) const;
 	void setNull(int32_t columnId, bool nullValue);
 
 	bool isNullDirect(int32_t columnId) const;
 	void setNullDirect(
-			int32_t columnId, const GSBindingEntry &entry, bool nullValue,
+			int32_t columnId, const RowMapper::Entry &entry, bool nullValue,
 			bool withClear);
 
 	const uint8_t* getNulls() const;
 	uint8_t* getNulls();
 
+	static size_t getInternalDataOffset();
+
 	struct FieldClearer {
 		template<typename Traits>
-		void operator()(GSRow &row, const GSBindingEntry &entry, const Traits&);
+		void operator()(
+				GSRow &row, const RowMapper::Entry &entry, const Traits&);
 	};
 
 private:
@@ -4573,7 +5221,7 @@ private:
 	static const size_t DATA_OFFSET;
 
 	GSRowTag(
-			void *parentResource, RowMapper::Reference mapper,
+			void *parentResource, RowMapper::Reference &mapper,
 			size_t objectSize, bool forKey);
 	~GSRowTag() noexcept(false);
 
@@ -4581,22 +5229,23 @@ private:
 	GSRow& operator=(const GSRow&);
 
 	static GSRow* create(
-			void *parentResource, RowMapper::Reference mapper, bool forKey);
+			void *parentResource, RowMapper::Reference &mapper, bool forKey);
 
-	const GSBindingEntry& getBindingEntry(int32_t columnId) const;
+	const RowMapper::Entry& getMappingEntry(int32_t columnId) const;
 	RowMapper::VarDataPool& getVarDataPool();
-	GSType checkType(
-			int32_t columnId, const GSBindingEntry &entry,
-			const GSType *expectedType, bool overwriting) const;
+	const RowMapper::DetailElementType& checkType(
+			int32_t columnId, const RowMapper::Entry &entry,
+			const RowMapper::DetailElementType *expectedType,
+			bool overwriting) const;
 
 	struct FieldGetter {
 		FieldGetter(GSValue &value, RowMapper::VarDataPool &pool);
 
 		template<typename Traits>
 		void operator()(
-				const GSRow &row, const GSBindingEntry &entry, const Traits&);
+				const GSRow &row, const RowMapper::Entry &entry, const Traits&);
 		void operator()(
-				const GSRow &row, const GSBindingEntry &entry,
+				const GSRow &row, const RowMapper::Entry &entry,
 				const RowMapper::AnyNullTraits&);
 
 		GSValue &value_;
@@ -4604,67 +5253,73 @@ private:
 	};
 
 	struct FieldSetter {
-		FieldSetter(const GSValue &value, GSType type);
+		FieldSetter(
+				const GSValue &value, const RowMapper::DetailElementType &type);
 
 		template<typename Traits>
-		void operator()(GSRow &row, const GSBindingEntry &entry, const Traits&);
 		void operator()(
-				GSRow &row, const GSBindingEntry &entry,
+				GSRow &row, const RowMapper::Entry &entry, const Traits&);
+		void operator()(
+				GSRow &row, const RowMapper::Entry &entry,
 				const RowMapper::AnyNullTraits&);
 
 		const GSValue &value_;
-		GSType type_;
+		const RowMapper::DetailElementType &type_;
 		bool deallocated_;
 	};
 
 	struct FieldDeallocator {
 		template<typename Traits>
-		void operator()(GSRow &row, const GSBindingEntry &entry, const Traits&);
 		void operator()(
-				GSRow &row, const GSBindingEntry &entry,
+				GSRow &row, const RowMapper::Entry &entry, const Traits&);
+		void operator()(
+				GSRow &row, const RowMapper::Entry &entry,
 				const RowMapper::AnyNullTraits&);
 	};
 
 	struct FieldInitializer {
 		template<typename Traits>
-		void operator()(GSRow &row, const GSBindingEntry &entry, const Traits&);
 		void operator()(
-				GSRow &row, const GSBindingEntry &entry,
+				GSRow &row, const RowMapper::Entry &entry, const Traits&);
+		void operator()(
+				GSRow &row, const RowMapper::Entry &entry,
 				const RowMapper::AnyNullTraits&);
 	};
 
 	template<typename Traits, bool ArrayType = Traits::ARRAY_TYPE>
 	struct DirectFieldGetter {
-		GSValue operator()(const GSRow &row, const GSBindingEntry &entry);
+		GSValue operator()(const GSRow &row, const RowMapper::Entry &entry);
 	};
 
 	template<typename Traits, bool ArrayType = Traits::ARRAY_TYPE>
 	struct DirectFieldSetter {
-		void operator()(GSRow &row, const GSBindingEntry &entry,
+		void operator()(
+				GSRow &row, const RowMapper::Entry &entry,
 				const GSValue &value);
 	};
 
 	template<typename Traits, typename T> void deallocate(
-			const GSBindingEntry&, T, const Traits&);
+			const RowMapper::Entry&, T, const Traits&);
 
 	template<typename Traits, typename E>
 	void deallocate(
-			const GSBindingEntry&, const E *value, const Traits&);
+			const RowMapper::Entry&, const E *value, const Traits&);
 
 	template<typename Traits>
-	void deallocate(const GSBindingEntry &entry,
-			const GSChar *const *value, const Traits&);
+	void deallocate(
+			const RowMapper::Entry &entry, const GSChar *const *value,
+			const Traits&);
 
 	template<typename Traits>
-	void deallocate(const GSBindingEntry&, const GSBlob &value, const Traits&);
+	void deallocate(
+			const RowMapper::Entry&, const GSBlob &value, const Traits&);
 
 	template<bool ArrayType>
-	void initializeArraySize(const GSBindingEntry &entry);
+	void initializeArraySize(const RowMapper::Entry &entry);
 
 	uint8_t* data();
 	const uint8_t* data() const;
 
-	const GSBinding& getBinding() const;
 	size_t getGeneralRowSize() const;
 	static size_t getGeneralRowSize(const RowMapper &mapper, bool forKey);
 
@@ -4694,7 +5349,7 @@ public:
 
 	static const RowMapper::Config KEY_MAPPER_CONFIG;
 
-	GSRowKeyPredicateTag(GSGridStore &store, RowMapper::Reference mapper);
+	GSRowKeyPredicateTag(GSGridStore &store, RowMapper::Reference &mapper);
 	~GSRowKeyPredicateTag();
 
 	static void close(GSRowKeyPredicate **predicate) throw();
@@ -4722,13 +5377,13 @@ public:
 
 	template<typename Traits>
 	static GSResult addDistinctKey(
-			GSRowKeyPredicate *predicate, typename Traits::Object key,
+			GSRowKeyPredicate *predicate, const typename Traits::Object *key,
 			const GSInterceptor::FunctionInfo &funcInfo) throw();
 
 	static GSContainerInfo createSingleKeySchema(
 			GSType keyType, GSColumnInfo &columnInfoStorage);
 
-	GSType getKeyType() const;
+	const RowMapper::DetailElementType& getKeyType() const;
 	const RowMapper& getRowMapper() const;
 
 	bool hasRangeKey(RangeElementType rangeElemType) const;
@@ -4740,7 +5395,8 @@ public:
 	void getRangeKey(
 			GSRowKey *&key, RangeElementType rangeElemType) const;
 	void getRangeKey(
-			const GSValue *&key, const GSType *expectedType,
+			const GSValue *&key,
+			const RowMapper::DetailElementType *expectedType,
 			RangeElementType rangeElemType) const;
 
 	void getDistinctKeys(GSRowKey *const *&keyList, size_t &size) const;
@@ -4748,11 +5404,14 @@ public:
 
 	void setRangeKey(const GSRowKey *key, RangeElementType rangeElemType);
 	void setRangeKey(
-			const GSValue *key, GSType expectedType,
+			const GSValue *key,
+			const RowMapper::DetailElementType &expectedType,
 			RangeElementType rangeElemType);
 
 	void addDistinctKey(const GSRowKey &key);
-	void addDistinctKey(const GSValue &key, GSType expectedType);
+	void addDistinctKey(
+			const GSValue &key,
+			const RowMapper::DetailElementType &expectedType);
 
 	void* allocate(size_t size);
 	void deallocate(void *varData);
@@ -4774,7 +5433,8 @@ private:
 			const RowMapper &mapper,
 			const TinyRowKey &key1, const  TinyRowKey &key2);
 	static int64_t compareValue(
-			GSType keyType, const  GSValue &value1, const  GSValue &value2);
+			const RowMapper::DetailElementType &keyType,
+			const  GSValue &value1, const  GSValue &value2);
 
 	template<typename T, typename Receiver>
 	void getRangeKey(
@@ -4785,7 +5445,8 @@ private:
 
 	template<typename T, typename Receiver>
 	void getDistinctKeys(
-			const T *&keyList, size_t &size, const GSType *expectedType,
+			const T *&keyList, size_t &size,
+			const RowMapper::DetailElementType *expectedType,
 			bool singleOnly, const Receiver &receiver) const;
 
 	void addDistinctKey(TinyRowKey &key);
@@ -4800,13 +5461,19 @@ private:
 	GSRowKey* toRowKey(const TinyRowKey &src) const;
 
 	void checkKeyType(const GSRowKey &key) const;
-	void checkKeyType(const GSType *expectedType, bool singleOnly) const;
+	void checkKeyType(
+			const RowMapper::DetailElementType *expectedType,
+			bool singleOnly) const;
+
 	static void checkMapper(const RowMapper &mapper);
+
+	const RowMapper& resolveKeyMapper() const;
+	static const RowMapper& resolveKeyMapper(const RowMapper &mapper);
 
 	void clear();
 	void clearRangeKeyEntry(RangeKeyEntry &keyEntry);
 	void clearKey(TinyRowKey &key);
-	void clearValue(GSValue &value, GSType type);
+	void clearValue(GSValue &value, const RowMapper::DetailElementType &type);
 
 	GSResourceHeader resourceHeader_;
 
@@ -4814,7 +5481,7 @@ private:
 	RowMapper::Reference mapper_;
 
 	RangeKeyEntry rangeKeyEntries_[RANGE_COUNT];
-	std::unique_ptr<DistinctKeySet> distinctKeys_;
+	UTIL_UNIQUE_PTR<DistinctKeySet> distinctKeys_;
 
 	TinyRowKey keyStorage_;
 };
@@ -4863,6 +5530,8 @@ struct GSRowKeyPredicateTag::SingleUntypedKeyReceiver {
 	GSValue receive(
 			const GSRowKeyPredicate &predicate,
 			const TinyRowKey &src, RowMapper::VarDataPool &pool) const {
+		static_cast<void>(predicate);
+		static_cast<void>(pool);
 		return src.front();
 	}
 	void clear(GSValue &key) const {

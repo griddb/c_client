@@ -1,4 +1,4 @@
-﻿LIBRARY GRIDSTORE_C
+LIBRARY GRIDSTORE_C
 EXPORTS
 	gsCloseFactory @1
 	gsGetDefaultFactory @2
@@ -261,3 +261,18 @@ EXPORTS
 	gsSetTimeZoneOffset @259
 	gsFormatTimeZone @260
 	gsParseTimeZone @261
+	gsGetRowByPreciseTimestamp @262
+	gsPutRowByPreciseTimestamp @263
+	gsDeleteRowByPreciseTimestamp @264
+	gsSetRowFieldByPreciseTimestamp @265
+	gsGetRowFieldAsPreciseTimestamp @266
+	gsGetRowSetSchema @267
+	gsGetAggregationValueAsPreciseTimestamp @268
+	gsGetPredicateStartKeyAsPreciseTimestamp @269
+	gsGetPredicateFinishKeyAsPreciseTimestamp @270
+	gsGetPredicateDistinctKeysAsPreciseTimestamp @271
+	gsSetPredicateStartKeyByPreciseTimestamp @272
+	gsSetPredicateFinishKeyByPreciseTimestamp @273
+	gsAddPredicateKeyByPreciseTimestamp @274
+	gsFormatPreciseTime @275
+	gsParsePreciseTime @276
