@@ -53,14 +53,6 @@
 #include <string>
 #include <list>
 
-#ifndef UTIL_DYNAMIC_LOAD_ENABLED
-#ifdef _WIN32
-#define UTIL_DYNAMIC_LOAD_ENABLED 1
-#else
-#define UTIL_DYNAMIC_LOAD_ENABLED 0
-#endif
-#endif
-
 #if defined(__GNUC__) && !defined(_WIN32)
 #define UTIL_DLL_PUBLIC __attribute__ ((visibility("default")))
 #else
@@ -87,12 +79,6 @@ public:
 	typedef LibraryTool::ProviderFunc ProviderFunc;
 
 
-#if UTIL_DYNAMIC_LOAD_ENABLED
-	static void getEntryProviderFunctions(
-			const char8_t *name, SharedObject &so,
-			const char8_t *entryFuncName, int32_t reqVersion,
-			const void *const *&funcList, size_t &funcCount);
-#endif 
 	static void getProviderFunctions(
 			const char8_t *name, ProviderFunc provider,
 			const void *const *&funcList, size_t &funcCount);
@@ -135,12 +121,6 @@ public:
 	explicit LibraryFunctionTable(const char8_t *tableName = NULL) throw();
 
 	bool isEmpty() const throw();
-
-#if UTIL_DYNAMIC_LOAD_ENABLED
-	void assign(
-			SharedObject &so, const char8_t *entryFuncName,
-			int32_t reqVersion);
-#endif 
 
 	void assign(LibraryFunctions::ProviderFunc provider);
 
@@ -317,15 +297,6 @@ bool LibraryFunctionTable<T, Ex>::isEmpty() const throw() {
 	return (funcList_ == NULL);
 }
 
-#if UTIL_DYNAMIC_LOAD_ENABLED
-template<typename T, int32_t Ex>
-void LibraryFunctionTable<T, Ex>::assign(
-		SharedObject &so, const char8_t *entryFuncName, int32_t reqVersion) {
-	LibraryFunctions::getEntryProviderFunctions(
-			tableName_, so, entryFuncName, reqVersion, funcList_, funcCount_);
-}
-#endif 
-
 template<typename T, int32_t Ex>
 void LibraryFunctionTable<T, Ex>::assign(LibraryFunctions::ProviderFunc provider) {
 	LibraryFunctions::getProviderFunctions(
@@ -359,7 +330,7 @@ LibraryFunctionTable<T, Ex>::find() const throw() {
 	if (N >= funcCount_) {
 		return NULL;
 	}
-	return reinterpret_cast<typename FuncOf<T, N>::Type>(funcList_[N]);
+	return reinterpret_cast<typename FuncOf<T, N>::Type>(const_cast<void*>(funcList_[N]));
 }
 
 

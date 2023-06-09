@@ -53,34 +53,6 @@
 
 namespace util {
 
-
-#if UTIL_DYNAMIC_LOAD_ENABLED
-void LibraryFunctions::getEntryProviderFunctions(
-		const char8_t *name, SharedObject &so,
-		const char8_t *entryFuncName, int32_t reqVersion,
-		const void *const *&funcList, size_t &funcCount) {
-	funcList = NULL;
-	funcCount = 0;
-
-	void *entryFunc = so.getSymbol(entryFuncName);
-	if (entryFunc == NULL) {
-		errorEntryFunctionNotFound(name, entryFuncName);
-		return;
-	}
-
-	const void *const *list;
-	size_t count;
-	int32_t libVersion;
-
-	const int32_t code = reinterpret_cast<EntryProviderFunc>(
-			entryFunc)(&list, &count, reqVersion, &libVersion);
-	checkProviderResult(name, code, &reqVersion, &libVersion);
-
-	funcList = list;
-	funcCount = count;
-}
-#endif 
-
 void LibraryFunctions::getProviderFunctions(
 		const char8_t *name, ProviderFunc provider,
 		const void *const *&funcList, size_t &funcCount) {

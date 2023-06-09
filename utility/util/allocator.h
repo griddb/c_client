@@ -468,6 +468,49 @@ private:
 	Alloc alloc_;
 };
 
+
+namespace detail {
+template<typename T>
+class InitializableValue {
+public:
+	explicit InitializableValue(const T &value = T()) throw() :
+			value_(value) {
+	}
+
+	T& get() throw() { return value_; }
+	const T& get() const throw() { return value_; }
+
+private:
+	T value_;
+};
+
+template<size_t BaseSize>
+class ApproxAlignedStorage {
+public:
+	ApproxAlignedStorage() throw() {
+		UTIL_STATIC_ASSERT((sizeof(void*) <= sizeof(uint64_t)));
+	}
+
+	void* address() throw() { return data_; }
+	const void* address() const throw() { return data_; }
+
+private:
+	typedef
+			typename Conditional<(BaseSize <= 1), uint8_t,
+			typename Conditional<(BaseSize <= 2), uint16_t,
+			typename Conditional<(BaseSize <= 4), uint32_t,
+					uint64_t>::Type>::Type>::Type UnitType;
+
+	enum {
+		UNIT_SIZE = sizeof(UnitType),
+		UNIT_COUNT = (BaseSize <= UNIT_SIZE ?
+				1 : (BaseSize + (UNIT_SIZE - 1)) / UNIT_SIZE)
+	};
+
+	UnitType data_[UNIT_COUNT];
+};
+} 
+
 template< typename T, typename D = AllocDefaultDelete<T> >
 class AllocUniquePtr {
 public:
@@ -492,7 +535,77 @@ private:
 	pointer ptr_;
 	deleter_type deleter_;
 };
+} 
 
+
+namespace util {
+template<typename T> class LocalUniquePtr;
+namespace detail {
+class LocalUniquePtrBuilder {
+public:
+	LocalUniquePtrBuilder(void *storage, size_t size, bool constructed);
+
+	void* getStorage(size_t size) const;
+	void* get() const throw();
+
+	template<typename T>
+	static LocalUniquePtr<T>& check(LocalUniquePtr<T> &src) { return src; }
+
+private:
+	void *storage_;
+	size_t size_;
+	bool constructed_;
+};
+} 
+
+template<typename T>
+class LocalUniquePtr {
+public:
+	class Builder;
+
+	typedef T element_type;
+	typedef element_type *pointer;
+
+	LocalUniquePtr() throw() {}
+	~LocalUniquePtr();
+
+	pointer get() const throw() { return ptr_.get(); }
+	element_type& operator*() const;
+	pointer operator->() const throw();
+
+	pointer release() throw();
+	void reset() throw();
+
+	LocalUniquePtr& operator=(const detail::LocalUniquePtrBuilder &builder);
+
+	detail::LocalUniquePtrBuilder toBuilder(T *ptr);
+
+private:
+	LocalUniquePtr(const LocalUniquePtr&);
+	LocalUniquePtr& operator=(const LocalUniquePtr&);
+
+	detail::InitializableValue<pointer> ptr_;
+	detail::ApproxAlignedStorage<sizeof(T)> storage_;
+};
+} 
+
+#define UTIL_MAKE_LOCAL_UNIQUE(localUniqPtr, type, ...) \
+		util::detail::LocalUniquePtrBuilder::check(localUniqPtr).toBuilder( \
+				new (util::detail::LocalUniquePtrBuilder::check( \
+						localUniqPtr).toBuilder(NULL).getStorage( \
+								sizeof(type))) \
+						type(__VA_ARGS__))
+
+inline void* operator new(
+		size_t size, const util::detail::LocalUniquePtrBuilder &builder) {
+	return builder.getStorage(size);
+}
+
+inline void operator delete(
+		void*, const util::detail::LocalUniquePtrBuilder&) throw() {
+}
+
+namespace util {
 
 /*!
 	@brief STL string template for using allocators with members.
@@ -817,6 +930,95 @@ inline BasicString<CharT, Traits, Alloc> operator+(
 	return (BasicString<CharT, Traits, Alloc>(rhs.get_allocator()) += lhs) += rhs;
 }
 
+
+
+
+namespace detail {
+inline LocalUniquePtrBuilder::LocalUniquePtrBuilder(
+		void *storage, size_t size, bool constructed) :
+		storage_(storage),
+		size_(size),
+		constructed_(constructed) {
+}
+
+inline void* LocalUniquePtrBuilder::getStorage(size_t size) const {
+	if (constructed_ || size != size_) {
+		assert(false);
+		return NULL;
+	}
+	return storage_;
+}
+
+inline void* LocalUniquePtrBuilder::get() const throw() {
+	if (!constructed_) {
+		return NULL;
+	}
+	return storage_;
+}
+
+} 
+
+template<typename T>
+inline LocalUniquePtr<T>::~LocalUniquePtr() {
+	reset();
+}
+
+template<typename T>
+inline typename LocalUniquePtr<T>::element_type&
+LocalUniquePtr<T>::operator*() const {
+	assert(ptr_.get() != pointer());
+	return *ptr_.get();
+}
+
+template<typename T>
+inline typename LocalUniquePtr<T>::pointer
+LocalUniquePtr<T>::operator->() const throw() {
+	assert(ptr_.get() != pointer());
+	return ptr_.get();
+}
+
+template<typename T>
+inline typename LocalUniquePtr<T>::pointer
+LocalUniquePtr<T>::release() throw() {
+	pointer ptr = ptr_.get();
+	ptr_.get() = pointer();
+	return ptr;
+}
+
+template<typename T>
+inline void LocalUniquePtr<T>::reset() throw() {
+	pointer ptr = release();
+	if (ptr != pointer()) {
+		ptr->~T();
+	}
+}
+
+template<typename T>
+inline LocalUniquePtr<T>& LocalUniquePtr<T>::operator=(
+		const detail::LocalUniquePtrBuilder &builder) {
+	if (ptr_.get() != NULL || storage_.address() != builder.get()) {
+		assert(false);
+		return *this;
+	}
+
+	ptr_.get() = static_cast<T*>(storage_.address());
+	return *this;
+}
+
+template<typename T>
+inline detail::LocalUniquePtrBuilder LocalUniquePtr<T>::toBuilder(T *ptr) {
+	reset();
+
+	void *storage = storage_.address();
+	const bool constructed = (ptr != NULL);
+
+	if (constructed && storage != ptr) {
+		assert(false);
+		storage = NULL;
+	}
+
+	return detail::LocalUniquePtrBuilder(storage, sizeof(T), constructed);
+}
 
 }	
 

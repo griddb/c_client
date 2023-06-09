@@ -429,6 +429,7 @@ bool RWLock::ReadLock::tryLock(void) {
 #endif
 }
 
+#ifndef __APPLE__
 bool RWLock::ReadLock::tryLock(uint32_t msec) {
 #ifdef UTIL_HAVE_POSIX_MUTEX
 	timespec ts = FileLib::calculateTimeoutSpec(CLOCK_REALTIME, msec);
@@ -453,6 +454,7 @@ bool RWLock::ReadLock::tryLock(uint32_t msec) {
 	}
 #endif
 }
+#endif
 
 void RWLock::ReadLock::unlock(void) {
 #ifdef UTIL_HAVE_POSIX_MUTEX
@@ -480,6 +482,7 @@ bool RWLock::WriteLock::tryLock(void) {
 #endif
 }
 
+#ifndef __APPLE__
 bool RWLock::WriteLock::tryLock(uint32_t msec) {
 #ifdef UTIL_HAVE_POSIX_MUTEX
 	timespec ts = FileLib::calculateTimeoutSpec(CLOCK_REALTIME, msec);
@@ -509,6 +512,7 @@ bool RWLock::WriteLock::tryLock(uint32_t msec) {
 	}
 #endif
 }
+#endif
 
 void RWLock::WriteLock::unlock(void) {
 #ifdef UTIL_HAVE_POSIX_MUTEX
