@@ -31,13 +31,6 @@ jobs:
             docker_image: centos
             container_name: centos_container
             upload_path: installer/RPMS/x86_64/griddb-c-client-*-linux.x86_64.rpm
-          - os: Opensuse
-            file_type: rpm
-            package_path: ./c_client/installer/RPMS/x86_64/griddb-c-client-*-opensuse.x86_64.rpm
-            docker_file: .github/dockerfile/Dockerfile-opensuse
-            docker_image: opensuse
-            container_name: opensuse_container
-            upload_path: installer/RPMS/x86_64/griddb-c-client-*-opensuse.x86_64.rpm
 
     steps:
       - uses: actions/checkout@v1
