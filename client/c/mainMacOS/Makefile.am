@@ -1,4 +1,3 @@
-# Line separator must be LF
 lib_LTLIBRARIES = libgridstore.la
 ACLOCAL_AMFLAGS = -I m4
 
