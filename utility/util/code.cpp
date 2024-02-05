@@ -1138,7 +1138,8 @@ void NameCoderImpl::initialize(
 		assert(it->second == it - entryList);
 	}
 
-	std::sort(entryList, entryEnd, EntryPred());
+	const NameCoderOptions options;
+	std::sort(entryList, entryEnd, EntryPred(&options));
 }
 
 const char8_t* NameCoderImpl::findName(
@@ -1152,14 +1153,15 @@ const char8_t* NameCoderImpl::findName(
 }
 
 const NameCoderImpl::Entry* NameCoderImpl::findEntry(
-		const Entry *entryList, size_t count, const char8_t *name) {
+		const Entry *entryList, size_t count, const char8_t *name,
+		const NameCoderOptions &options) {
 	assert(name != NULL);
 
 	const Entry *entryEnd = entryList + count;
 	const Entry key(name, Entry::second_type());
 	const std::pair<const Entry*, const Entry*> &range =
 			std::equal_range<const Entry*>(
-					entryList, entryEnd, key, EntryPred());
+					entryList, entryEnd, key, EntryPred(&options));
 
 	if (range.first == range.second) {
 		return NULL;
@@ -1187,13 +1189,22 @@ const char8_t* NameCoderImpl::removePrefix(
 	return ret;
 }
 
+NameCoderImpl::EntryPred::EntryPred(const NameCoderOptions *options) :
+		options_(options) {
+}
+
 bool NameCoderImpl::EntryPred::operator()(
 		const Entry &entry1, const Entry &entry2) const {
 	if (entry1.first == NULL || entry2.first == NULL) {
 		return (entry1.first == NULL ? 0 : 1)  < (entry2.first == NULL ? 0 : 1);
 	}
 
-	return strcmp(entry1.first, entry2.first) < 0;
+	if (options_->isCaseSensitive()) {
+		return strcmp(entry1.first, entry2.first) < 0;
+	}
+	else {
+		return util::stricmp(entry1.first, entry2.first) < 0;
+	}
 }
 } 
 
