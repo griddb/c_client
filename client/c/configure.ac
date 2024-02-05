@@ -56,6 +56,7 @@ case "${host_os}" in
         ;;
     darwin*)
         BUILD_MAC=true
+        LDFLAGS="$LDFLAGS -liconv"
         ;;
     *)
         AC_MSG_ERROR(["OS $host_os is not supported"])
