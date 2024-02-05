@@ -1213,9 +1213,9 @@ typedef struct GSPreciseTimestampTag {
 
 	/*!
 		@JP
-		@brief ミリ秒未満の桁の値について、ナノ秒単位ので表します。
+		@brief ミリ秒未満の桁の値について、ナノ秒単位で表します。
 		@par
-			有効な値の範囲は@c0 から @c 999999 までです。
+			有効な値の範囲は@c 0 から @c 999999 までです。
 
 		@EN
 
@@ -4713,7 +4713,7 @@ typedef union GSValueTag {
 		@brief 通常精度のTIMESTAMP型のロウフィールドに対応する値です。
 		@par
 			@ref GSValue を用いてフィールド値を設定・取得する場合、
-			値の型は@ref GS_TYPE_TIMESTAMP と対応します。
+			値の型は@ref GS_TYPE_TIMESTAMP によって識別します。
 
 		@EN
 		@brief The value corresponding to a Row field of TIMESTAMP type.
@@ -4728,7 +4728,7 @@ typedef union GSValueTag {
 		@brief 高精度のTIMESTAMP型のロウフィールドに対応する値です。
 		@par
 			@ref GSValue を用いてフィールド値を設定・取得する場合、
-			値の型は@ref GS_TYPE_PRECISE_TIMESTAMP と対応します。
+			値の型は@ref GS_TYPE_PRECISE_TIMESTAMP によって識別します。
 		@since 5.3
 
 		@EN
@@ -5230,12 +5230,12 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<td>consistency</td>
 		<td>一貫性レベル。次のいずれかの文字列を指定できる。
 		<dl>
-		<dt>@c "IMMEDIATE"</dt>
+		<dt><tt>"IMMEDIATE"</tt></dt>
 		<dd>他のクライアントからの更新結果は、該当トランザクションの完了後即座に
 		反映される</dd>
-		<dt>@c "EVENTUAL"</dt>
+		<dt><tt>"EVENTUAL"</tt></dt>
 		<dd>他のクライアントからの更新結果は、該当トランザクションが完了した
-		後でも反映されない場合がある。@ref Container に対する更新操作は
+		後でも反映されない場合がある。@ref GSContainer に対する更新操作は
 		実行できない</dd>
 		</dl>
 		省略時は@c "IMMEDIATE" が指定されたものとみなされる
@@ -5305,9 +5305,9 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<td>authentication</td>
 		<td>認証種別。次のいずれかの文字列を指定できる。
 		<dl>
-		<dt>@c "INTERNAL"</dt>
+		<dt><tt>"INTERNAL"</tt></dt>
 		<dd>クラスタ上で管理されているアカウント情報に基づいた、内部認証</dd>
-		<dt>@c "LDAP"</dt>
+		<dt><tt>"LDAP"</tt></dt>
 		<dd>クラスタ外にあるLDAPサーバで管理されているアカウント情報に基づいた、
 		外部認証。LDAP接続設定のないクラスタに接続する場合、もしくは、
 		管理ユーザを使用する場合は指定できない</dd>
@@ -5322,12 +5322,12 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<td>クラスタへの接続においてSSLの使用有無の判断に用いられるモード。
 		次のいずれかの文字列を指定できる。
 		<dl>
-		<dt>@c "DISABLED"</dt>
+		<dt><tt>"DISABLED"</tt></dt>
 		<dd>SSLを常に使用しない</dd>
-		<dt>@c "PREFERRED"</dt>
+		<dt><tt>"PREFERRED"</tt></dt>
 		<dd>可能な限りSSLを使用する。SSL接続・非SSL接続共に使用できる場合は
 		SSL接続を使用する</dd>
-		<dt>@c "VERIFY"</dt>
+		<dt><tt>"VERIFY"</tt></dt>
 		<dd>SSLを常に使用する。サーバ検証あり</dd>
 		</dl>
 		SSL接続を選択できる環境設定(詳細: @ref GSGridStoreFactory)の場合のみ
@@ -5339,7 +5339,7 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<td>connectionRoute</td>
 		<td>クラスタ接続時における通信経路。次の文字列を指定できる。
 		<dl>
-		<dt>@c "PUBLIC"</dt>
+		<dt><tt>"PUBLIC"</tt></dt>
 		<dd>クラスタの外部通信経路が設定されている場合に、外部通信経路を経由した接続を行う</dd>
 		</dl>
 		省略時は通常のクラスタ通信経路を用いた接続が行われる。外部接続が必要な場合のみ指定する。
@@ -16483,7 +16483,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsLong(
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- 引数に@c NULL が指定された場合
-		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる
+			場合
 	@since 1.5
 
 	@EN
@@ -16543,7 +16544,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsTimestamp(
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- 引数に@c NULL が指定された場合
-		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる
+			場合
 	@since 5.3
 
 	@EN
@@ -16853,7 +16855,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsLong(
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- 引数に@c NULL が指定された場合
-		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる
+			場合
 	@since 1.5
 
 	@EN
@@ -16913,7 +16916,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsTimestamp(
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- 引数に@c NULL が指定された場合
-		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる
+			場合
 	@since 5.3
 
 	@EN
@@ -17315,7 +17319,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsLong(
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- 引数に@c NULL が指定された場合
-		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる
+			場合
 	@since 1.5
 
 	@EN
@@ -17390,7 +17395,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsTimestamp(
 		ポインタ値が@c NULL の場合、この格納処理が省略されます。
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- 引数に@c NULL が指定された場合
-		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる
+			場合
 	@since 5.3
 
 	@EN
@@ -17676,7 +17682,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByLong(
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- @c predicate 引数に@c NULL が指定された場合
 		- 個別条件がすでに設定されていた場合
-		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる
+			場合
 	@since 1.5
 
 	@EN
@@ -17725,7 +17732,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByTimestamp(
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- @c predicate 引数に@c NULL が指定された場合
 		- 個別条件がすでに設定されていた場合
-		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる
+			場合
 	@since 5.3
 
 	@EN
@@ -18009,7 +18017,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByLong(
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- @c predicate 引数に@c NULL が指定された場合
 		- 個別条件がすでに設定されていた場合
-		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる
+			場合
 	@since 1.5
 
 	@EN
@@ -18058,7 +18067,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByTimestamp(
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- @c predicate 引数に@c NULL が指定された場合
 		- 個別条件がすでに設定されていた場合
-		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる
+			場合
 	@since 5.3
 
 	@EN
@@ -18179,7 +18189,6 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyGeneral(
 		処理対象の@ref GSRowKeyPredicate
 	@param [in] key
 		個別条件の要素の一つとするロウキーの値
-		終了位置とするロウキーの値。@c NULL の場合、設定が解除されます
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- ポインタ型引数に@c NULL が指定された場合
 		- 個別条件がすでに設定されていた場合
@@ -18223,7 +18232,6 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByString(
 		処理対象の@ref GSRowKeyPredicate
 	@param [in] key
 		個別条件の要素の一つとするロウキーの値
-		終了位置とするロウキーの値。@c NULL の場合、設定が解除されます
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- ポインタ型引数に@c NULL が指定された場合
 		- 個別条件がすでに設定されていた場合
@@ -18267,7 +18275,6 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByInteger(
 		処理対象の@ref GSRowKeyPredicate
 	@param [in] key
 		個別条件の要素の一つとするロウキーの値
-		終了位置とするロウキーの値。@c NULL の場合、設定が解除されます
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- ポインタ型引数に@c NULL が指定された場合
 		- 個別条件がすでに設定されていた場合
@@ -18312,11 +18319,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByLong(
 		処理対象の@ref GSRowKeyPredicate
 	@param [in] key
 		個別条件の要素の一つとするロウキーの値
-		終了位置とするロウキーの値。@c NULL の場合、設定が解除されます
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- ポインタ型引数に@c NULL が指定された場合
 		- 個別条件がすでに設定されていた場合
-		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる
+			場合
 	@since 1.5
 
 	@EN
@@ -18358,11 +18365,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByTimestamp(
 		処理対象の@ref GSRowKeyPredicate
 	@param [in] key
 		個別条件の要素の一つとするロウキーの値
-		終了位置とするロウキーの値。@c NULL の場合、設定が解除されます
 	@return 実行結果のコード番号。次の場合、@ref GS_RESULT_OK 以外の値を返します。
 		- ポインタ型引数に@c NULL が指定された場合
 		- 個別条件がすでに設定されていた場合
-		- 期待した型・精度種別が合致条件の評価対象とするロウキーの型と異なる場合
+		- 期待した型・精度種別が合致条件の評価対象とするロウキーのものと異なる
+			場合
 	@since 5.3
 
 	@EN

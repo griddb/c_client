@@ -53,7 +53,7 @@ void ContainerKeyUtils::compose(
 	FullContainerKeyComponents dest;
 	dest.dbId_ = components.databaseId_;
 	dest.baseName_ = components.base_;
-	dest.baseNameSize_ = components.base_.size();
+	dest.baseNameSize_ = static_cast<uint32_t>(components.base_.size());
 	dest.largeContainerId_ = (components.largeId_ < 0 ?
 			UNDEF_LARGE_CONTAINERID : components.largeId_);
 	dest.affinityNumber_ = (components.affinityNum_ < 0 ?
@@ -63,12 +63,12 @@ void ContainerKeyUtils::compose(
 
 	if (components.affinityStr_.get() != NULL) {
 		dest.affinityString_ = *components.affinityStr_;
-		dest.affinityStringSize_ = components.affinityStr_->size();
+		dest.affinityStringSize_ = static_cast<uint32_t>(components.affinityStr_->size());
 	}
 
 	if (components.systemStr_.get() != NULL) {
 		dest.systemPart_ = *components.systemStr_;
-		dest.systemPartSize_ = components.systemStr_->size();
+		dest.systemPartSize_ = static_cast<uint32_t>(components.systemStr_->size());
 	}
 
 	const KeyConstraint &constraint = Tool::getConstraint(true);
@@ -127,7 +127,7 @@ bool ContainerKeyUtils::parse(
 
 	const KeyConstraint &constraint = Tool::getConstraint(internalMode);
 	const FullContainerKey key(
-			constraint, PUBLIC_DATABASE_ID, str, strlen(str));
+		constraint, PUBLIC_DATABASE_ID, str, static_cast<uint32_t>(strlen(str)));
 	Tool::toBinary(key, bytes);
 
 	const FullContainerKeyComponents &components =

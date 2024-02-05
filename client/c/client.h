@@ -1438,6 +1438,7 @@ public:
 
 	GSType toFullFieldType() const;
 	GSType toFullObjectType() const;
+	const GSType* toFullObjectTypeRef() const;
 
 	int8_t toRawType() const;
 	GSTypeOption toOptions() const;
@@ -1842,9 +1843,12 @@ struct RowMapper::TypeTraits {
 		return ObjectTraits::arraySizeOf(v);
 	}
 
-	static const GSType* findFullKeyType() {
-		static const GSType type = FULL_FIELD_TYPE;
-		return (KEY_TYPE ? &type : NULL);
+	static const GSType* findKeyFullObjectType() {
+		return (KEY_TYPE ? getDetailType().toFullObjectTypeRef() : NULL);
+	}
+
+	static const DetailElementType& getDetailType() {
+		return DetailElementType::of(ELEMENT_TYPE, ARRAY_TYPE);
 	}
 
 };
@@ -4785,13 +4789,13 @@ private:
 struct GSContainerTag::AnyKeyTraits {
 	typedef void Object;
 	static const bool GENERAL_KEY = false;
-	static const GSType* findFullKeyType() { return NULL; }
+	static const GSType* findKeyFullObjectType() { return NULL; }
 };
 
 struct GSContainerTag::GeneralKeyTraits {
 	typedef GSRowKey Object;
 	static const bool GENERAL_KEY = true;
-	static const GSType* findFullKeyType() { return NULL; }
+	static const GSType* findKeyFullObjectType() { return NULL; }
 };
 
 struct GSContainerTag::PartialFetchStatus {

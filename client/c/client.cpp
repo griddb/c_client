@@ -2233,7 +2233,8 @@ void RowMapper::encodeKeyGeneral(
 			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
 					"Unacceptable key type for composite key");
 		}
-		if (*keyType != frontKeyType.toFullObjectType()) {
+		if (!DetailElementType::ofFullObject(*keyType).matchAsObject(
+				frontKeyType)) {
 			GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED,
 					"Key type unmatched");
 		}
@@ -2321,7 +2322,9 @@ void RowMapper::encodeKeyByObj(
 
 	const Entry &entry = keyMapper.getEntry(0);
 	assert(!entry.getType().isForArray());
-	if (keyType != NULL && *keyType != entry.getType().toFullObjectType()) {
+	if (keyType != NULL &&
+			!DetailElementType::ofFullObject(*keyType).matchAsObject(
+					entry.getType())) {
 		GS_CLIENT_THROW_ERROR(GS_ERROR_CC_KEY_NOT_ACCEPTED, "");
 	}
 
@@ -5094,6 +5097,10 @@ GSType RowMapper::DetailElementType::toFullFieldType() const {
 
 GSType RowMapper::DetailElementType::toFullObjectType() const {
 	return fullObjectType_;
+}
+
+const GSType* RowMapper::DetailElementType::toFullObjectTypeRef() const {
+	return &fullObjectType_;
 }
 
 int8_t RowMapper::DetailElementType::toRawType() const {
@@ -10791,13 +10798,15 @@ Properties GridStoreChannel::Source::resolveTransportProperties(
 }
 
 
-GridStoreChannel::Context::~Context() try {
-	for (ConnectionMap::iterator it = activeConnections_.begin();
-			it != activeConnections_.end(); ++it) {
-		delete it->second.second;
+GridStoreChannel::Context::~Context() {
+	try {
+		for (ConnectionMap::iterator it = activeConnections_.begin();
+				it != activeConnections_.end(); ++it) {
+			delete it->second.second;
+		}
 	}
-}
-catch (...) {
+	catch (...) {
+	}
 }
 
 GridStoreChannel::Context::Context(const Context &another) :
@@ -11021,18 +11030,20 @@ GridStoreChannel::ContainerCache::ContainerCache(int32_t cacheSize) :
 		lastSessionCacheId_(0) {
 }
 
-GridStoreChannel::ContainerCache::~ContainerCache() try {
-	RowMapper::Cache &mapperCache = RowMapper::getDefaultCache();
-	for (SchemaCache::iterator it = schemaCache_.begin();
-			it != schemaCache_.end(); ++it) {
-		mapperCache.release(&it->second.mapper_);
-	}
+GridStoreChannel::ContainerCache::~ContainerCache() {
+	try {
+		RowMapper::Cache &mapperCache = RowMapper::getDefaultCache();
+		for (SchemaCache::iterator it = schemaCache_.begin();
+				it != schemaCache_.end(); ++it) {
+			mapperCache.release(&it->second.mapper_);
+		}
 
-	schemaNameMap_.clear();
-	schemaCache_.clear();
-	sessionCache_.clear();
-}
-catch (...) {
+		schemaNameMap_.clear();
+		schemaCache_.clear();
+		sessionCache_.clear();
+	}
+	catch (...) {
+	}
 }
 
 const GridStoreChannel::LocatedSchema*
@@ -11586,11 +11597,13 @@ GSInterceptor::GSInterceptor(GSInterceptorManager &manager) :
 	id_ = manager_.add(*this);
 }
 
-GSInterceptor::~GSInterceptor() try {
-	manager_.remove(id_);
-}
-catch (...) {
-	assert(false);
+GSInterceptor::~GSInterceptor() {
+	try {
+		manager_.remove(id_);
+	}
+	catch (...) {
+		assert(false);
+	}
 }
 
 GSInterceptor::Id GSInterceptor::getId() const {
@@ -12048,18 +12061,20 @@ GSGridStoreFactoryTag::GSGridStoreFactoryTag() throw() :
 	}
 }
 
-GSGridStoreFactoryTag::~GSGridStoreFactoryTag() try {
-	if (data_.get() == NULL) {
-		return;
-	}
+GSGridStoreFactoryTag::~GSGridStoreFactoryTag() {
+	try {
+		if (data_.get() == NULL) {
+			return;
+		}
 
-	for (ChannelMap::iterator it = data_->channelMap_.begin();
-			it != data_->channelMap_.end(); ++it) {
-		delete it->second;
+		for (ChannelMap::iterator it = data_->channelMap_.begin();
+				it != data_->channelMap_.end(); ++it) {
+			delete it->second;
+		}
+		data_->channelMap_.clear();
 	}
-	data_->channelMap_.clear();
-}
-catch (...) {
+	catch (...) {
+	}
 }
 
 bool GSGridStoreFactoryTag::isAlive() throw() {
@@ -13923,25 +13938,27 @@ void GSGridStoreTag::multiGet(
 	typedef std::vector<GSRow*> RowList;
 
 	struct Cleaner {
-		~Cleaner() try {
-			for (MapperList::iterator it = allMapperList_.begin();
-					it != allMapperList_.end(); ++it) {
-				try {
-					RowMapper::getDefaultCache().release(&(*it));
+		~Cleaner() {
+			try {
+				for (MapperList::iterator it = allMapperList_.begin();
+						it != allMapperList_.end(); ++it) {
+					try {
+						RowMapper::getDefaultCache().release(&(*it));
+					}
+					catch (...) {
+					}
 				}
-				catch (...) {
+				for (RowList::iterator it = allRowList_.begin();
+						it != allRowList_.end(); ++it) {
+					try {
+						GSRow::close(&(*it));
+					}
+					catch (...) {
+					}
 				}
 			}
-			for (RowList::iterator it = allRowList_.begin();
-					it != allRowList_.end(); ++it) {
-				try {
-					GSRow::close(&(*it));
-				}
-				catch (...) {
-				}
+			catch (...) {
 			}
-		}
-		catch (...) {
 		}
 
 		MapperList allMapperList_;
@@ -17434,7 +17451,7 @@ GSResult GSContainerTag::getRowChecked(
 		GS_CLIENT_CHECK_NOT_NULL(rowObj);
 
 		*exists = container->getRow(
-				Traits::GENERAL_KEY, Traits::findFullKeyType(), key,
+				Traits::GENERAL_KEY, Traits::findKeyFullObjectType(), key,
 				RowGeneral, rowObj, ClientUtil::toBool(forUpdate), false);
 	}
 	catch (...) {
@@ -17464,7 +17481,7 @@ GSResult GSContainerTag::putRowChecked(
 		GS_CLIENT_CHECK_NOT_NULL(rowObj);
 
 		*exists = container->putRow(
-				Traits::GENERAL_KEY, Traits::findFullKeyType(), key,
+				Traits::GENERAL_KEY, Traits::findKeyFullObjectType(), key,
 				RowGeneral, rowObj, false);
 	}
 	catch (...) {
@@ -17492,7 +17509,7 @@ GSResult GSContainerTag::removeRowChecked(
 		GS_CLIENT_CHECK_NOT_NULL(key);
 
 		*exists = container->removeRow(
-				Traits::GENERAL_KEY, Traits::findFullKeyType(), key, false);
+				Traits::GENERAL_KEY, Traits::findKeyFullObjectType(), key, false);
 	}
 	catch (...) {
 		*exists = GS_FALSE;
@@ -24060,7 +24077,7 @@ GSResult GS_API_CALL gsGetAggregationValueAsTimestamp(
 			GS_CLIENT_INTERCEPT_API_CALL_FUNCTION(aggregationResult));
 }
 
-GSResult GS_API_CALL gsGetAggregationValueAsTimestamp(
+GSResult GS_API_CALL gsGetAggregationValueAsPreciseTimestamp(
 		GSAggregationResult *aggregationResult, GSPreciseTimestamp *value,
 		GSBool *assigned) {
 	typedef RowMapper::TypeTraits<RowMapper::ELEM_TYPE_NANO_TIMESTAMP, false> Traits;
