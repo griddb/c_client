@@ -279,10 +279,12 @@ Socket::Socket(const char *user) : family_(0), user_(user) {
 	SocketLibrary::checkAvailability();
 }
 
-Socket::~Socket() try {
-	close();
-}
-catch (...) {
+Socket::~Socket() {
+	try {
+		close();
+	}
+	catch (...) {
+	}
 }
 
 void Socket::close(void) {

@@ -700,14 +700,21 @@ struct StreamErrors {
 
 typedef ByteStream<util::ArrayInStream> ArrayByteInStream;
 
+class NameCoderOptions {
+public:
+	NameCoderOptions();
+
+	void setCaseSensitive(bool value);
+	bool isCaseSensitive() const;
+
+private:
+	bool caseSensitive_;
+};
 
 namespace detail {
 struct NameCoderImpl {
+public:
 	typedef std::pair<const char8_t*, int32_t> Entry;
-
-	struct EntryPred {
-		bool operator()(const Entry &entry1, const Entry &entry2) const;
-	};
 
 	static void initialize(
 			const char8_t **nameList, Entry *entryList, size_t count);
@@ -717,12 +724,25 @@ struct NameCoderImpl {
 			const char8_t *defaultName);
 
 	static const Entry* findEntry(
-			const Entry *entryList, size_t count, const char8_t *name);
+			const Entry *entryList, size_t count, const char8_t *name,
+			const NameCoderOptions &options);
 
 	static const char8_t* removePrefix(
 			const char8_t *name, size_t prefixWordCount);
+
+private:
+	struct EntryPred;
 };
-} 
+
+struct NameCoderImpl::EntryPred {
+public:
+	explicit EntryPred(const NameCoderOptions *options);
+	bool operator()(const Entry &entry1, const Entry &entry2) const;
+
+private:
+	const NameCoderOptions *options_;
+};
+}
 
 template<typename T>
 struct NameCoderEntry {
@@ -739,7 +759,10 @@ public:
 	NameCoder(const Entry (&entryList)[Count], size_t prefixWordCount);
 
 	const char8_t* operator()(T id, const char8_t *defaultName = NULL) const;
-	bool operator()(const char8_t *name, T &id) const;
+
+	bool operator()(
+			const char8_t *name, T &id,
+			const NameCoderOptions &options = NameCoderOptions()) const;
 
 	size_t getSize() const { return Count; }
 
@@ -1870,6 +1893,16 @@ inline ByteStream<S, F>& ByteStream<S, F>::put(
 	return *this;
 }
 
+inline NameCoderOptions::NameCoderOptions() : caseSensitive_(true) {
+}
+
+inline void NameCoderOptions::setCaseSensitive(bool value) {
+	caseSensitive_ = value;
+}
+
+inline bool NameCoderOptions::isCaseSensitive() const {
+	return caseSensitive_;
+}
 
 
 template<typename T, size_t Count>
@@ -1894,8 +1927,9 @@ const char8_t* NameCoder<T, Count>::operator()(
 }
 
 template<typename T, size_t Count>
-bool NameCoder<T, Count>::operator()(const char8_t *name, T &id) const {
-	const BaseEntry *entry = Impl::findEntry(entryList_, Count, name);
+bool NameCoder<T, Count>::operator()(
+		const char8_t *name, T &id, const NameCoderOptions &options) const {
+	const BaseEntry *entry = Impl::findEntry(entryList_, Count, name, options);
 
 	if (entry == NULL) {
 		id = T();

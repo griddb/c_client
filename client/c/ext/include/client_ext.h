@@ -39,7 +39,9 @@ GS_CLIENT_EXT_PUBLIC int32_t UTIL_DLL_CALL gsGetClientExtensionFunctions(
 class GSClientExtension {
 public:
 	enum {
-		CURRENT_LIB_VERSION = 0
+		// 0: V4.5
+		// 1: V5.4
+		CURRENT_LIB_VERSION = 1
 	};
 
 	struct Functions;

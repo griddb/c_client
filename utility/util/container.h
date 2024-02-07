@@ -812,7 +812,9 @@ typename XArray<T, Alloc>::iterator XArray<T, Alloc>::insert(
 	}
 
 	T *newPos = data_ + posIndex;
-	memmove(newPos + 1, newPos, (size() - posIndex) * sizeof(T));
+	void *s = reinterpret_cast<void*>(newPos);
+	void *d = reinterpret_cast<void*>(newPos + 1);
+	memmove(d, s, (size() - posIndex) * sizeof(T));
 	*newPos = value;
 	tail_++;
 	restSize_--;
@@ -836,7 +838,9 @@ void XArray<T, Alloc>::insert(iterator pos, Iter first, Iter last) {
 	}
 
 	T *dest = data_ + posIndex;
-	memmove(dest + count, dest, (size() - posIndex) * sizeof(T));
+	void *s = reinterpret_cast<void*>(dest);
+	void *d = reinterpret_cast<void*>(dest + count);
+	memmove(d, s, (size() - posIndex) * sizeof(T));
 	for (Iter src = first; src != last; ++dest, ++src) {
 		*dest = *src;
 	}
@@ -848,7 +852,9 @@ template<typename T, typename Alloc>
 typename XArray<T, Alloc>::iterator XArray<T, Alloc>::erase(iterator pos) {
 	assert(data_ <= pos.cur_ && pos.cur_ < tail_);
 
-	memmove(pos.cur_, pos.cur_ + 1, (tail_ - pos.cur_) * sizeof(T));
+	void *s = reinterpret_cast<void*>(pos.cur_ + 1);
+	void *d = reinterpret_cast<void*>(pos.cur_);	
+	memmove(d, s, (tail_ - pos.cur_) * sizeof(T));
 	tail_--;
 	restSize_++;
 
@@ -877,7 +883,7 @@ void XArray<T, Alloc>::reserveInternal(size_t requestedCapacity) {
 
 	const uint32_t MIN_CAPACITY_BIT = 4;	
 	const size_t usedSize = this->size();
-	const size_t newCapacity = (1U << std::max<uint32_t>(
+	const size_t newCapacity = (1ULL << std::max<uint32_t>(
 		MIN_CAPACITY_BIT,
 		static_cast<uint32_t>(sizeof(uint32_t) * CHAR_BIT) -
 		nlz(static_cast<uint32_t>(requestedCapacity - 1)) ));
@@ -897,7 +903,9 @@ void XArray<T, Alloc>::reserveInternal(size_t requestedCapacity) {
 	}
 
 	if (data_ != NULL) {
-		memcpy(newData, data_, sizeof(T) * usedSize);
+		void *s = reinterpret_cast<void*>(data_);
+		void *d = reinterpret_cast<void*>(newData);		
+		memcpy(d, s, sizeof(T) * usedSize);
 		allocator_.deallocate(data_, capacity());
 	}
 

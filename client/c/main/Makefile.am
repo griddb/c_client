@@ -1,4 +1,3 @@
-# Line separator must be LF
 lib_LTLIBRARIES = libgridstore.la
 ACLOCAL_AMFLAGS = -I m4
 
@@ -28,7 +27,7 @@ sofile3 = $(sofile)
 all-local: $(bindir)/$(sofile1) $(bindir)/$(sofile2) $(bindir)/$(sofile3)
 
 $(bindir)/$(sofile1): $(lib_LTLIBRARIES)
-	test `nm -u $(sofile0) | grep -v '@@GLIBC\|@@CXXABI\|@@GCC\| w ' | wc -l` -eq 0
+	test `nm -u $(sofile0) | grep -v '@GLIBC\|@CXXABI\|@GCC\| w ' | wc -l` -eq 0
 	test -x $(sofile0) && mkdir -p $(bindir) && cp $(sofile0) $(bindir)/
 
 $(bindir)/$(sofile2): $(bindir)/$(sofile1)

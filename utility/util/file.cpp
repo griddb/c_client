@@ -419,10 +419,12 @@ const FilePermission File::DEFAULT_PERMISSION = 0664;
 File::File() : fd_(INITIAL_FD) {
 }
 
-File::~File() try {
-	close();
-}
-catch (...) {
+File::~File() {
+	try {
+		close();
+	}
+	catch (...) {
+	}
 }
 
 void File::close(void) {
