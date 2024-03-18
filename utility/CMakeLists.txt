@@ -37,6 +37,7 @@ set(SRC_FILES
     util/thread.cpp
     util/time.cpp
     util/type.cpp
+    util/system.cpp
 )
 source_group("Sources" FILES ${SRC_FILES})
 
@@ -53,6 +54,7 @@ set(HEADERS_FILES
     util/thread.h
     util/time.h
     util/type.h
+    util/system.h
 )
 source_group("Headers" FILES ${HEADERS_FILES})
 

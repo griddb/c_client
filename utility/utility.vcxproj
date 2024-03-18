@@ -81,6 +81,7 @@
     <ClCompile Include="util\file.cpp" />
     <ClCompile Include="util\net.cpp" />
     <ClCompile Include="util\os.cpp" />
+    <ClCompile Include="util\system.cpp" />
     <ClCompile Include="util\thread.cpp" />
     <ClCompile Include="util\time.cpp" />
     <ClCompile Include="util\type.cpp" />
@@ -93,6 +94,7 @@
     <ClInclude Include="util\net.h" />
     <ClInclude Include="util\numeric.h" />
     <ClInclude Include="util\os.h" />
+    <ClInclude Include="util\system.h" />
     <ClInclude Include="util\thread.h" />
     <ClInclude Include="util\time.h" />
     <ClInclude Include="util\type.h" />

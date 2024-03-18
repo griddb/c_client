@@ -113,6 +113,7 @@
     <ClCompile Include="..\..\server\http.cpp" />
     <ClCompile Include="..\..\server\json.cpp" />
     <ClCompile Include="..\..\server\service_address.cpp" />
+    <ClCompile Include="..\..\server\socket_wrapper.cpp" />
     <ClCompile Include="..\..\server\uuid_utils.cpp" />
     <ClCompile Include="client.cpp" />
     <ClCompile Include="container_key_utils.cpp" />
@@ -127,6 +128,7 @@
     <ClInclude Include="..\..\server\http.h" />
     <ClInclude Include="..\..\server\json.h" />
     <ClInclude Include="..\..\server\service_address.h" />
+    <ClInclude Include="..\..\server\socket_wrapper.h" />
     <ClInclude Include="..\..\server\uuid_utils.h" />
     <ClInclude Include="client.h" />
     <ClInclude Include="container_key_utils.h" />

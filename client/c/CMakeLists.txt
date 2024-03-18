@@ -58,12 +58,14 @@ set(SRC_FILES
 	${C_CLIENT_DIR}/server/json.cpp
 	${C_CLIENT_DIR}/server/uuid_utils.cpp
 	${C_CLIENT_DIR}/server/bit_array.cpp
+	${C_CLIENT_DIR}/server/socket_wrapper.cpp
 )
 source_group("Sources" FILES ${SRC_FILES})
 
 # Header Files
 include_directories(
     ${C_CLIENT_DIR}/client/c/include 
+    ${C_CLIENT_DIR}/client/c/ext/include
     ${UTILITY_DIR}/
     ${C_CLIENT_DIR}/client/c/ 
     ${C_CLIENT_DIR}/server/
@@ -82,6 +84,7 @@ set(HEADERS_FILES
 	${C_CLIENT_DIR}/client/c/include/gridstore.h
 	${C_CLIENT_DIR}/server/authentication.h
 	${C_CLIENT_DIR}/server/service_address.h
+	${C_CLIENT_DIR}/server/socket_wrapper.h
 )
 source_group("Headers" FILES ${HEADERS_FILES})
 
