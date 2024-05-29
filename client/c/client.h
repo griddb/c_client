@@ -1713,6 +1713,7 @@ private:
 		RowMapper::ELEM_TYPE_##upperSymbol, false> { \
 			typedef fieldType Field; \
 			typedef objectType Object; \
+			static const size_t zero = 0; \
 			static const GSType FULL_FIELD_TYPE = GS_TYPE_##upperSymbolFull; \
 			static Object& as(GSValue &v) { \
 					return v.as##camelSymbol; } \
@@ -1721,11 +1722,11 @@ private:
 			template<typename Value> \
 			static size_t& arraySizeOf(Value &v) { \
 					UTIL_STATIC_ASSERT(sizeof(Value) == 0); \
-					return *static_cast<size_t*>(NULL); } \
+					return *const_cast<size_t*>(&zero); } \
 			template<typename Value> \
 			static const size_t& arraySizeOf(const Value &v) { \
 					UTIL_STATIC_ASSERT(sizeof(Value) == 0); \
-					return *static_cast<size_t*>(NULL); } \
+					return zero; } \
 		}
 
 #define CLIENT_TYPE_TRAITS_PRIMITIVE( \
