@@ -45,7 +45,7 @@ static int unhex[] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
 #define FALSE 0
 #define MIN(a,b) (a < b ? a : b)
 
-#define REMAINING (pe - p)
+#define REMAINING (unsigned int)(pe - p)
 #define CURRENT (parser->current_request)
 #define CONTENT_LENGTH (parser->current_request->content_length)
 #define CALLBACK(FOR)                               \

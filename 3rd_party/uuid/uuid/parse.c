@@ -64,15 +64,15 @@ int uuid_parse(const char *in, uuid_t uu)
 			return -1;
 	}
 	uuid.time_low = strtoul(in, NULL, 16);
-	uuid.time_mid = strtoul(in+9, NULL, 16);
-	uuid.time_hi_and_version = strtoul(in+14, NULL, 16);
-	uuid.clock_seq = strtoul(in+19, NULL, 16);
+	uuid.time_mid = (uint16_t) strtoul(in+9, NULL, 16);
+	uuid.time_hi_and_version = (uint16_t) strtoul(in+14, NULL, 16);
+	uuid.clock_seq = (uint16_t) strtoul(in+19, NULL, 16);
 	cp = in+24;
 	buf[2] = 0;
 	for (i=0; i < 6; i++) {
 		buf[0] = *cp++;
 		buf[1] = *cp++;
-		uuid.node[i] = strtoul(buf, NULL, 16);
+		uuid.node[i] = (uint8_t) strtoul(buf, NULL, 16);
 	}
 
 	uuid_pack(&uuid, uu);
