@@ -12,7 +12,7 @@ configure: clean
 
 build: configure
 	cd client/c && \
-	make CC=gcc-7 CXX=g++-7
+	make
 
 override_dh_install:
 	dh_install bin/libgridstore.so.0.0.0                                   usr/griddb_c_client-$(C_CLIENT_VER)/lib
