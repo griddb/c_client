@@ -1,11 +1,11 @@
 FROM centos:centos7.8.2003
 
-ENV GRIDDB_VERSION=4.5.2
-ENV GRIDDB_DOWNLOAD_SHA512=2639cc7549f4fc151987c686c76e4deeb4b27f07b8a35dbf50b2f08954e1ee4dc39bd4a47d4407a63bb6fe7d9441508cd89009827d937d1045e25f685553cceb
+ENV GRIDDB_VERSION=5.3.1
+ENV GRIDDB_DOWNLOAD_SHA512=8ce6bcb2eeb952dd0fac8a055eb9cb76cd795b8d73067593e71d1b7e2eff39ee367d3f5eee610400685130b58e4b484bf56a111ada87e32228e7f7f74db25e2a
 
 # Install dependency other
 RUN set -eux \
-    && yum install -y wget python27 automake make gcc gcc-c++ rpm-build rsync libtool \
+    && yum install -y wget python3 automake make gcc gcc-c++ rpm-build rsync libtool \
     && yum clean all
 
 # Install griddb server
