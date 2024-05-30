@@ -1,11 +1,12 @@
 #!/bin/sh
 
-# Declare constants for OS Ubuntu, CentOS, openSUSE
+# Declare constants for OS Ubuntu, CentOS, openSUSE, RockyLinux
 readonly UBUNTU=Ubuntu
 readonly CENTOS=Centos
 readonly OPENSUSE=Opensuse
+readonly ROCKYLINUX=Rockylinux
 
-# Build docker images using Dockerfile for Ubuntu, CentOS, openSUSE
+# Build docker images using Dockerfile for Ubuntu, CentOS, openSUSE, RockyLinux
 build_docker_image() {
     docker build -t $image_name -f ${{ matrix.docker_file }} .
 }
@@ -28,12 +29,12 @@ get_version() {
     echo $griddb_version
 }
 
-# Build C Client for CentOS, openSUSE
+# Build C Client for CentOS, openSUSE, RockyLinux
 build_c_client() {
     local os=$1
     cd c_client
     case $os in
-        $CENTOS | $OPENSUSE)
+        $CENTOS | $OPENSUSE | $ROCKYLINUX)
             # Build GridDB server
             cd client/c
             ./bootstrap.sh
@@ -51,11 +52,11 @@ build_c_client() {
     esac
 }
 
-# Create rpm for CentOS, openSUSE and deb package for Ubuntu
+# Create rpm for CentOS, openSUSE, RockyLinux and deb package for Ubuntu
 build_package() {
     local os=$1
     case $os in
-        $CENTOS | $OPENSUSE)
+        $CENTOS | $OPENSUSE | $ROCKYLINUX)
             # Get griddb version and set source code zip file name,
             #   ex "4.5.2" and "griddb-c-client-4.5.2.zip"
             cd c_client
@@ -101,7 +102,7 @@ install_c_client() {
     local os=$2
 
     case $os in
-        $CENTOS | $OPENSUSE)
+        $CENTOS | $OPENSUSE | $ROCKYLINUX)
             rpm -ivh $package_path
             ;;
         $UBUNTU)
@@ -121,7 +122,7 @@ check_package() {
 
     local os=$2
     case $os in
-        $CENTOS | $OPENSUSE)
+        $CENTOS | $OPENSUSE | $ROCKYLINUX)
             rpm -qip $package_path
             ;;
         $UBUNTU)
@@ -155,7 +156,7 @@ uninstall_package() {
     local package_name=$1
     local os=$2
     case $os in
-        $CENTOS | $OPENSUSE)
+        $CENTOS | $OPENSUSE | $ROCKYLINUX)
             rpm -e $package_name
             ;;
         $UBUNTU)
@@ -172,8 +173,14 @@ config_griddb() {
     local username=$1
     local password=$2
     local cluster_name=$3
+
+    local griddb_version=5.3.1
+    # Use config Multicast method of GridDB server
+    cp -r /usr/griddb-$griddb_version/conf_multicast/. /var/lib/gridstore/conf/.
+    # Config new password and clustername
     su -l gsadm -c "gs_passwd $username -p $password"
-    su -l gsadm -c "sed -i 's/\"clusterName\":\"\"/\"clusterName\":\"$cluster_name\"/g' /var/lib/gridstore/conf/gs_cluster.json"
+    su -l gsadm -c "sed -i 's/\(\"clusterName\":\)\"\"/\1\"$cluster_name\"/g' /var/lib/gridstore/conf/gs_cluster.json"
+
 }
 
 # Start and run griddb server
@@ -192,7 +199,7 @@ copy_package_to_host() {
     local container_name=$1
     local griddb_version=$(get_version)
     case $os in
-        $CENTOS)
+        $CENTOS | $ROCKYLINUX)
             mkdir -p installer/RPMS/x86_64/
             docker cp $container_name:/c_client/installer/RPMS/x86_64/griddb-c-client-${griddb_version}-linux.x86_64.rpm installer/RPMS/x86_64/
             ;;
@@ -208,4 +215,3 @@ copy_package_to_host() {
             ;;
     esac
 }
-
