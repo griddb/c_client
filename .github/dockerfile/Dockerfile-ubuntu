@@ -1,21 +1,16 @@
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 
-ENV GRIDDB_VERSION=4.5.2
-ENV GRIDDB_DOWNLOAD_SHA512=92d0e382c8d694c2b37274fa37785e2bdb9d6ad8aee0f559e75a528ad171aea1221091ca24db5e2f90442fd92042a6307198d74d0eb1b5f9a23659a26ca7b609
+# Enviroment
+ENV DEBIAN_FRONTEND noninteractive
+
+ENV GRIDDB_VERSION=5.3.1
+ENV GRIDDB_DOWNLOAD_SHA512=d087e79665346f59fe8b9a50b9386f0805bb73da51fd3bc4f97e1737659d5f7676850abb71f7c34a038a0b48227878139f5904ac8bbc95062f4ec39887a75f12
 
 # Install dependency
 RUN set -eux \
     && apt-get update -y \
-    && apt-get install -y gcc-4.8 \
-    && apt-get install -y g++-4.8 \
-    && apt-get install -y debhelper libtool python2.7 wget \
+    && apt-get install -y debhelper libtool python3 wget init systemd \
     && apt-get clean all
-
-# Create softlink gcc g++ python2
-RUn set -eux \
-    && ln -sf /usr/bin/g++-4.8 /usr/bin/g++ \
-    && ln -sf /usr/bin/gcc-4.8 /usr/bin/gcc \
-    && ln -sf /usr/bin/python2.7 /usr/bin/python2
 
 # Install griddb server
 RUN set -eux \
