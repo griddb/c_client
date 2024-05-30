@@ -381,7 +381,7 @@ typedef int32_t GSEnum;
 
 	@EN
 	@ingroup Group_GSTimestamp
-	@brief Time data type corresponding to TIMESTAMP type on GridDB.
+	@brief Time data type corresponding to the normal-precision TIMESTAMP type on GridDB.
 		The value keeps Unix time in milliseconds.
 	@see GS_TYPE_OPTION_TIME_MILLI
 
@@ -699,7 +699,8 @@ typedef struct GSGridStoreTag GSGridStore;
 		LONG | int64_t
 		FLOAT | float
 		DOUBLE | double
-		TIMESTAMP | @ref GSTimestamp
+		TIMESTAMP (of normal-precision (millisecond)) | @ref GSTimestamp
+		TIMESTAMP (of high-precision (microsecond/nanosecond))| @ref GSPreciseTimestamp
 		GEOMETRY | @ref GSChar*
 		BLOB | @ref GSBlob
 		STRING Array | @ref GSChar**
@@ -746,6 +747,9 @@ typedef struct GSGridStoreTag GSGridStore;
 		GEOMETRY | @c POINT(EMPTY)
 		BLOB | 0-length BLOB data
 		Array type | An array with no element
+	@par
+		The date/time precision can be explicitly specified using the 
+		@ref GSTypeOption options about date/time precision.
 	@par
 		About transaction, auto commit mode is active as a default. In the auto
 		commit mode, each transaction is processed sequentially, and cannot be
@@ -1193,6 +1197,8 @@ typedef int32_t GSResult;
 
 	@EN
 	@ingroup Group_GSTimestamp
+	@brief Time data type corresponding to the high-precision TIMESTAMP type on GridDB.
+		In the current version, retains time with a precision up to nanoseconds.
 	@see GS_TYPE_OPTION_TIME_MICRO
 	@see GS_TYPE_OPTION_TIME_NANO
 	@since 5.3
@@ -1206,6 +1212,7 @@ typedef struct GSPreciseTimestampTag {
 		@brief 通常精度のTIMESTAMP値を表します。
 
 		@EN
+		@brief Represents a normal-precision TIMESTAMP value.
 
 		@ENDL
 	 */
@@ -1218,6 +1225,9 @@ typedef struct GSPreciseTimestampTag {
 			有効な値の範囲は@c 0 から @c 999999 までです。
 
 		@EN
+		@brief Represents a value of the digits with a precision that is more accurate than milliseconds in nanoseconds.
+		@par
+			The range of valid values is @c 0 to @c 999999 .
 
 		@ENDL
 	 */
@@ -1233,6 +1243,7 @@ typedef struct GSPreciseTimestampTag {
 
 	@EN
 	@ingroup Group_GSTimestamp
+	@brief Initializer of @ref GSPreciseTimestamp.
 	@since 5.3
 
 	@ENDL
@@ -2495,6 +2506,12 @@ enum GSTypeTag {
 
 		@EN
 		@brief TIMESTAMP type.
+		@par
+			To use this for column definition, use the 
+			@ref GSTypeOption options about date/time precision.
+		@par
+			If used to identify the type of the field value of a Row object, 
+			this indicates that it is a normal-precision TIMESTAMP value.
 
 		@ENDL
 	 */
@@ -2649,6 +2666,10 @@ enum GSTypeTag {
 		@since 5.3
 
 		@EN
+		@brief Indicates that it is a high-precision TIMESTAMP value.
+		@par
+			Cannot be used as a Column type; it is used to identify the 
+			type of the field value of a Row object.
 		@since 5.3
 
 		@ENDL
@@ -2756,6 +2777,10 @@ enum GSTypeOptionTag {
 		@since 5.3
 
 		@EN
+		@brief Indicates that it is a date/time type column with a normal-precision retained in milliseconds.
+		@par
+			If the precision option is not specified in the definition of a date/time type column,
+			then this normal-precision option is assumed to have been selected.
 		@since 5.3
 
 		@ENDL
@@ -2768,6 +2793,7 @@ enum GSTypeOptionTag {
 		@since 5.3
 
 		@EN
+		@brief Indicates that it is a date/time type column with a high-precision retained in microseconds.
 		@since 5.3
 
 		@ENDL
@@ -2780,6 +2806,7 @@ enum GSTypeOptionTag {
 		@since 5.3
 
 		@EN
+		@brief Indicates that it is a date/time type column with a high-precision retained in nanoseconds.
 		@since 5.3
 
 		@ENDL
@@ -4716,7 +4743,10 @@ typedef union GSValueTag {
 			値の型は@ref GS_TYPE_TIMESTAMP によって識別します。
 
 		@EN
-		@brief The value corresponding to a Row field of TIMESTAMP type.
+		@brief The value corresponding to a Row field of normal-precision TIMESTAMP type.
+		@par
+			To set or retrieve a field value using @ref GSValue,
+			the type of the value is identified by @ref GS_TYPE_TIMESTAMP.
 
 		@ENDL
 	 */
@@ -4732,6 +4762,10 @@ typedef union GSValueTag {
 		@since 5.3
 
 		@EN
+		@brief The value corresponding to a Row field of high-precision TIMESTAMP type.
+		@par
+			To set or retrieve a field value using @ref GSValue, the type 
+			of the value is identified by @ref GS_TYPE_PRECISE_TIMESTAMP.
 		@since 5.3
 
 		@ENDL
@@ -5035,6 +5069,10 @@ typedef struct GSTimeZoneTag {
 
 	@EN
 	@ingroup Group_GSTimestamp
+	@brief Represents option information about the date/time format.
+	@note
+		Depending on the functions used, option information may not 
+		be referenced in part or in whole.
 	@since 5.3
 
 	@ENDL
@@ -5047,6 +5085,9 @@ typedef struct GSTimestampFormatOptionTag {
 			@c NULL の場合、タイムゾーンが指定されなかったものとみなされます。
 
 		@EN
+		@brief an option of a time zone used in the date/time format.
+		@par
+			If @c NULL, a time zone is assumed to have not been specified.
 
 		@ENDL
 	*/
@@ -5230,10 +5271,10 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<td>consistency</td>
 		<td>一貫性レベル。次のいずれかの文字列を指定できる。
 		<dl>
-		<dt><tt>"IMMEDIATE"</tt></dt>
+		<dt><tt>@c "IMMEDIATE" </tt></dt>
 		<dd>他のクライアントからの更新結果は、該当トランザクションの完了後即座に
 		反映される</dd>
-		<dt><tt>"EVENTUAL"</tt></dt>
+		<dt><tt>@c "EVENTUAL" </tt></dt>
 		<dd>他のクライアントからの更新結果は、該当トランザクションが完了した
 		後でも反映されない場合がある。@ref GSContainer に対する更新操作は
 		実行できない</dd>
@@ -5305,9 +5346,9 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<td>authentication</td>
 		<td>認証種別。次のいずれかの文字列を指定できる。
 		<dl>
-		<dt><tt>"INTERNAL"</tt></dt>
+		<dt><tt>@c "INTERNAL" </tt></dt>
 		<dd>クラスタ上で管理されているアカウント情報に基づいた、内部認証</dd>
-		<dt><tt>"LDAP"</tt></dt>
+		<dt><tt>@c "LDAP" </tt></dt>
 		<dd>クラスタ外にあるLDAPサーバで管理されているアカウント情報に基づいた、
 		外部認証。LDAP接続設定のないクラスタに接続する場合、もしくは、
 		管理ユーザを使用する場合は指定できない</dd>
@@ -5322,24 +5363,24 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		<td>クラスタへの接続においてSSLの使用有無の判断に用いられるモード。
 		次のいずれかの文字列を指定できる。
 		<dl>
-		<dt><tt>"DISABLED"</tt></dt>
+		<dt><tt>@c "DISABLED" </tt></dt>
 		<dd>SSLを常に使用しない</dd>
-		<dt><tt>"PREFERRED"</tt></dt>
+		<dt><tt>@c "PREFERRED" </tt></dt>
 		<dd>可能な限りSSLを使用する。SSL接続・非SSL接続共に使用できる場合は
 		SSL接続を使用する</dd>
-		<dt><tt>"VERIFY"</tt></dt>
+		<dt><tt>@c "VERIFY" </tt></dt>
 		<dd>SSLを常に使用する。サーバ検証あり</dd>
 		</dl>
 		SSL接続を選択できる環境設定(詳細: @ref GSGridStoreFactory)の場合のみ
 		指定できる。それ以外の場合は、プロパティの値によらず指定できない。
 		SSL接続を選択できる場合、省略時は@c "PREFERRED" が指定されたものと
-		みなされる。バージョン4.5よりサポート。VERIFYはバージョン4.6よりサポート。</td>
+		みなされる。バージョン4.5よりサポート。@c "VERIFY" はバージョン4.6よりサポート。</td>
 		</tr>
 		<tr>
 		<td>connectionRoute</td>
 		<td>クラスタ接続時における通信経路。次の文字列を指定できる。
 		<dl>
-		<dt><tt>"PUBLIC"</tt></dt>
+		<dt><tt>@c "PUBLIC" </tt></dt>
 		<dd>クラスタの外部通信経路が設定されている場合に、外部通信経路を経由した接続を行う</dd>
 		</dl>
 		省略時は通常のクラスタ通信経路を用いた接続が行われる。外部接続が必要な場合のみ指定する。
@@ -5530,6 +5571,59 @@ GS_DLL_PUBLIC GSGridStoreFactory* GS_API_CALL gsGetDefaultFactory();
 		@c "auto" can only be used for the time zone that does not observe the
 		daylight saving time.
 		This property is supported on version 4.3 or later.</td>
+		</tr>
+		<tr>
+		<td>authentication</td>
+		<td>authentication type. One of the following strings can be specified:
+		<dl>
+		<dt><tt>@c "INTERNAL" </tt></dt>
+		<dd>internal authentication based on the account information managed on
+		the cluster.</dd>
+		<dt><tt>@c "LDAP" </tt></dt>
+		<dd>external authentication based on the account information managed by
+		the LDAP server outside the cluster. This property is not applicable when
+		connecting to the cluster where LDAP connection settings are not available
+		or when the administrative user is used.</dd>
+		</dl>
+		If omitted, the authentication type is automatically selected.
+		Generally, it is not necessary to specify the authentication type.
+		It is necessary, for example, to specify internal authentication when
+		connecting to the cluster that uses both internal and external
+		authentication for a non-administrative user.
+		This property is supported on version 4.5 or later.</td>
+		</tr>
+		<tr>
+		<td>sslMode</td>
+		<td>mode for specifying whether to use SSL in connecting to the cluster.
+		One of the following strings can be specified:
+		<dl>
+		<dt><tt>@c "DISABLED" </tt></dt>
+		<dd>Never uses SSL.</dd>
+		<dt><tt>@c "PREFERRED" </tt></dt>
+		<dd>Uses SSL as much as possible. If both SSL and non-SSL
+		connections can be used, uses SSL connection.</dd>
+		<dt><tt>@c "VERIFY" </tt></dt>
+		<dd>Always uses SSL. Server certificate verification is enabled.</dd>
+		</dl>
+		This property is applicable only when the environment settings
+		(For details, see @ref GSGridStoreFactory) allow to select SSL connection.
+		Otherwise, it is not applicable regardless of the value of the property.
+		If SSL connection can be selected but the value is omitted, @c "PREFERRED"
+		is specified by default. This property is supported on version 4.5 or later.
+		@c "VERIFY" is supported on version 4.6 or later.</td>
+		</tr>
+		<tr>
+		<td>connectionRoute</td>
+		<td>A communication path used when connected to a cluster.
+		The following string can be specified:
+		<dl>
+		<dt><tt>@c "PUBLIC" </tt></dt>
+		<dd>Connects to a cluster with multiple communication paths settings by
+		using an external communication path.</dd>
+		</dl>
+		When omitted, a normal communication path is used to establish a connection.
+		Specify this string only when external connection is required.
+		Supported starting with version 5.1.1.</td>
 		</tr>
 		</table>
 	@par
@@ -10541,11 +10635,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByLong(
 
 	@EN
 	@ingroup Group_GSContainer
-	@brief Returns the content of a Row corresponding to the TIMESTAMP-type Row
-		key.
+	@brief Retains the content of a Row corresponding to a normal-precision 
+		TIMESTAMP type Row key.
 	@par
-		It can be used only if a TIMESTAMP-type Column exists which corresponds
-		to the specified Row key.
+		 It can be used only if there exists a normal-precision TIMESTAMP-type 
+		 Column that corresponds to a Row key.
 	@par
 		If it requests a lock for update in the manual commit mode, it will hold
 		the lock until a relevant transaction completes or a timeout occurs. The
@@ -10595,8 +10689,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByLong(
 		No value is stored if @c NULL is specified to this pointer.
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
-		- if no TIMESTAMP-type Column exists which corresponds to the specified
-			Row key
+		-  if no TIMESTAMP-type Column exists which corresponds to the specified
+			Row key.
 		- if it requests a lock for update in the auto commit mode
 		- if a timeout occurs during this operation or the transaction,
 			a specified Container is deleted, its schema is changed or
@@ -10669,6 +10763,67 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowByTimestamp(
 
 	@EN
 	@ingroup Group_GSContainer
+	@brief Returns the content of a Row corresponding to the high-precision
+		TIMESTAMP-type Row key.
+	@par
+		It can be used only if there exists a high-precision TIMESTAMP-type 
+		Column that corresponds to a Row key.
+	@par
+		If it requests a lock for update in the manual commit mode, it will 
+		hold the lock until a relevant transaction completes or a timeout occurs.
+		The update or deletion operation by any other transaction on the locked 
+		Row will wait until the transaction completes or a timeout occurs.
+		The lock will be held even if the target Row is deleted.
+	@par
+		In the auto commit mode, it cannot request a lock for update.
+	@par
+		Resources of data with variable-length sizes such as strings and arrays
+		that are included in the Row object as an acquisition result are 
+		maintained until the next Row object acquisition via the specified
+		@ref GSContainer is executed.。
+	@attention
+		The behavior is undefined if the type of Row object bound to the specified
+		@ref GSContainer and the type of specified Row object do not match.
+		There is a possibility that the execution process will be abnormally
+		terminated by access violation.
+	@attention
+		In order to store the variable-length data such as strings and arrays,it
+		uses a temporary memory area which is managed by the specified
+		@ref GSGridStore instance corresponding to the specified @ref GSContainer .
+		This area is valid until this function or similar functions which use a
+		temporary memory area is executed again for the specified @ref GSGridStore
+		or its related resources. 
+		The behavior is undefined when the area which has been invalidated
+		is accessed.
+	@param [in] container
+		@ref GSContainer to be processed
+	@param [in] key
+		Row key to be processed
+	@param [out] rowObj
+		The Row object to store the contents of target Row to be obtained.
+		Nothing will be changed in the contents of Row object if the target 
+		Row does not exist.
+		Some or all fields in the Row object may be changed if 
+		non-@ref GS_RESULT_OK is returned as the execution result.
+	@param [in] forUpdate
+		indicates whether it requests a lock for update or not
+	@param [out] exists
+		the pointer to a BOOL-type variable to store the value which can
+		be used to identify whether the Row to be processed exists or not.
+		@ref GS_FALSE is stored if non-@ref GS_RESULT_OK is returned as 
+		the execution result. 
+		If the pointer is @c NULL, this storing process will be skipped.
+	@return the code number of the execution result. It returns the value
+	other than @ref GS_RESULT_OK in the following cases.
+		- if there is no high-precision TIMESTAMP-type Column that 
+			corresponds to a Row key.
+		- if it requests a lock for update in the auto commit mode
+		- if a timeout occurs during this operation or the transaction;
+			if a specified Container is deleted; if its schema is changed; 
+			or if a connection failure occurs
+		- if an unsupported value is set as the Row key
+		- if @c NULL is specified to arguments other than " @c exists "
+	@see gsGetRow
 	@since 5.3
 
 	@ENDL
@@ -11044,11 +11199,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRowByLong(
 
 	@EN
 	@ingroup Group_GSContainer
-	@brief Newly creates or update a Row by specifying the TIMESTAMP type Row
-		key.
+	@brief Newly creates or updates a Row by specifying the normal-precision 
+		TIMESTAMP type Row key.
 	@par
-		It can be used only if a TIMESTAMP-type Column exists which corresponds
-		to the specified Row key.
+		It can be used only if there exists a normal-precision TIMESTAMP-type
+		Column that corresponds to the specified Row key.
 	@par
 		It determines whether to newly create or update a Row, based on the Row
 		key and the state of the Container. If there is no corresponding Row in
@@ -11162,6 +11317,62 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsPutRowByTimestamp(
 
 	@EN
 	@ingroup Group_GSContainer
+	@brief Newly creates or updates a Row by specifying the high-precision 
+		TIMESTAMP type Row key.
+	@par
+		It can be used only if there exists a high-precision TIMESTAMP-type 
+		Column that corresponds to a Row key.
+	@par
+		It determines whether to newly create or update a Row, based on the
+		Row key and the state of the Container. 
+		If there is no corresponding Row in the Container, it determines to 
+		newly create a Row; otherwise, it updates a relevant Row.
+		The Row key in the specified Row object is ignored.
+	@par
+		However, there are some restrictions depending on the type of
+		Container and its settings.
+		It can be used only for conditionally performing the following operations
+		if the specified Container is TimeSeries and its compression option is enabled.
+		- Create New
+			- Only if newer Row than the existing Row which has the most 
+				recent time is specified
+		- Keep the contents of the existing Row
+			- Only if the time of the existing Row which has the most recent
+				time and the specified time match.
+	@par
+		In the manual commit mode, the target Row is locked.
+	@attention
+		The behavior is undefined if the type of Row object bound to the
+		specified GSContainer and the type of specified Row object do not match. 
+		There is a possibility that the execution process will be
+		abnormally terminated by access violation.
+	@param [in] container
+		@ref GSContainer to be processed
+	@param [in] key
+		Row key to be processed
+	@param [in] rowObj
+		A Row object representing the content of a Row to be newly created or updated.
+	@param [out] exists
+		the pointer to a BOOL-type variable for storing a value to identify
+		whether the Row to be processed exists or not
+		GS_FALSE is stored if non-@ref GS_RESULT_OK is returned as
+		the execution result. 
+		If the pointer is @c NULL , this storing process will be skipped.
+	@return the code number of the execution result. It returns the value
+		other than @ref GS_RESULT_OK in the following cases.
+		- if there is no high-precision TIMESTAMP-type Column that
+			corresponds to a Row key.
+		- if its operation is contrary to the restrictions specific to a particular
+			Container
+		- if a timeout occurs during this operation or the transaction; 
+			if a specified Container is deleted; if its schema is changed;
+			or if a connection failure occurs
+		- if an unsupported value is set in the Row key or the Row object
+		- if @c NULL is specified to arguments other than " @c exists "
+			or if @c NULL is included in the pointer to the data with
+			variable-length sizes such as strings in the fields
+			within the specified Row object
+	@see gsPutRow
 	@since 5.3
 
 	@ENDL
@@ -11423,10 +11634,11 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByLong(
 
 	@EN
 	@ingroup Group_GSContainer
-	@brief Deletes a Row corresponding to the TIMESTAMP-type Row key.
+	@brief Deletes a Row corresponding to the normal-precision TIMESTAMP-type
+		Row key.
 	@par
-		It can be used only if a TIMESTAMP-type Column exists which corresponds
-		to the specified Row key. If no corresponding Row exists, nothing is
+		It can be used only if there exists a normal-precision TIMESTAMP-type 
+		Column that corresponds to the specified Row key. If no corresponding Row exists, nothing is
 		changed.
 	@par
 		However, there are some restrictions depending on the type of Container
@@ -11446,8 +11658,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByLong(
 		No value is stored if @c NULL is specified to this pointer.
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
-		- if no TIMESTAMP-type Column exists which corresponds to the specified
-			Row key
+		- if no normal-precision TIMESTAMP-type Column exists which corresponds
+			to the specified Row key
 		- if its operation is contrary to the restrictions specific to a
 			particular Container
 		- if a timeout occurs during this operation or the transaction,
@@ -11494,6 +11706,40 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsDeleteRowByTimestamp(
 
 	@EN
 	@ingroup Group_GSContainer
+	@brief Deletes a Row corresponding to the high-precision TIMESTAMP-type
+		Row key.
+	@par
+		It can be used only if there exists a high-precision TIMESTAMP-type
+		Column that corresponds to a Row key. If no corresponding Row exists,
+		nothing is changed.
+	@par
+		However, there are some restrictions depending on the type of
+		Container and its settings.
+		It cannot be used for the TimeSeries whose compression option is
+		enabled.
+	@par
+		In the manual commit mode, the target Row is locked.
+	@param [in] container
+		@ref GSContainer to be processed
+	@param [in] key
+		Row key to be processed
+	@param [out] exists
+		the pointer to a BOOL-type variable for storing a value to identify
+		whether the Row to be processed exists or not
+		@ref GS_FALSE is stored if non-@ref GS_RESULT_OK is returned as the
+		execution result. 
+		If the pointer is @c NULL, this storing process will be skipped.
+	@return the code number of the execution result. It returns the value
+		other than @ref GS_RESULT_OK in the following cases.
+		- if there is no high-precision TIMESTAMP-type Column that 
+			corresponds to a Row key.
+		- if its operation is contrary to the restrictions specific to 
+			a particular Container
+		- if a timeout occurs during this operation or the transaction;
+			if a specified Container is deleted; if its schema is changed;
+			or if a connection failure occurs
+		- if an unsupported value is specified as the Row key
+	@see gsDeleteRow
 	@since 5.3
 
 	@ENDL
@@ -13670,7 +13916,7 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldAsDouble(
 
 	@EN
 	@ingroup Group_GSRow
-	@brief Sets the TIMESTAMP-type value to the specified field.
+	@brief Sets the normal-precision TIMESTAMP-type value in the specified field.
 	@param [in] row
 		@ref GSRow to be processed
 	@param [in] column
@@ -13682,8 +13928,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldAsDouble(
 		@ref GS_RESULT_OK in the following cases.
 		- if @c NULL is specified to pointer type arguments
 		- if the specified Column number is out of range
-		- if there is a type mismatch between the type of specified value and
-			the type of specified Column
+		- the Class that corresponds to the type of a RowKey used to evaluate
+			the matching condition.
 	@since 1.5
 
 	@ENDL
@@ -13712,7 +13958,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByTimestamp(
 
 	@EN
 	@ingroup Group_GSRow
-	@brief Returns the TIMESTAMP-type value in the specified field.
+	@brief Retrieves the value of a TIMESTAMP type field with the specified
+		normal precision.
 	@param [in] row
 		@ref GSRow to be processed
 	@param [in] column
@@ -13727,6 +13974,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByTimestamp(
 		@ref GS_RESULT_OK in the following cases.
 		- if @c NULL is specified to pointer type arguments
 		- if the specified Column number is out of range
+		- the Class that corresponds to the type of a RowKey used to evaluate
+			the matching condition.
 	@since 1.5
 
 	@ENDL
@@ -13753,6 +14002,21 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetRowFieldAsTimestamp(
 
 	@EN
 	@ingroup Group_GSRow
+	@brief Sets a value in a TIMESTAMP type field with the specified
+		high precision.
+	@param [in] row
+		@ref GSRow to be processed
+	@param [in] column
+		the Column number of the target field, a value from zero or
+		greater than zero to a value less than the number of columns
+	@param [in] fieldValue
+		the value of the target field
+	@return the code number of the execution result. It returns the value
+		other than @ref GS_RESULT_OK in the following cases.
+		- if @c NULL is specified to pointer type arguments
+		- if the specified Column number is out of range
+		- the Class that corresponds to the type of a RowKey used to 
+			evaluate the matching condition.
 	@since 5.3
 
 	@ENDL
@@ -13781,6 +14045,24 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetRowFieldByPreciseTimestamp(
 
 	@EN
 	@ingroup Group_GSRow
+	@brief Retrieves the value of a TIMESTAMP type field with the specified
+		high precision.
+	@param [in] row
+		@ref GSRow to be processed
+	@param [in] column
+		the Column number of the target field, a value from zero or
+		greater than zero to a value less than the number of columns
+	@param [out] fieldValue
+		the pointer to a variable to store the value of the target field.
+		@c NULL is stored if non- @ref GS_RESULT_OK is returned as
+		theexecution result.
+		If the pointer is @c NULL, this storing process will be skipped.
+	@return the code number of the execution result. It returns the value
+		other than @ref GS_RESULT_OK in the following cases.
+		- if @c NULL is specified to pointer type arguments
+		- if the specified Column number is out of range
+		- the Class that corresponds to the type of a RowKey used to
+			evaluate the matching condition.
 	@since 5.3
 
 	@ENDL
@@ -15641,6 +15923,33 @@ GS_DLL_PUBLIC GSRowSetType GS_API_CALL gsGetRowSetType(GSRowSet *rowSet);
 
 	@EN
 	@ingroup Group_GSRowSet
+	@brief Retrieves a schema corresponding to this Row set.
+	@par
+		It returns @ref GSContainerInfo in which only the Column layout
+		information including the existence of any Row key is set
+		Any other Container information, such as the Container name,
+		the Container type, index settings, and the TimeSeries
+		configuration options, is not included.
+	@par
+		If the type of this Row set is @ref GS_ROW_SET_AGGREGATION_RESULT
+		and the Row set does not contain any Row, the schema is not
+		retrieved in the current version.
+	@param [in] rowSet
+		@ref GSRowSet to be processed
+	@param [out] schemaInfo
+		The pointer to @ref GSContainerInfo for storing schema information.
+		If @ref GS_RESULT_OK is not returned as the execution result,
+		the initial value which is the same as
+		@ref GS_CONTAINER_INFO_INITIALIZER is stored.
+	@param [out] exists
+		the pointer to a BOOL-type variable for storing a value to identify
+		whether the available schema exists or not
+		@ref GS_FALSE is stored if non- @ref GS_RESULT_OK is returned
+		as the execution result. 
+		If the pointer is @c NULL, this storing process will be skipped.
+	@return the code number of the execution result. It returns the value
+		other than @ref GS_RESULT_OK in the following cases.
+		- if @c NULL is specified to " @c exists " arguments.
 	@since 5.3
 
 	@ENDL
@@ -16006,10 +16315,14 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsDouble(
 
 	@EN
 	@ingroup Group_GSAggregationResult
-	@brief Gets the aggregate value of numeric type as TIMESTAMP (@c GSTimestamp).
+	@brief Retrieves the time-type aggregate value as normal-precision
+		TIMESTAMP-type (@c GSTimestamp).
 	@par
 		If a non TIMESTAMP value is saved, the @c assigned argument contains
 		@ref GS_FALSE.
+	@par
+		If normal-precision TIMESTAMP values are retained, they are converted
+		to high-precision values and then returned. 
 	@param [in] aggregationResult
 		Target acquisition of @ref GSAggregationResult
 	@param [out] value
@@ -16055,6 +16368,26 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetAggregationValueAsTimestamp(
 
 	@EN
 	@ingroup Group_GSAggregationResult
+	@brief Retrieves the time-type aggregate value as high-precision
+		TIMESTAMP-type (@ref GSPreciseTimestamp).
+	@par
+		If a non TIMESTAMP-type value is retained, @ref GS_FALSE
+		is stored in the " @c assigned " argument.
+	@par
+		If high-precision TIMESTAMP values are retained,they are
+		converted to normal-precision values and then returned. 
+	@param [in] aggregationResult
+		@ref GSAggregationResult to be retrieved
+	@param [out] value
+		The pointer to the variable for storing the aggregate value
+	@param [out] assigned
+		A pointer to a variable for storing whether or not the expected
+		type value can be acquired. 
+		When @c NULL is specified, the information on whether or not it was
+		acquired is not stored.
+	@return the code number of the execution result. It returns the value
+		other than @ref GS_RESULT_OK in the following cases.
+		- If NULL is specified as an argument other than " @c assigned "
 	@since 5.3
 
 	@ENDL
@@ -16489,8 +16822,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsLong(
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
-	@brief Returns the value of the TIMESTAMP-type Row key at the starting
-		position of the range condition.
+	@brief Returns the value of the normal-precision TIMESTAMP-type
+		Row key at the starting position of the range condition.
 	@attention
 		In order to allocate the area for storing the value, it might use a
 		temporary memory area which is managed by @ref GSGridStore instance
@@ -16512,8 +16845,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsLong(
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
 		- if @c NULL is specified in the argument(s)
-		- if the expected type is different from the type of Row key to be
-			evaluated in the match conditions
+		- if the expected type and precision are different from those of
+			Row key to be evaluated in the match conditions.
 	@since 1.5
 
 	@ENDL
@@ -16550,6 +16883,31 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateStartKeyAsTimestamp(
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
+	@brief Returns the value of the high-precision TIMESTAMP-type Row key
+		at the starting position of the range condition.
+	@attention
+		In order to allocate the area for storing the value,
+		it might use a temporary memory area which is managed by the
+		@ref GSGridStore instance related to specified @ref GSRowKeyPredicate.
+		This area is valid until this function or similar functions which
+		use a temporary memory area are executed again for the specified
+		@ref GSGridStore or its related resources.
+		The behavior is undefined when the area which has been
+		invalidated is accessed.
+	@param [in] predicate
+		@ref GSRowKeyPredicate to be processed
+	@param [out] startKey
+		the pointer to a variable to store the value of the Row key at the
+		starting position. 
+		@c NULL is stored if the starting position is not set. 
+		@c NULL is stored if non- @ref GS_RESULT_OK is returned as the
+			execution result.
+		If the pointer is @c NULL, this storing process will be skipped.
+	@return the code number of the execution result. It returns the value
+		other than @ref GS_RESULT_OK in the following cases.
+		- @c if NULL is specified in the argument(s)
+		- if the expected type and precision are different from those
+			of Row key to be evaluated in the match conditions.
 	@since 5.3
 
 	@ENDL
@@ -16861,8 +17219,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsLong(
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
-	@brief Returns the value of the TIMESTAMP-type Row key at the end position
-		of the range condition.
+	@brief Retrieves the value of the normal-precision TIMESTAMP-type Row key
+		at the end position of the range condition.
 	@attention
 		In order to allocate the area for storing the value, it might use a
 		temporary memory area which is managed by @ref GSGridStore instance
@@ -16884,8 +17242,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateFinishKeyAsLong(
 	@return Return code of the execution result. It returns the value except
 		@ref GS_RESULT_OK in the following cases.
 		- if @c NULL is specified in the argument(s)
-		- if the expected type is different from the type of Row key to be
-			evaluated in the match conditions
+		- if the expected type and precision are different from those of
+			Row key to be evaluated in the match conditions.
 	@since 1.5
 
 	@ENDL
@@ -17401,6 +17759,38 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPredicateDistinctKeysAsTimestamp(
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
+	@brief Retrieves a set of the values of the high precision
+		TIMESTAMP-type Row keys that configure the individual condition.
+	@attention
+		In order to allocate the area for storing the value and its column,
+		it might use a temporary memory area which is managed by the
+		@ref GSGridStore instance related to specified @ref GSRowKeyPredicate.
+		This area is valid until this function or similar functions which
+		use a temporary memory area are executed again for the specified 
+		@ref GSGridStore or its related resources.
+		The behavior is undefined when the area which has been
+		invalidated is accessed.
+	@param [in] predicate
+		@ref GSRowKeyPredicate to be processed
+	@param [out] keyList
+		the pointer to a variable to store the address of an array which
+		contains a set of the values of the Row keys that configure the
+		individual condition. 
+		@c NULL is stored if non- @ref GS_RESULT_OK is returned as the
+		execution result.
+		If the pointer is @c NULL, this storing process will be skipped.
+	@param [out] size
+		the pointer to a variable to store the number of elements in a
+		set of the values of the Row keys that configure the individual
+		condition. @c 0 is stored if no individual condition is set.
+		@c 0 is stored if non- @ref GS_RESULT_OK is returned as the execution
+		result. 
+		If the pointer is @c NULL, this storing process will be skipped.
+	@return the code number of the execution result. It returns the value other
+		than @ref GS_RESULT_OK in the following cases.
+		- if @c NULL is specified in the argument(s)
+		- if the expected type and precision are different from those of Row
+			key to be evaluated in the match conditions.
 	@since 5.3
 
 	@ENDL
@@ -17688,8 +18078,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByLong(
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
-	@brief Sets the value of the TIMESTAMP-type Row key as the start position of
-		the range conditions.
+	@brief Sets the value of the normal-precision TIMESTAMP-type Row key
+		as the start position of the range conditions.
 	@par
 		The Row key which has smaller value than the specified value is
 		considered to be unmatched.
@@ -17705,8 +18095,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByLong(
 		@ref GS_RESULT_OK in the following cases.
 		- if @c NULL is specified to @c predicate
 		- if an individual condition has already been set
-		- if the expected type is different from the type of Row key to be
-			evaluated in the match conditions
+		- if the expected type and precision are different from those of
+			Row key to be evaluated in the match conditions.
 	@since 1.5
 
 	@ENDL
@@ -17738,6 +18128,24 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateStartKeyByTimestamp(
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
+	@brief Sets the value of the high-precision TIMESTAMP-type Row key
+		as the start position of the range conditions.
+	@par
+		The Row key which has a smaller value than the specified value is
+		considered to be unmatched.
+	@par
+		A type with an undefined magnitude relationship can be set as a
+		condition but cannot be used in the actual judgment, e.g. STRING type.
+	@param [in] predicate
+		@ref GSRowKeyPredicate to be processed
+	@param [in] startKey
+		the Row key as the start position. If @c NULL, the setting is cancelled.
+	@return the code number of the execution result. It returns the value other
+		than @ref GS_RESULT_OK in the following cases.
+		- if @c NULL is specified as the @c predicate argument.
+		- if an individual condition has already been set
+		- if the expected type and precision are different from those of
+			Row key to be evaluated in the match conditions.
 	@since 5.3
 
 	@ENDL
@@ -18023,8 +18431,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByLong(
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
-	@brief Sets the value of the TIMESTAMP-type Row key as the end position of
-		the range conditions.
+	@brief Sets the value of the normal-precision TIMESTAMP-type Row key
+		as the end position of the range conditions.
 	@par
 		The Row key which has greater value than the specified value is
 		considered to be unmatched.
@@ -18040,8 +18448,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByLong(
 		@ref GS_RESULT_OK in the following cases.
 		- if @c NULL is specified to @c predicate
 		- if an individual condition has already been set
-		- if the expected type is different from the type of Row key to be
-			evaluated in the match conditions
+		- if the expected type and precision are different from those of
+			Row key to be evaluated in the match conditions.
 	@since 1.5
 
 	@ENDL
@@ -18073,6 +18481,25 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsSetPredicateFinishKeyByTimestamp(
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
+	@brief Sets the value of the high-precision TIMESTAMP-type Row key
+		as the end position of the range conditions.
+	@par
+		The Row key which has greater value than the specified value
+			is considered to be unmatched.
+	@par
+		A type with an undefined magnitude relationship can be set as a
+			condition but cannot be used in the actual judgment, e.g. STRING type.
+	@param [in] predicate
+		@ref GSRowKeyPredicate to be processed
+	@param [in] finishKey
+		the value of the Row key as the end position. If @c NULL, 
+			the setting is cancelled
+	@return the code number of the execution result. It returns the value other
+		than @ref GS_RESULT_OK in the following cases.
+		- if @c NULL is specified as the @c predicate argument.
+		- if an individual condition has already been set
+		- if the expected type and precision are different from those of
+			Row key to be evaluated in the match conditions.
 	@since 5.3
 
 	@ENDL
@@ -18328,8 +18755,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByLong(
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
-	@brief Adds the value of the TIMESTAMP-type Row key as one of the elements
-		in the individual condition.
+	@brief Adds the value of the normal-precision TIMESTAMP-type Row key
+		as one of the elements in the individual condition.
 	@par
 		The Row key which has the same value with the added value is
 		considered to be matched.
@@ -18344,8 +18771,8 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByLong(
 		@ref GS_RESULT_OK in the following cases.
 		- if @c NULL is specified to pointer type arguments
 		- if an individual condition has already been set
-		- if the expected type is different from the type of Row key to be
-			evaluated in the match conditions
+		- if the expected type and precision are different from those of
+			Row key to be evaluated in the match conditions.
 	@since 1.5
 
 	@ENDL
@@ -18374,6 +18801,21 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsAddPredicateKeyByTimestamp(
 
 	@EN
 	@ingroup Group_GSRowKeyPredicate
+	@brief Adds the value of the high-precision TIMESTAMP-type Row key
+		as one of the elements in the individual condition.
+	@par
+		The Row key which has the same value with the added value is
+		considered to be matched.
+	@param [in] predicate
+		@ref GSRowKeyPredicate to be processed
+	@param [in] key
+		the value of the Row key as the end position.
+	@return the code number of the execution result. It returns the
+		value other than @ref GS_RESULT_OK in the following cases.
+		- if @c NULL is specified to pointer type arguments
+		- if an individual condition has already been set
+		- if the expected type and precision are different from those
+			of Row key to be evaluated in the match conditions.
 	@since 5.3
 
 	@ENDL
@@ -19573,6 +20015,36 @@ GS_DLL_PUBLIC size_t GS_API_CALL gsFormatZonedTime(
 
 	@EN
 	@ingroup Group_GSTimestamp
+	@brief Using the specified option settings, finds the string
+		representation of time, according to the high-precision TIMESTAMP
+		value notation.
+	@param [in] timestamp
+		the time to be processed
+	@param [out] strBuf
+		the output string buffer. 
+		Outputs the string containing the termination character within a
+		range that does not exceed the @c bufSize. 
+		If @c bufSize is greater than or equal to 1 and less than the size
+		required to output, the termination character is set to the last
+		position in the buffer range and the string is output as much as
+		possible to the rest of the region.
+		If @c strBuf is @c NULL or if bufSize is 0, no string is output.
+	@param [in] bufSize
+		the size of an output string buffer in bytes, including the
+		termination character
+	@param [in] option
+		The pointer to option settings information
+		If @c NULL, it behaves the same as @ref gsFormatTime.
+		If the time zone is specified, the specified time zone settings
+		are used.
+	@return The minimum size of string buffer required for output in bytes,
+		including the termination character.However, one @c (1) which is
+		equivalent to the size of an empty string is returned in the
+		following cases:
+		- An unsupported time is specified.
+		- It has been detected that incorrect time zone information,
+			such as initialization errors, has been specified.
+	@see GS_TIME_STRING_SIZE_MAX
 	@since 5.3
 
 	@ENDL
@@ -19653,6 +20125,27 @@ GS_DLL_PUBLIC GSBool GS_API_CALL gsParseTime(
 
 	@EN
 	@ingroup Group_GSTimestamp
+	@brief Returns the @ref GSPreciseTimestamp value corresponding to
+		the specified string, according to the normal-precision or
+		high-precision TIMESTAMP value notation.
+	@par
+		Uses the time zone settings in the TIMESTAMP value notation.
+	@param [in] str
+		the string of the time to be processed
+	@param [out] timestamp
+		the pointer to a variable to store the converted value.
+		If the return value is @ref GS_FALSE, @c -1 is stored unless
+		the pointer is @c NULL.
+	@param [in] option
+		The pointer to option settings information; it is not used in
+		the current version.
+	@return Indicates whether or not a conversion to a @ref GSTimestamp
+		value was successful, and its result was successfully stored. 
+		It returns @ref GS_FALSE in the following cases:
+		- if the string which does not match the string representation
+			of time is specified
+		- An unsupported time is specified.
+		- if @c NULL is specified in the argument(s)
 	@since 5.3
 
 	@ENDL

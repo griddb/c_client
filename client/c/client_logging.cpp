@@ -50,7 +50,7 @@ ClientTraceFormatter ClientTraceFormatter::instance_;
 
 CallLogger::CallLogger(GSInterceptorManager &manager) :
 		GSInterceptor(manager) {
-	util::Tracer &tracer = UTIL_TRACER_RESOLVE(API_CALL);
+	UTIL_TRACER_RESOLVE(API_CALL);
 	setLogTargetFunctionNames();
 }
 

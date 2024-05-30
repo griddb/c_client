@@ -70,7 +70,6 @@ $(uuiddir)/uuid/isnull.c \
 $(uuiddir)/uuid/pack.c \
 $(uuiddir)/uuid/parse.c \
 $(uuiddir)/uuid/unpack.c \
-$(uuiddir)/uuid/unparse.c \
 $(uuiddir)/uuid/uuid_time.c \
 $(srcdir)/client.cpp \
 $(srcdir)/client_logging.cpp \

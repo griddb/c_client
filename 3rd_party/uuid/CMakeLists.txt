@@ -37,7 +37,6 @@ set(SRC_FILES
     uuid/pack.c
     uuid/parse.c
     uuid/unpack.c
-    uuid/unparse.c
     uuid/uuid_time.c
 )
 source_group("Sources" FILES ${SRC_FILES})

@@ -68,7 +68,7 @@ time_t uuid_time(const uuid_t uu, struct timeval *ret_tv)
 	clock_reg = uuid.time_low | ((uint64_t) high << 32);
 
 	clock_reg -= (((uint64_t) 0x01B21DD2) << 32) + 0x13814000;
-	tv.tv_sec = clock_reg / 10000000;
+	tv.tv_sec = (uint32_t)(clock_reg / 10000000);
 	tv.tv_usec = (clock_reg % 10000000) / 10;
 
 	if (ret_tv)
@@ -165,7 +165,7 @@ main(int argc, char **argv)
 		printf("Warning: not a time-based UUID, so UUID time "
 		       "decoding will likely not work!\n");
 	}
-	printf("UUID time is: (%ld, %ld): %s\n", tv.tv_sec, tv.tv_usec,
+	printf("UUID time is: (%ld, %ld): %s\n", (long)tv.tv_sec, (long)tv.tv_usec,
 	       ctime(&time_reg));
 
 	return 0;

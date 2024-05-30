@@ -4,7 +4,7 @@
 %define griddb_name griddb-c-client
 %endif
 
-%define griddb_ver v5.5.0
+%define griddb_ver v5.6.0
 %define griddb_instdir /usr/griddb_c_client-%{griddb_ver}
 # do not strip
 %define __spec_install_post /usr/lib/rpm/brp-compress
