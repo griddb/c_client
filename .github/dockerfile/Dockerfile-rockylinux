@@ -1,0 +1,20 @@
+FROM rockylinux:9.3
+
+ENV GRIDDB_VERSION=5.3.1
+ENV GRIDDB_DOWNLOAD_SHA512=8ce6bcb2eeb952dd0fac8a055eb9cb76cd795b8d73067593e71d1b7e2eff39ee367d3f5eee610400685130b58e4b484bf56a111ada87e32228e7f7f74db25e2a
+
+# Install dependency other
+RUN set -eux \
+    && yum install -y wget python3 automake make gcc gcc-c++ rpm-build rsync libtool systemd procps-ng \
+    && yum clean all
+
+# Install griddb server
+RUN set -eux \
+# Download package griddb server
+    && wget -q https://github.com/griddb/griddb/releases/download/v${GRIDDB_VERSION}/griddb-${GRIDDB_VERSION}-linux.x86_64.rpm \
+# Check sha512sum package
+    && echo "$GRIDDB_DOWNLOAD_SHA512 griddb-${GRIDDB_VERSION}-linux.x86_64.rpm" | sha512sum --strict --check \
+# Install package griddb server
+    && rpm -ivh griddb-${GRIDDB_VERSION}-linux.x86_64.rpm \
+# Remove package
+    && rm griddb-${GRIDDB_VERSION}-linux.x86_64.rpm
