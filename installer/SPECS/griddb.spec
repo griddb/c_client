@@ -107,6 +107,8 @@ ln -sf %{griddb_instdir}/lib/gridstore.h                        %{buildroot}/usr
 /usr/include/gridstore.h
 
 %changelog
+* Thu May 30 2024 Toshiba Digital Solutions Corporation
+- 5.6.0
 * Fri Feb 9 2024 Toshiba Digital Solutions Corporation
 - 5.5.0
 * Mon Jun 12 2023 Toshiba Digital Solutions Corporation
