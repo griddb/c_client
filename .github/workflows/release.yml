@@ -24,12 +24,12 @@ jobs:
             docker_image: ubuntu
             container_name: ubuntu_container
             upload_path: ../griddb-c-client_*_amd64.deb
-          - os: Centos
+          - os: Rockylinux
             file_type: rpm
             package_path: ./c_client/installer/RPMS/x86_64/griddb-c-client-*-linux.x86_64.rpm
-            docker_file: .github/dockerfile/Dockerfile-centos7
-            docker_image: centos
-            container_name: centos_container
+            docker_file: .github/dockerfile/Dockerfile-rockylinux
+            docker_image: rockylinux
+            container_name: rockylinux_container
             upload_path: installer/RPMS/x86_64/griddb-c-client-*-linux.x86_64.rpm
 
     steps:
@@ -70,4 +70,3 @@ jobs:
           tag: ${{ github.ref }}
           overwrite: true
           file_glob: true
-
