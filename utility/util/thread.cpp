@@ -576,9 +576,15 @@ void Thread::yield() {
 
 uint64_t Thread::getSelfId() {
 #ifdef _WIN32
-	return GetCurrentThreadId();
+    return GetCurrentThreadId();
 #else
-	return syscall(SYS_gettid);
+    #ifdef __APPLE__
+		uint64_t tid;
+		pthread_threadid_np(NULL, &tid);
+		return tid;
+    #else
+        return syscall(SYS_gettid);
+	#endif
 #endif
 }
 
