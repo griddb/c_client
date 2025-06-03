@@ -13,10 +13,10 @@ GridDB CクライアントはC言語用のインタフェースを提供しま�
 以下の環境でCクライアントのビルドとサンプルプログラムの実行を確認しています。
 
     OS: Ubuntu 22.04(x64) (gcc 11), Windows 11(x64) (VS2017), MacOS Catalina 12 (clang 13.1.6)
-    GridDB server: V5.7 CE(Community Edition), Ubuntu 22.04(x64)
+    GridDB server: V5.8 CE(Community Edition), Ubuntu 22.04(x64)
 
     OS: RockyLinux 9.4(x64) (gcc 11)
-    GridDB server: V5.7 CE(Community Edition), RockyLinux 9.4(x64)
+    GridDB server: V5.8 CE(Community Edition), RockyLinux 9.4(x64)
 
 ## クイックスタート(Ubuntu, RockyLinux)
 

@@ -1,8 +1,8 @@
 lib_LTLIBRARIES = libgridstore.la
 ACLOCAL_AMFLAGS = -I m4
 
-srcdir = ..
-rootdir = $(srcdir)/../..
+srcdir1 = ..
+rootdir = $(srcdir1)/../..
 utildir = $(rootdir)/utility
 serverdir = $(rootdir)/server
 commondir = $(serverdir)
@@ -11,7 +11,7 @@ ebbdir = $(rootdir)/3rd_party/ebb
 shadir = $(rootdir)/3rd_party/sha2
 securitydir = $(rootdir)/3rd_party/omaha/omaha/base/security
 uuiddir = $(rootdir)/3rd_party/uuid
-extdir = $(srcdir)/ext
+extdir = $(srcdir1)/ext
 bindir = $(rootdir)/bin
 
 version = 0:0:0
@@ -71,16 +71,11 @@ $(uuiddir)/uuid/pack.c \
 $(uuiddir)/uuid/parse.c \
 $(uuiddir)/uuid/unpack.c \
 $(uuiddir)/uuid/uuid_time.c \
-$(srcdir)/client.cpp \
-$(srcdir)/client_logging.cpp \
-$(srcdir)/container_key_utils.cpp 
+$(srcdir1)/client.cpp \
+$(srcdir1)/client_logging.cpp \
+$(srcdir1)/container_key_utils.cpp 
 
-libgridstore_la_CFLAGS = $(AM_CFLAGS) -fvisibility=hidden
-libgridstore_la_CXXFLAGS = $(AM_CXXFLAGS) -fvisibility=hidden
-libgridstore_la_LDFLAGS = $(AM_LDFLAGS) -version-info $(version)
-libgridstore_la_LIBADD = -lpthread -lrt
-
-INCLUDES = \
+includes = \
 -I$(utildir) \
 -I$(commondir) \
 -I$(serverdir) \
@@ -89,5 +84,10 @@ INCLUDES = \
 -I$(shadir) \
 -I$(securitydir) \
 -I$(uuiddir) \
--I$(srcdir)/include \
+-I$(srcdir1)/include \
 -I$(extdir)/include
+
+libgridstore_la_CFLAGS   = $(includes) $(AM_CFLAGS)   -fvisibility=hidden
+libgridstore_la_CXXFLAGS = $(includes) $(AM_CXXFLAGS) -fvisibility=hidden
+libgridstore_la_LDFLAGS = $(AM_LDFLAGS) -version-info $(version)
+libgridstore_la_LIBADD = -lpthread -lrt

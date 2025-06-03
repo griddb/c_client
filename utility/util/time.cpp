@@ -884,7 +884,14 @@ bool DateTime::parse(
 DateTime DateTime::now(const Option &option) {
 #ifdef _WIN32
 	FILETIME time;
-	GetSystemTimeAsFileTime(&time);
+	FileLib::GetSystemTimePreciseAsFileTimeFunc preciseFunc =
+			FileLib::findPreciseSystemTimeFunc();
+	if (preciseFunc == NULL) {
+		GetSystemTimeAsFileTime(&time);
+	}
+	else {
+		preciseFunc(&time);
+	}
 	int64_t unixTime = FileLib::getUnixTime(time);
 #else
 	timespec time;

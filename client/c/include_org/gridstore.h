@@ -19446,12 +19446,16 @@ GS_DLL_PUBLIC GSResult GS_API_CALL gsGetPartitionIndexOfContainer(
 	@JP
 	@ingroup Group_GSTimestamp
 	@brief 現在時刻を求めます。
+	@note 取得分解能はLinux/Windowsともにおおむね1msです(Windows上ではV5.8より)。
 	@return 現在時刻に相当する@ref GSTimestamp 。内部のシステムコールに
 		失敗した場合、@c -1
 
 	@EN
 	@ingroup Group_GSTimestamp
 	@brief Returns the current time.
+	@note
+		The acquisition resolution is approximately 1ms for both Linux and Windows
+		(from version V5.8 on Windows).
 	@return @ref GSTimestamp corresponding to the current time.
 		@c -1 is returned if internal system call fails.
 
