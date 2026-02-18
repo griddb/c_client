@@ -1,5 +1,5 @@
 %define griddb_name griddb-c-client
-%define griddb_ver 5.8.0
+%define griddb_ver 5.9.0
 %define griddb_instdir /usr/griddb_c_client-%{griddb_ver}
 # do not strip
 %define __spec_install_post /usr/lib/rpm/brp-compress
@@ -107,6 +107,8 @@ ln -sf %{griddb_instdir}/lib/gridstore.h                        %{buildroot}/usr
 /usr/include/gridstore.h
 
 %changelog
+* Tue Jun 3 2025 Toshiba Digital Solutions Corporation
+- 5.8.0
 * Wed Nov 13 2024 Toshiba Digital Solutions Corporation
 - 5.7.0
 * Thu May 30 2024 Toshiba Digital Solutions Corporation
